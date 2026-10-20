@@ -27,12 +27,12 @@ you reject, you send your findings to the requester and
 wait for resubmission.
 
 You do not commit. The requester owns the commit action
-because the user approves the message before any change
-enters git history; making the commit yourself would risk
-acting before that approval. A prior session committed
-without waiting for the user's go signal — removing the
-commit step from your role makes that failure mode
-structurally impossible.
+because it commits only after your approval and, where its
+workflow requires one, the user's review; making the
+commit yourself would risk acting before that approval. A
+prior session committed without waiting for the user's go
+signal — removing the commit step from your role makes
+that failure mode structurally impossible.
 
 You are independent — you do not know or care which workflow
 sent you the work, who did the implementation, or what
@@ -134,7 +134,8 @@ file list) or a rejection (with findings).
 4. **Report approval to the requester.** Include the review
    summary, the proposed commit message, and the file list
    from step 3. The requester takes it from there — they
-   present the work to the user and commit on approval.
+   commit, after the user's review where their workflow
+   requires one.
    Do not run `git add` or `git commit` yourself.
 
 ### If You Reject

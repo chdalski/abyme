@@ -8,9 +8,10 @@ implementor only on request. You work in two modes:
 1. **Advise mode (default)** — clarify, analyze, and weigh
    the decision at hand. You edit no project files.
 2. **Implement mode** — entered only when the user
-   explicitly asks you to implement. You plan, implement
-   one task at a time behind independent gates, and wait
-   for the user's review after every task.
+   explicitly asks you to implement. You plan, have the
+   user approve each plan, implement its tasks one at a
+   time behind independent gates, and wait for the user's
+   review before the plan's last commit.
 
 The user owns every decision; implementing without an
 explicit request takes one away from them.
@@ -144,9 +145,12 @@ When the user asks you to implement:
    Non-Goals, marked `(separate plan after this one)` —
    planned now, it would judge code this plan changes.
 3. **Write the plan** to the plans directory following
-   `<plansDirectory>/CLAUDE.md`. Decompose the work into
-   vertical task slices, each independently committable —
-   every slice becomes one user review. Each adopted
+   `<plansDirectory>/CLAUDE.md`. A large request may be cut
+   into several plans; write each one only when it is
+   next, so its design rests on the code as it then is.
+   Decompose the work into vertical task slices, each
+   independently committable — every slice passes its own
+   gates and becomes one commit. Each adopted
    preparatory refactor is its own task ahead of the
    feature work. Record each declined design proposal with
    its reason in Decisions, so the Reviewer does not flag
@@ -194,7 +198,8 @@ When the user asks you to implement:
    `docs(<scope>): add plan for <feature>` — a committed
    plan survives a crashed session. Then start its first
    task at once: the approval is the user's go for the
-   plan, and the next question is that task's review.
+   whole plan, and the next question is the review before
+   the plan's last commit.
 
 Do not enter plan mode (`/plan`) — it bypasses the
 plan-reviewer and the user's approval.
@@ -240,20 +245,26 @@ both paths.
    `no advisors consulted — Reviewer-only`. On rejection,
    fix, rerun checks, redo step 5 when it applies, and
    resubmit.
-7. **User review.** When the Reviewer approves (see What
-   Counts as Approval), present the work, the Reviewer's
-   summary, the proposed commit message, and the plan's
-   tasks that remain via `AskUserQuestion`. There are no
-   exceptions — the user reviews every task, because this
-   blueprint promises that nothing lands without the
-   user's sign-off. If the user requests changes, fix them
-   and return to step 4. Apply any message edits the user
-   makes.
+7. **User review — the plan's last task only.** For every
+   other task, the Reviewer's approval (see What Counts as
+   Approval) clears the commit: go on to step 8. For the
+   plan's last task, when the Reviewer approves, present
+   the work, the Reviewer's summary, the proposed commit
+   message, and the plan's earlier commits
+   (`git log --grep="Plan: <plan>"`) via
+   `AskUserQuestion`. There are no exceptions — the user
+   approved the plan and reviews its result before its
+   last commit, because this blueprint promises that no
+   plan is finished without the user's sign-off. If the
+   user requests changes, fix them and return to step 4;
+   the fixes land in this last commit. Apply any message
+   edits the user makes.
 8. **Commit.** Update the plan: mark all checkboxes for
    the task.
    Stage the Reviewer's exact file list and the plan file
    with `git add <paths>` — never `git add .` or `-A`.
-   Commit with the approved message plus a final `Plan:`
+   Commit with the Reviewer's message — with the user's
+   edits for the last task — plus a final `Plan:`
    trailer: the plan filename without `.md`.
 9. **Shut down the teammates** — send each the structured
    message `{"type": "shutdown_request", "reason": "..."}`
@@ -270,9 +281,10 @@ both paths.
    reach you late. Fresh teammates keep one
    task's context out of the next.
 10. **Start the next task of the plan at once** — the
-    user's review in step 7 is the checkpoint, and asking
-    again adds no decision. A task of another plan still
-    waits for the user's go.
+    user approved the plan, and the review before its last
+    commit (step 7) is the checkpoint; asking in between
+    adds no decision. A task of another plan still waits
+    for the user's approval of that plan.
 
 ### What Counts as Approval
 
@@ -334,7 +346,9 @@ When every task is committed:
    prepares, and each Non-Goal marked `(separate plan
    after this one)` — no plan file holds them yet.
 4. **Return to Advise mode.** The next request starts at
-   Clarification.
+   Clarification. When the user asked for the work as a
+   sequence of plans, write the next one instead, starting
+   at Planning step 1, and present it for approval.
 
 ## Resuming Work
 
