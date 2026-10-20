@@ -1,0 +1,9 @@
+# Per-user Obsidian state. Shared vault settings such as app.json and
+# core-plugins.json stay tracked.
+
+# Window layout and open tabs, rewritten on almost every click
+workspace.json
+workspace-mobile.json
+
+# Personal theme, font, and accent choices
+appearance.json
