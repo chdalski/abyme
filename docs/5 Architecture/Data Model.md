@@ -1,0 +1,199 @@
+---
+tags:
+  - architecture
+aliases:
+  - Abyme Format
+  - Waist
+  - Format
+  - Summary
+  - Data Types
+  - Types
+---
+# Data Model
+
+The data model is the Abyme format, the waist of the [[Hourglass]]. Inputs and outputs use it together. It lives in the crate `abyme-model` and lies as files in Git (see [[Storage in Git]]). The type names are the ones the code will use, see [[Glossary]].
+
+> [!question] Proposal
+> The concepts behind it are decided. Names and fields of the types are a first draft.
+
+## Overview
+
+```mermaid
+classDiagram
+    direction LR
+    class Element {
+        id: ElementId
+        type_ref: TypeRef
+        name: String
+        summary: Option~String~
+        body: Markdown
+        attributes: Map
+        anchor: Option~Anchor~
+        statement: Option~StatementKind~
+        inner_board: Option~BoardId~
+        verified: Option~Verification~
+        expected_anchor: Option~Anchor~
+    }
+    class Relation {
+        kind: RelationKind
+        to: ElementId
+        label: Option~String~
+    }
+    class Board {
+        id: BoardId
+        title: String
+        owner: Option~ElementId~
+        summary: Option~String~
+    }
+    class Frame {
+        id: FrameId
+        title: String
+        rect: Rect
+    }
+    class Placement {
+        element: ElementId
+        is_reference: bool
+        frame: Option~FrameId~
+        rect: Rect
+        presentation: Presentation
+        pinned: bool
+        attached_to: Option~ElementId~
+        color: Option~Color~
+    }
+    class Zone {
+        preset: Option~ZonePreset~
+        mode: Option~Mode~
+        statement: Option~StatementKind~
+        anchor: Option~Anchor~
+    }
+    class ChangeRequest {
+        id: ChangeRequestId
+        element: ElementId
+        action: ChangeAction
+        created_by: Actor
+    }
+    Element "1" *-- "*" Relation : outgoing
+    Relation --> Element : to
+    Board "1" *-- "*" Frame
+    Board "1" *-- "*" Placement
+    Board *-- Zone
+    Frame *-- Zone
+    Placement --> Element : shows
+    Element ..> Board : inner_board
+    ChangeRequest --> Element
+```
+
+The most important separation: **Element** holds the content, **Board** and **Placement** hold the layout. Moving a box changes only the board (see [[Elements#View and Data]]).
+
+## Types
+
+```rust
+/// Stable, readable ID, e.g. "payment-service".
+/// Assigned on creation and never changes afterwards.
+pub struct ElementId(String);
+pub struct BoardId(String);
+pub struct FrameId(String);
+
+pub struct Element {
+    pub id: ElementId,
+    pub type_ref: TypeRef,                   // semantic type, e.g. "c4/container"
+    pub name: String,
+    pub summary: Option<String>,             // summary, for all outputs
+    pub body: String,                        // description as Markdown
+    pub attributes: BTreeMap<String, Value>, // type-specific, e.g. technology = "Go"
+    pub anchor: Option<Anchor>,              // Some → representation, None → native
+    pub statement: Option<StatementKind>,    // overrides the zone
+    pub relations: Vec<Relation>,            // outgoing relations
+    pub inner_board: Option<BoardId>,        // inner board, the inside of the element
+    pub verified: Option<Verification>,      // verification stamp
+    pub expected_anchor: Option<Anchor>,     // target elements only: expected destination
+}
+
+pub struct Relation {
+    pub kind: RelationKind,                  // contains, depends_on, uses, corresponds_to, replaces, concerns, see_also
+    pub to: ElementId,
+    pub label: Option<String>,               // e.g. "REST, synchronous"
+}
+
+pub struct Anchor(Url);                      // file://crates/payment-service/, later jira://PROJ-123
+
+pub struct Verification {
+    pub commit: String,                      // commit of the last check
+    pub by: Actor,                           // person or AI
+}
+
+pub struct Board {
+    pub id: BoardId,
+    pub title: String,
+    pub owner: Option<ElementId>,            // whose inside this board is
+    pub summary: Option<String>,
+    pub zone: Zone,
+    pub frames: Vec<Frame>,
+    pub placements: Vec<Placement>,
+}
+
+pub struct Frame {
+    pub id: FrameId,
+    pub title: String,
+    pub rect: Rect,
+    pub zone: Zone,
+}
+
+pub struct Placement {
+    pub element: ElementId,
+    pub is_reference: bool,                  // false: home, true: reference
+    pub frame: Option<FrameId>,
+    pub rect: Rect,
+    pub presentation: Presentation,
+    pub pinned: bool,                        // placed by hand, auto-layout leaves it alone
+    pub attached_to: Option<ElementId>,      // attached: rect is relative to this element
+    pub color: Option<Color>,                // overrides the color from type and statement kind
+}
+
+pub struct Zone {
+    pub preset: Option<ZonePreset>,          // Current, Target, Brainstorm, Archive
+    pub mode: Option<Mode>,                  // overrides the preset
+    pub statement: Option<StatementKind>,    // overrides the preset
+    pub anchor: Option<Anchor>,              // e.g. a Current frame on crates/
+}
+
+pub enum Mode { Free, Synced, Mirrored, Locked }
+pub enum StatementKind { Current, Target, Decision, Idea, Knowledge, Question, Historic }
+pub enum Presentation { Box, Card, Note, Document, Image, Chart, Table }
+
+pub struct ChangeRequest {
+    pub id: ChangeRequestId,
+    pub element: ElementId,
+    pub action: ChangeAction,                // e.g. Delete
+    pub created_by: Actor,
+}
+
+pub struct Rect { pub x: i64, pub y: i64, pub width: i64, pub height: i64 }
+```
+
+## Rules
+
+- **Representation or native:** An element is a representation if it has an `anchor` (see [[Elements]]).
+- **Home:** Every element has exactly one `Placement` with `is_reference = false`. All others are references (see [[Board Graph]]). An element without a home, for example freshly created by the AI, is allowed and reported as a hint.
+- **Arrows are not stored.** They follow from the relations. Deleting an arrow means deleting the relation.
+- **The board decides what is shown and how.** The [[Presentation]] belongs to the placement; the default comes from the [[Extensions#Type Packs|type pack]].
+- **Attaching is layout, “concerns” is content.** An attached sticky note has both: the relation in the element and `attached_to` in the placement (see [[Presentation#Sticky Notes]]).
+- **Inheritance:** The effective mode and the effective statement kind come from the element, otherwise from the frame, otherwise from the board, otherwise from the type pack (see [[Boards and Zones#Inheritance]]).
+- **Summaries are data:** short texts on elements and boards, written by the AI or supplied by a parser. The AI sees them in the [[MCP Server#Detail Levels|board outline]], the canvas for example as a tooltip.
+- **Integer coordinates** keep the diffs calm.
+
+## Operations
+
+The MCP server and the canvas use the same operations:
+
+- read and query, in [[MCP Server#Detail Levels|detail levels]]
+- apply a change set, transactionally
+- place and auto-layout ([[Placement and Layout]])
+- fetch and resolve checks and change requests
+- subscribe to changes, for the live view in the canvas
+
+> [!todo] Open
+> - **IDs:** readable slugs as above, or ULIDs? Readable IDs make diffs and pull requests understandable but need a rule for collisions. Sticky notes have no name; their slug would come from the first words.
+> - **Review flags** are missing from the model, because it is still open whether they are stored or computed.
+> - **Provenance** (who created an element?) is not in yet, see [[Ideas]].
+> - **Operations:** Which ones exactly belong to it, and what do they look like as data?

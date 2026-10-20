@@ -32,10 +32,10 @@ keywords.
 <!-- Agents: add non-obvious project conventions discovered during work — things a future agent would need to know to avoid mistakes. One line each. Remove when no longer true. -->
 
 - Concept phase: there is no code yet; write prototypes or code only when explicitly asked — the Working Skeleton and MVP get defined first.
-- `docs/` is an Obsidian vault whose root is the project root; its rules are in `docs/README.md` ("Regeln"): docs describe the current state, not its history; proposals go in `> [!question] Vorschlag`, open points in `> [!todo] Offen`; decisions are a table in `docs/Entscheidungen.md`; links are wikilinks.
+- `docs/` is an Obsidian vault whose root is the project root; its rules are in `docs/README.md` ("Rules"): docs describe the current state, not its history; proposals go in `> [!question] Proposal`, open points in `> [!todo] Open`; decisions are a table in `docs/Decisions.md`; links are wikilinks.
 - Render-check every new Mermaid diagram before adding it to `docs/`.
 - Comparisons with other tools stay in the chat; `docs/` takes only the adopted ideas, without naming the tool.
-- `docs/Glossar.md` maps each German term (docs, UI) to its English term (code); add new terms there.
+- `docs/Glossary.md` defines the terms that docs, UI, and code share; add new terms there.
 - Decided stack: a Rust Cargo workspace with crates under `crates/`; the canvas is a Tauri app with React Flow, its UI in TypeScript.
 - License MIT: every dependency must be MIT-compatible.
 - `.devcontainer/` provides the toolchains: Rust (linked with mold), Node with pnpm, uv, and Go.
