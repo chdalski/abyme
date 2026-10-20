@@ -29,7 +29,8 @@ The AI describes *what* it wants, and Abyme decides *where* it goes. Instead of 
 | `create_from_template` | boards or frames from a template, e.g. C4 or Current/Target |
 | `place` | place semantically or apply auto-layout |
 | `render` | image of a board or a section |
-| `checks` / `resolve_check` | fetch and resolve review flags and change requests |
+| `checks` / `resolve_check` | fetch review flags and change requests, resolve change requests |
+| `verify` | resolve a review flag and set a new verification stamp |
 
 Every writing response contains the consequences of the change, that is affected elements and new review flags (see [[Checks#Reports]]). For visual collaboration, tools like `get_selection` and `focus` would be added, see [[Ideas#Visual Collaboration with the AI]].
 

@@ -8,11 +8,14 @@ Only what is still open, with a link to the note where the question lives. Once 
 
 ## Before the Working Skeleton
 
-- **Define the Working Skeleton and the MVP**, plus the first use case. The obvious choice is living architecture docs based on C4 with current and target, see [[First Slice]]. Building on that: plan a feature as a [[Ideas#Specifications|specification]] in the target and implement it against this current state.
 - **Confirm the core API, crates, and runtime**, see [[Hexagonal Architecture]].
 - **Discuss the data model and file format**, see [[Data Model]] and [[Storage in Git]]. Open there: IDs as slugs or ULIDs, boards as JSON or YAML, folder names.
 - **Review flags:** store or compute them? And do structural checks belong to the format or to the core? See [[Checks]].
 - **Canvas:** desktop first? Which library for text layout? How are arrows routed? See [[Canvas]].
+
+## Before the MVP
+
+- **Measuring the results:** How are the MVP's results measured, for example the share of justified review flags in the replay? See [[First Slice]].
 
 ## Later
 

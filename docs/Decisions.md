@@ -54,3 +54,13 @@ What is settled, briefly and with a reason. Details are in the linked note. A ch
 | Open source under MIT. Dependencies must be compatible with it. | – | – |
 | The canvas is a Tauri app with React Flow; the UI is TypeScript. | ready-made mechanics, MIT, controlled from outside | [[Canvas#Why Tauri and React Flow]] |
 | The repository, including the docs, is written in English. | – | – |
+
+## First Slice
+
+| Decision | Why | More |
+|---|---|---|
+| The Working Skeleton comes first, then the MVP in feature slices. | Two processes, file watchers, generated types, and the LanceDB build show their risks before features depend on them. | [[First Slice#Working Skeleton]] |
+| The Working Skeleton is a thin path through all layers without feature value: an element written by `apply` over MCP appears live in the canvas, and `search` finds it; a drag in the canvas lands in the board file, and `read_board` shows it. | It proves that a text access and a visual access work on the same files. | [[First Slice#Working Skeleton]] |
+| The MVP tests the core loop of reconciliation on a C4 model and a docs map, with search, a canvas for viewing and light editing, and the modes free and mirrored. | Current and target, change requests, and specifications build on boards that stay honest; if that fails, nothing built on it holds. | [[First Slice#MVP]] |
+| Current and target, synced zones and change requests, specifications, `render` and the visual check, exports, parsers, type packs as an extension mechanism (C4 is built in), references, stubs, and implied relations are not in the MVP. | focus on the core loop | [[First Slice#MVP]] |
+| The MVP is tested on a local clone of rlsp, with a replay of its history. | Real history produces real review flags, and a replay makes them repeatable. The clone keeps the experiment out of the published repo. | [[First Slice#Test Setup]] |

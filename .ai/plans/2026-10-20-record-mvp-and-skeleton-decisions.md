@@ -1,5 +1,5 @@
 **Repository:** root
-**Status:** NotStarted
+**Status:** InProgress
 **Created:** 2026-10-20
 
 ## Goal
@@ -28,7 +28,7 @@ decided state the skeleton and MVP plans build on.
 - [x] Settle the MVP, the Working Skeleton, and the skeleton
       design with the user, with the design advisor and the
       security engineer consulted
-- [ ] Record the MVP and the Working Skeleton
+- [x] Record the MVP and the Working Skeleton
 - [ ] Record the architecture decisions for the Working
       Skeleton
 
@@ -90,23 +90,23 @@ from the open lists. Decided content:
 
 Review path: Reviewer-only
 
-- [ ] A reader of `First Slice.md` learns what the Working
+- [x] A reader of `First Slice.md` learns what the Working
       Skeleton demonstrates, what the MVP contains and leaves
       out, what it must show, and how it is tested against
       rlsp; the note no longer says the slice is undiscussed
-- [ ] `Decisions.md` holds the decisions on order, Working
+- [x] `Decisions.md` holds the decisions on order, Working
       Skeleton, MVP scope, and test setup, each with its
       reason
-- [ ] `Open Questions.md` no longer asks to define the Working
+- [x] `Open Questions.md` no longer asks to define the Working
       Skeleton, the MVP, or the first use case, and lists how
       the MVP's results are measured as a question to answer
       before the MVP
-- [ ] `Glossary.md` defines the term docs map
-- [ ] Neither the status line in `docs/README.md` nor the
+- [x] `Glossary.md` defines the term docs map
+- [x] Neither the status line in `docs/README.md` nor the
       concept-phase convention in the root `CLAUDE.md` says
       that the Working Skeleton and the MVP are still to be
       defined
-- [ ] Every Mermaid diagram the task adds or changes passes
+- [x] Every Mermaid diagram the task adds or changes passes
       the render check
 
 ### Task 2: Record the architecture decisions for the Working Skeleton

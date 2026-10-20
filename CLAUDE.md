@@ -31,7 +31,7 @@ keywords.
 
 <!-- Agents: add non-obvious project conventions discovered during work — things a future agent would need to know to avoid mistakes. One line each. Remove when no longer true. -->
 
-- Concept phase: there is no code yet; write prototypes or code only when explicitly asked — the Working Skeleton and MVP get defined first.
+- Concept phase: there is no code yet; write prototypes or code only when explicitly asked. The Working Skeleton comes first, as defined in `docs/5 Architecture/First Slice.md`.
 - `docs/` is an Obsidian vault whose root is the project root; its rules are in `docs/README.md` ("Rules"): docs describe the current state, not its history; proposals go in `> [!question] Proposal`, open points in `> [!todo] Open`; decisions are a table in `docs/Decisions.md`; links are wikilinks.
 - Render-check every new Mermaid diagram before adding it to `docs/`.
 - Comparisons with other tools stay in the chat; `docs/` takes only the adopted ideas, without naming the tool.
