@@ -24,6 +24,8 @@ aliases:
 
 When an element changes, the system sets review flags along the [[Relations]] that trigger checks. This works like the dirty flag in build systems. In classic AI, such a thing is called a truth maintenance system. Whether a statement still holds is then judged by the AI or a person.
 
+Review flags are not stored. They are computed whenever they are needed, from the anchors, the [[#Verification Stamp|verification stamps]], Git, and the relations, so they cannot go stale.
+
 Two things help against a flood of warnings:
 
 - Only certain relation types trigger checks.
@@ -41,5 +43,4 @@ Abyme does not contact the AI on its own, because MCP works on request. That is 
 - **Through a status call** at the start of a session, e.g.: “3 open checks, 2 pending changes, target ‘Notifications’ 60 % reached.”
 
 > [!todo] Open
-> - Are review flags stored, or computed on demand from Git and the relations?
-> - Do the structural checks belong to the format or to the core? That decides what the canvas alone can already check.
+> Do the structural checks belong to the format or to the core? That decides what the canvas alone can already check.

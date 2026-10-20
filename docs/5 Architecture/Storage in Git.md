@@ -10,8 +10,10 @@ aliases:
 
 All Abyme data lies as files in Git, in the same repo as the code. Derived data such as the search index is not in Git.
 
+The folders are `abyme/`, in Git, and `.abyme/`, which Git ignores. Elements are Markdown files with YAML frontmatter, boards are JSON files.
+
 > [!question] Proposal
-> The folder names `abyme/` and `.abyme/cache/` and the file format below are a draft.
+> The file names inside the folders and the fields in the examples below are a draft.
 
 ```
 project/
@@ -25,10 +27,15 @@ project/
 │   │   └── container-level.board.json
 │   └── requests/
 │       └── delete-legacy-mailer.yaml  change requests
-├── .abyme/cache/                      search index and render cache, ignored by Git
+├── .abyme/                            not in Git
+│   ├── .gitignore                     contains `*`, so Git ignores the folder
+│   ├── lock                           lock for writing
+│   └── cache/                         search index and render cache
 ├── src/ …
 └── …
 ```
+
+`.abyme/` ignores itself through its own `.gitignore`, so Abyme never edits the project's `.gitignore`.
 
 ## Consequences
 
@@ -46,6 +53,15 @@ project/
 - **Content and layout separated:** Moving a box does not change the file with the content.
 - **Merge-friendly:** many small files instead of one large one, so conflicts stay local
 - **Versioned:** The format has a version number, and there are migrations.
+
+## Writing
+
+In [[Hexagonal Architecture#Runtime|stage A]], the canvas and the MCP server write the same files from two processes.
+
+- **Under a lock:** Every [[Data Model#Operations|operation]] is applied to the current files while the writer holds an advisory lock on `.abyme/lock`. A change therefore never overwrites one it has not seen.
+- **Atomically:** Every file is written to a temporary file and then renamed, so a file watcher never sees a half-written file.
+- **No model in memory:** The MCP server reads the files on every call. The canvas holds only the board it shows and reloads it on file-watcher events, its own writes included.
+- **Outside the lock:** An editor or `git checkout` does not take the lock. The file watchers pick up such changes as well.
 
 ## Element File
 
@@ -71,6 +87,9 @@ relations:
 Handles payments through Stripe. Refunds run asynchronously
 through the refund-worker.
 ```
+
+> [!todo] Open
+> **YAML library:** Which library reads and writes the frontmatter?
 
 ## Board File
 
@@ -114,7 +133,5 @@ type_packs = ["c4", "adr"]
 - **Values that change continuously.** Such sources are [[Ideas#Deferred|deferred]].
 
 > [!todo] Open
-> - Folder names, see above
-> - Boards as JSON or YAML?
 > - Where do hints for arrow routing go, in case someone bends an arrow by hand?
 > - **Several repos:** How do projects work that consist of several repos? One option is a separate Abyme repo that points to the others.

@@ -66,6 +66,9 @@ Changes in the repo are detected without source-specific code, through anchors a
 
 **Parsers** are optional. Some things can be read exactly without the AI, such as crates and their dependencies from `Cargo.toml` (see [[Extensions#Parsers]]).
 
+> [!todo] Open
+> **Git access:** the git CLI or a Rust Git library?
+
 ### Finer Review Flags
 
 > [!question] Proposal

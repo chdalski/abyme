@@ -173,6 +173,7 @@ pub struct Rect { pub x: i64, pub y: i64, pub width: i64, pub height: i64 }
 
 ## Rules
 
+- **IDs are readable slugs.** The core assigns them when it creates an element or board and never changes them. A collision gets the suffix `-2`, `-3`, and so on. A sticky note's slug comes from its first words, or is `note` if it has no text. Frame IDs are unique within their board. The same slugs appear in files, diffs, and the [[MCP Server#Detail Levels|board outline]].
 - **Representation or native:** An element is a representation if it has an `anchor` (see [[Elements]]).
 - **Home:** Every element has exactly one `Placement` with `is_reference = false`. All others are references (see [[Board Graph]]). An element without a home, for example freshly created by the AI, is allowed and reported as a hint.
 - **Arrows are not stored.** They follow from the relations. Deleting an arrow means deleting the relation.
@@ -181,19 +182,19 @@ pub struct Rect { pub x: i64, pub y: i64, pub width: i64, pub height: i64 }
 - **Inheritance:** The effective mode and the effective statement kind come from the element, otherwise from the frame, otherwise from the board, otherwise from the type pack (see [[Boards and Zones#Inheritance]]).
 - **Summaries are data:** short texts on elements and boards, written by the AI or supplied by a parser. The AI sees them in the [[MCP Server#Detail Levels|board outline]], the canvas for example as a tooltip.
 - **Integer coordinates** keep the diffs calm.
+- **Review flags are not part of the model.** They are computed from anchors, verification stamps, Git, and relations (see [[Checks]]).
 
 ## Operations
 
-The MCP server and the canvas use the same operations:
+An operation is a delta held as data, such as creating, placing, moving, or pinning an element, or attaching a note. Applying operations is a pure function: it takes the current files and returns the file writes, and the core then carries them out (see [[Storage in Git#Writing]]). This makes it testable without a file system and lets operations travel between processes later.
+
+The MCP server and the canvas use the same core functions:
 
 - read and query, in [[MCP Server#Detail Levels|detail levels]]
-- apply a change set, transactionally
+- apply operations, transactionally
 - place and auto-layout ([[Placement and Layout]])
 - fetch and resolve checks and change requests
 - subscribe to changes, for the live view in the canvas
 
 > [!todo] Open
-> - **IDs:** readable slugs as above, or ULIDs? Readable IDs make diffs and pull requests understandable but need a rule for collisions. Sticky notes have no name; their slug would come from the first words.
-> - **Review flags** are missing from the model, because it is still open whether they are stored or computed.
-> - **Provenance** (who created an element?) is not in yet, see [[Ideas]].
-> - **Operations:** Which ones exactly belong to it, and what do they look like as data?
+> **Provenance** (who created an element?) is not in yet, see [[Ideas]].

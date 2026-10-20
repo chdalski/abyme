@@ -64,7 +64,7 @@ flowchart TB
     dev <-->|"sees, edits, selects"| canvas
     canvas <-->|"operations,<br>live changes"| core
     export -->|"reads boards"| core
-    core -->|"derives"| cache
+    mcp -->|"derives search index"| cache
     core <-->|"operations"| mcp
     mcp <-->|"reads context,<br>writes interpretation"| ai
     ai -->|"reads with its own tools"| code

@@ -62,7 +62,8 @@ The docs, the UI, and the code use these terms alike. The type names are in [[Da
 | [[Hexagonal Architecture\|Port]] | interface the core defines; the input port for callers, output ports for what the core itself needs |
 | [[Hexagonal Architecture\|Driving adapter]] | calls the core through the input port, e.g. canvas or MCP server |
 | [[Hexagonal Architecture\|Driven adapter]] | is called by the core through an output port, e.g. storage or search index |
-| [[Hexagonal Architecture#Core API\|Core API]] | the core's input port (`AbymeApi`), usable embedded or remote |
+| [[Hexagonal Architecture#Core API\|Core API]] | the core's input port; for now the public API of `abyme-core`, from stage B a trait (`AbymeApi`) usable embedded or remote |
+| [[Data Model#Operations\|Operation]] | a change held as data, such as creating, moving, or pinning an element; applying it returns the file writes |
 | [[Canvas#Projecting a Board\|Projection]] | a board from the board graph, translated into what an interface displays |
 | [[Canvas#Visual Check\|Visual check]] | the AI fetches an image of the board to check its result |
 | [[Canvas#Visual Check\|Scene]] | shapes, geometry, style, and text of a board, from which the render tool draws |

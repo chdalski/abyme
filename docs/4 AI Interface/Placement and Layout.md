@@ -10,7 +10,7 @@ aliases:
 ## Three Levels
 
 1. **Semantic (the normal case):** “Put X on board B, in frame F, to the right of Z.” The layout engine turns this into coordinates and looks for free space.
-2. **Auto-layout:** The AI supplies only elements and relations, and an algorithm arranges them. ELK, for example, suits box-and-arrow diagrams such as C4 well.
+2. **Auto-layout:** The AI supplies only elements and relations, and a layered (Sugiyama) layout arranges them, which suits box-and-arrow diagrams such as C4 well. The layout library must be MIT-compatible, which rules out the copyleft ones.
 3. **Coordinates:** for fine work.
 
 ## Rules
@@ -18,7 +18,7 @@ aliases:
 - **Pinned positions:** What a person placed by hand is moved neither by the AI nor by auto-layout without asking.
 - **Transactional:** A package of changes succeeds completely or not at all.
 - **Visual check:** The `render` tool returns an image of a board or a section. That way the AI sees what reaches the person, such as overlaps or cut-off text (see [[Canvas#Visual Check]]).
-- **A building block of its own:** The MCP server and the canvas both need layout and placement, so they are a crate of their own (see [[Hexagonal Architecture#Crates]]).
+- **Part of the core:** The MCP server and the canvas both need layout and placement and both use the core, so layout lives there. It becomes a crate of its own when the canvas alone needs it (see [[Hexagonal Architecture#Crates]]).
 
 ## Prior Art
 

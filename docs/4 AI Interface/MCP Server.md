@@ -47,24 +47,24 @@ Abyme gives the AI three detail levels in a compact text format instead of JSON:
 Example of a board outline:
 
 ```
-Board: Container Level (current, verified @ abc123)
-Above: Context · Below: Payment ▸, Checkout ▸
+Board: container-level · Container Level (current, verified @ abc123)
+Above: context · Below: payment-components ▸, checkout-components ▸
 
-[1] Web Shop      container  React     storefront
-[2] Checkout Svc  container  Kotlin    order completion
-[3] Payment Svc   container  Go        Stripe payments   ⚠ review
-[4] Orders DB     datastore  Postgres
+web-shop          container  React     storefront
+checkout-service  container  Kotlin    order completion
+payment-service   container  Go        Stripe payments   ⚠ review
+orders-db         datastore  Postgres
 
-1 → 2  REST
-2 → 3  REST, synchronous
-2 → 4  writes orders
+web-shop → checkout-service          REST
+checkout-service → payment-service   REST, synchronous
+checkout-service → orders-db         writes orders
 
-Notes: "Bottleneck on Black Friday" (at 3)
+Notes: "Bottleneck on Black Friday" (at payment-service)
 ```
 
 As a rough estimate, this takes 5 to 10 times fewer tokens than the same board as JSON with geometry. A prototype still has to confirm this.
 
-- **Short IDs** per response ([1], [2] …) instead of the real IDs. Abyme translates them back.
+- **Real IDs:** The outline shows the element IDs themselves, which are short, readable slugs (see [[Data Model#Rules]]). The server needs no state between calls, and an ID from an older response never points to the wrong element.
 - **Coordinates** only on request, when the AI wants to arrange elements.
 - **Geometry is translated into relations.** “Lies in frame X” is reliable and important. “Lies near Y” is only a hint.
 - **Summaries** of boards are maintained automatically. When the content below them changes, they get a review flag themselves.

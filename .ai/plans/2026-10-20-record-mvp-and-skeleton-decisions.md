@@ -29,7 +29,7 @@ decided state the skeleton and MVP plans build on.
       design with the user, with the design advisor and the
       security engineer consulted
 - [x] Record the MVP and the Working Skeleton
-- [ ] Record the architecture decisions for the Working
+- [x] Record the architecture decisions for the Working
       Skeleton
 
 ## Tasks
@@ -182,7 +182,7 @@ question lists. Decided content:
 
 Review path: Reviewer-only
 
-- [ ] Each decision above is stated as decided in the note it
+- [x] Each decision above is stated as decided in the note it
       concerns: `Data Model.md`, `Storage in Git.md`,
       `Hexagonal Architecture.md`, `MCP Server.md`,
       `Search and Index.md`, `Placement and Layout.md`,
@@ -190,25 +190,25 @@ Review path: Reviewer-only
       file confinement and accepted risks are in
       `Hexagonal Architecture.md`, its canvas part in
       `Canvas.md`
-- [ ] No note presents a settled alternative as current or
+- [x] No note presents a settled alternative as current or
       open: per-response short IDs, slugs or ULIDs, boards as
       JSON or YAML, desktop first, stored or computed review
       flags, a core
       API trait with `embedded` and `remote` features for the
       skeleton, local or API embeddings, or the excluded
       layout library
-- [ ] The crate diagram and table in
+- [x] The crate diagram and table in
       `Hexagonal Architecture.md` show the skeleton's crates
       and mark the others as later
-- [ ] `Decisions.md` holds each decision with its reason, and
+- [x] `Decisions.md` holds each decision with its reason, and
       its architecture rows no longer mark the core API, the
       crates, and the runtime as a proposal
-- [ ] `Open Questions.md` lists the questions named open above
+- [x] `Open Questions.md` lists the questions named open above
       and none that this task settles, under headings that say
       when each must be answered: before the Working
       Skeleton, before the MVP, or later
-- [ ] `Glossary.md` defines the term operation
-- [ ] Every Mermaid diagram the task adds or changes passes
+- [x] `Glossary.md` defines the term operation
+- [x] Every Mermaid diagram the task adds or changes passes
       the render check
 
 ## Decisions

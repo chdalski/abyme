@@ -30,12 +30,17 @@ Rejected:
 
 ## Structure
 
-> [!question] Proposal
+- `crates/abyme-canvas` is the Tauri app. Its Rust side uses `abyme-core` directly, through the [[Hexagonal Architecture#Core API|core API]].
+- The web UI lies next to it, in `crates/abyme-canvas/ui/`. It talks to the Rust side only through an interface, `AbymeClient`, which runs over Tauri's IPC.
+- The TypeScript types are generated from the Rust types with ts-rs. That way the format is defined only once, in `abyme-model`. The few IPC commands are typed by hand in `AbymeClient`.
+- Layout and text measurement stay in Rust. The AI places things without a canvas too, so layout must work without a screen.
 
-- `crates/abyme-canvas` is the Tauri app. Its Rust side uses the core through the [[Hexagonal Architecture#Core API|core API]], with the features `standalone`, `embedded`, and `remote`.
-- The web UI lies next to it, for example in `crates/abyme-canvas/ui/`. It talks to the Rust side only through an interface, e.g. `AbymeClient`. On the desktop this runs over Tauri's IPC, in the browser over a WebSocket connection to `abyme serve`.
-- The TypeScript types are generated from the Rust types, e.g. with ts-rs or specta. That way the format is defined only once, in `abyme-model`.
-- Layout and text measurement stay in Rust. The AI places things without a canvas too, so `abyme-layout` must work without a screen.
+## Security
+
+- **No raw HTML:** The canvas shows names, summaries, descriptions, and notes as text and renders no raw HTML from them.
+- **Only Abyme's own commands:** The webview reaches the Rust side only through Abyme's own IPC commands, not through plugins for files or the shell.
+
+The core's part is in [[Hexagonal Architecture#Security Baseline]].
 
 ## Scope
 
@@ -94,13 +99,13 @@ React Flow reports every change through `onNodesChange` or `onConnect`. The canv
 
 The AI should see what the person sees. But the MCP server's `render` tool must not depend on the canvas for that. So the rule is **same geometry** instead of same pixels:
 
-- Positions, sizes, and arrow paths come from the core and `abyme-layout`, colors and fonts from a shared theme.
+- Positions, sizes, and arrow paths come from the core's layout, colors and fonts from a shared theme.
 - `abyme-render` redraws boxes, titles, and arrows in Rust, rich content such as charts only as placeholders. For the visual check, what matters most is the geometry: overlaps, legibility, and arrows.
 - If the canvas is open, it can also deliver an image of its own view. Then the AI sees exactly what the person is seeing right now.
 
 ```mermaid
 flowchart LR
-    layout["<b>Core and<br>abyme-layout</b><br>positions, sizes,<br>arrow paths"]
+    layout["<b>Core</b><br>layout: positions, sizes,<br>arrow paths"]
     theme["<b>Theme</b><br>colors, fonts"]
     canvas["<b>Canvas</b>"]
     render["<b>abyme-render</b><br>draws in Rust"]
@@ -119,11 +124,11 @@ flowchart LR
     class theme proposal
 ```
 
-**Text measurement:** Layout without a screen has to know how big a box with a given text becomes. So a Rust library for text layout computes the sizes, with bundled fonts, such as parley or cosmic-text. The canvas takes these sizes over instead of measuring itself.
+**Text measurement:** Layout without a screen has to know how big a box with a given text becomes. So a Rust library for text layout computes the sizes, with bundled fonts, such as parley or cosmic-text. The canvas takes these sizes over instead of measuring itself. This comes with the MVP; the Working Skeleton uses fixed sizes. Fixed sizes for the MVP were rejected for exactly that reason.
 
 ## Platforms and Risks
 
-- **Desktop first** (proposal), as a Tauri app with access to files and Git. In the browser there is no file system and no Git; there the canvas needs `abyme serve`.
+- **Desktop first**, as a Tauri app with access to files and Git. In the browser there is no file system and no Git; there the canvas needs `abyme serve` from [[Hexagonal Architecture#Runtime|stage B]].
 - **Linux:** The webview there is WebKitGTK. How well it renders many elements must be shown by a test.
 - **Text sizes** from Rust and the rendering in the webview can differ slightly. Fixed fonts and some room around the text help.
 
