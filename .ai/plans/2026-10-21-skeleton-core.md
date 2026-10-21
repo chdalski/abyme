@@ -42,7 +42,7 @@ the Cargo workspace with `abyme-model`, `abyme-core`, and
 
 - [x] Settle the design of the skeleton core
 - [x] Workspace and board file format
-- [ ] Run `/project-init` and commit its outputs: it fills the
+- [x] Run `/project-init` and commit its outputs: it fills the
       Build and Test section of the root `CLAUDE.md` and
       enables the rust-analyzer plugin
 - [ ] Element files

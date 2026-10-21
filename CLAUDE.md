@@ -11,9 +11,18 @@ core comes first, then search and the canvas.
 ## Build and Test
 
 ```sh
-# No code yet — no build, test, lint, or format commands.
-# Re-run /project-init once the first Cargo.toml or package.json exists.
+cargo build --workspace
+cargo test --workspace
+cargo clippy --workspace --all-targets   # zero warnings: the workspace lints deny them
+cargo fmt --all                          # --check to verify only
+cargo clean
 ```
+
+## Components
+
+| Path | Purpose |
+|---|---|
+| `crates/abyme-model` | The Abyme format: identifiers and the files that hold boards |
 
 ## Language
 
@@ -33,7 +42,8 @@ keywords.
 
 - Write code only when explicitly asked. The Working Skeleton is being built as defined in `docs/5 Architecture/First Slice.md`: its core first, then search and the canvas, each in its own plan under `.ai/plans/`.
 - `docs/` is an Obsidian vault whose root is the project root; its rules are in `docs/README.md` ("Rules"): docs describe the current state, not its history; proposals go in `> [!question] Proposal`, open points in `> [!todo] Open`; decisions are a table in `docs/Decisions.md`; links are wikilinks.
-- Render-check every new Mermaid diagram before adding it to `docs/`.
+- Render-check every new Mermaid diagram before adding it to `docs/`: `npx -y @mermaid-js/mermaid-cli@12.0.0 -q -i "<note>.md" -o "<scratch dir>/<note>.md"` exits non-zero on a broken diagram; it needs headless Chrome's libraries (`libnss3` and others), which the devcontainer image does not install yet.
+- Crates inherit the workspace lint set with `[lints] workspace = true`; the set comes from `.claude/skills/project-init/rust-init.md`, and `clippy.toml` relaxes it only for tests.
 - Comparisons with other tools stay in the chat; `docs/` takes only the adopted ideas, without naming the tool.
 - `docs/Glossary.md` defines the terms that docs, UI, and code share; add new terms there.
 - Decided stack: a Rust Cargo workspace with crates under `crates/`; the canvas is a Tauri app with React Flow, its UI in TypeScript.
