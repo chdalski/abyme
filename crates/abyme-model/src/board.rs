@@ -5,16 +5,13 @@
 
 use std::collections::BTreeMap;
 use std::collections::btree_map::Entry;
-use std::fmt;
-use std::marker::PhantomData;
 use std::num::NonZeroU32;
 
-use serde::de::value::MapAccessDeserializer;
-use serde::de::{MapAccess, Visitor};
-use serde::{Deserialize, Deserializer};
+use serde::Deserialize;
 use serde_json::Value;
 
 use crate::id::{BoardId, ElementId};
+use crate::object_only::ObjectOnly;
 use crate::untrusted::shown;
 
 /// The version of the board file format this crate reads and writes.
@@ -108,35 +105,6 @@ struct PlacementLine {
     y: i32,
     width: NonZeroU32,
     height: NonZeroU32,
-}
-
-/// A `T` read only from a JSON object.
-///
-/// A derived struct also reads the array form (`[1, "main", …]`), so the
-/// same file would be a board here and something else to every other JSON
-/// reader. This wrapper keeps the derive's checks for unknown and duplicate
-/// fields and rejects every other shape.
-struct ObjectOnly<T>(T);
-
-/// The visitor behind [`ObjectOnly`]; it accepts nothing but a map.
-struct ObjectOnlyVisitor<T>(PhantomData<T>);
-
-impl<'de, T: Deserialize<'de>> Deserialize<'de> for ObjectOnly<T> {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        deserializer.deserialize_map(ObjectOnlyVisitor(PhantomData))
-    }
-}
-
-impl<'de, T: Deserialize<'de>> Visitor<'de> for ObjectOnlyVisitor<T> {
-    type Value = ObjectOnly<T>;
-
-    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("a JSON object")
-    }
-
-    fn visit_map<A: MapAccess<'de>>(self, map: A) -> Result<Self::Value, A::Error> {
-        T::deserialize(MapAccessDeserializer::new(map)).map(ObjectOnly)
-    }
 }
 
 impl Board {

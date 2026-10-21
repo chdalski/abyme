@@ -9,9 +9,14 @@ publish.workspace = true
 
 [dependencies]
 rlsp-yaml-parser.workspace = true
+schemars = { workspace = true, optional = true }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+
+[features]
+# JSON Schemas for the types an AI sends over MCP; off unless a client needs them.
+json-schema = ["dep:schemars"]
 
 [dev-dependencies]
 proptest.workspace = true

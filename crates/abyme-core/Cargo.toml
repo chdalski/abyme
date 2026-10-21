@@ -1,0 +1,27 @@
+[package]
+name = "abyme-core"
+description = "The Abyme core: operations on boards and elements, applied to the files in a repository"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+abyme-model.workspace = true
+schemars = { workspace = true, optional = true }
+serde.workspace = true
+thiserror.workspace = true
+
+[features]
+# JSON Schemas for the operations, so an MCP server can describe its tools;
+# off unless a client needs them.
+json-schema = ["dep:schemars", "abyme-model/json-schema"]
+
+[dev-dependencies]
+proptest.workspace = true
+rstest.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

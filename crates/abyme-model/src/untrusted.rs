@@ -1,10 +1,12 @@
 //! Showing text from untrusted input in messages.
 
 /// Quotes `text` with every control or special character escaped and cuts
-/// it after `limit` characters.
+/// it after `limit` characters. Use it for every text from untrusted input
+/// that a message shows.
 ///
 /// Messages reach the AI and the terminal, so a value from a file must not
 /// break their lines, smuggle in terminal escapes, or flood them.
+#[must_use]
 pub fn shown(text: &str, limit: usize) -> String {
     let mut chars = text.chars();
     let head: String = chars

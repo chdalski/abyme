@@ -46,7 +46,7 @@ the Cargo workspace with `abyme-model`, `abyme-core`, and
       Build and Test section of the root `CLAUDE.md` and
       enables the rust-analyzer plugin
 - [x] Element files
-- [ ] Pure apply
+- [x] Pure apply
 - [ ] Persisting operations
 - [ ] Board outline
 - [ ] MCP server
@@ -185,8 +185,8 @@ Tasks 1 and 2 accept; `type_ref` must not be empty.
 
 Review path: Security-Hybrid
 
-- [ ] An empty list of operations succeeds with no writes
-- [ ] Apply returns either all file writes or an error and no
+- [x] An empty list of operations succeeds with no writes
+- [x] Apply returns either all file writes or an error and no
       writes; tests cover an unknown slug, an unknown key, a
       key used before the operation that creates it, a key
       created twice (also once for an element and once for a
@@ -196,27 +196,27 @@ Review path: Security-Hybrid
       empty `type_ref`, a character outside the allowed set in
       `type_ref`, name, and summary, and an element whose
       frontmatter would exceed 64 KiB
-- [ ] Every file in the returned writes is accepted by the
+- [x] Every file in the returned writes is accepted by the
       readers of Tasks 1 and 2; a property test over arbitrary
       names, summaries, bodies, and titles checks it
-- [ ] Every new element and board gets a slug that collides
+- [x] Every new element and board gets a slug that collides
       neither with existing ones nor with others from the same
       request, through the suffixes `-2`, `-3`, and so on;
       apply reports the slug each key received
-- [ ] A name whose slug would exceed 64 characters yields a
+- [x] A name whose slug would exceed 64 characters yields a
       valid slug of at most 64 characters, also when a
       collision suffix is added; tests cover both cases
-- [ ] A placed element overlaps no other placement on its
+- [x] A placed element overlaps no other placement on its
       board, including placements made earlier in the same
       request; a test places two elements on one board in one
       request
-- [ ] In the returned writes, element files come before board
+- [x] In the returned writes, element files come before board
       files
-- [ ] Operations in the JSON shape described in this task are
+- [x] Operations in the JSON shape described in this task are
       accepted, and unknown fields and unknown `op` values are
       rejected; with the `json-schema` feature the operations
       yield a JSON Schema
-- [ ] From `Data Model.md` alone, a reader can write a valid
+- [x] From `Data Model.md` alone, a reader can write a valid
       request with the skeleton's operations and predict the
       slug a name receives; `Glossary.md` defines local key
 

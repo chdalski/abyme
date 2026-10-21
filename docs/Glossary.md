@@ -64,6 +64,7 @@ The docs, the UI, and the code use these terms alike. The type names are in [[Da
 | [[Hexagonal Architecture\|Driven adapter]] | is called by the core through an output port, e.g. storage or search index |
 | [[Hexagonal Architecture#Core API\|Core API]] | the core's input port; for now the public API of `abyme-core`, from stage B a trait (`AbymeApi`) usable embedded or remote |
 | [[Data Model#Operations\|Operation]] | a change held as data, such as creating, moving, or pinning an element; applying it returns the file writes |
+| [[Data Model#Operations\|Local key]] | a name for something a request creates, valid only within that request |
 | [[Canvas#Projecting a Board\|Projection]] | a board from the board graph, translated into what an interface displays |
 | [[Canvas#Visual Check\|Visual check]] | the AI fetches an image of the board to check its result |
 | [[Canvas#Visual Check\|Scene]] | shapes, geometry, style, and text of a board, from which the render tool draws |

@@ -173,7 +173,8 @@ pub struct Rect { pub x: i32, pub y: i32, pub width: NonZeroU32, pub height: Non
 
 ## Rules
 
-- **IDs are readable slugs.** The core assigns them when it creates an element or board and never changes them. A collision gets the suffix `-2`, `-3`, and so on. A sticky note's slug comes from its first words, or is `note` if it has no text. Frame IDs are unique within their board. The same slugs appear in files, diffs, and the [[MCP Server#Detail Levels|board outline]].
+- **IDs are readable slugs.** A valid ID consists of lowercase ASCII letters and digits joined by single hyphens, has at most 64 characters, and is none of the names Windows reserves for devices (`con`, `prn`, `aux`, `nul`, `com0`–`com9`, `lpt0`–`lpt9`). The core assigns IDs when it creates an element or board and never changes them. The same slugs appear in files, diffs, and the [[MCP Server#Detail Levels|board outline]]. Frame IDs are unique within their board.
+- **How a name becomes a slug:** ASCII letters become lowercase, ASCII letters and digits stay, every other run of characters becomes one hyphen, and hyphens at the ends are dropped; so `Payment Service` becomes `payment-service`, and `Überweisung` becomes `berweisung`. A name without letters or digits becomes `element` or `board`. If the slug is taken, or is a reserved device name, it gets the suffix `-2`, `-3`, and so on; a slug longer than 64 characters is shortened so that it fits together with its suffix, and a hyphen left at the cut is dropped. An element ID that a board still places counts as taken even when its file is missing. A sticky note's slug will come from its first words, or be `note` if it has no text.
 - **Representation or native:** An element is a representation if it has an `anchor` (see [[Elements]]).
 - **Home:** Every element has exactly one `Placement` with `is_reference = false`. All others are references (see [[Board Graph]]). An element without a home, for example freshly created by the AI, is allowed and reported as a hint.
 - **Arrows are not stored.** They follow from the relations. Deleting an arrow means deleting the relation.
@@ -187,6 +188,24 @@ pub struct Rect { pub x: i32, pub y: i32, pub width: NonZeroU32, pub height: Non
 ## Operations
 
 An operation is a delta held as data, such as creating, placing, moving, or pinning an element, or attaching a note. Applying operations is a pure function: it takes the current files and returns the file writes, and the core then carries them out (see [[Storage in Git#Writing]]). This makes it testable without a file system and lets operations travel between processes later.
+
+A request is a list of operations, each a JSON object with the field `op`. The Working Skeleton has three:
+
+```json
+[
+  {"op": "create_board", "key": "b", "title": "Container Level"},
+  {"op": "create_element", "key": "pay", "type_ref": "c4/container", "name": "Payment Service",
+   "summary": "Payment processing through Stripe", "body": "Handles payments."},
+  {"op": "place_element", "element": {"new": "pay"}, "board": {"new": "b"}},
+  {"op": "place_element", "element": {"existing": "orders-db"}, "board": {"new": "b"}}
+]
+```
+
+- **`create_element`** takes a key, `type_ref`, `name`, and optionally `summary` and `body`; **`create_board`** takes a key and `title`; **`place_element`** gives an element its home on a board. Other fields are rejected.
+- **References:** `{"new": "<key>"}` names what an earlier operation of the same request creates, `{"existing": "<id>"}` what already exists. A **local key** has 1 to 64 ASCII letters, digits, hyphens, and underscores, is valid only within its request, and elements and boards share one set of keys.
+- **All or nothing:** Operations run in order. If one fails, for example because a key is unknown or an element already has a home, the request writes nothing, and the error names the operation's position. A request has at most 1000 operations.
+- **The result** names the ID each key received; the canvas and the AI refer to the new elements and boards by these IDs from then on.
+- **Placement:** The skeleton gives every placed element the size 180 × 90 and the first free cell of a grid near the board's origin, or a position below everything else.
 
 The MCP server and the canvas use the same core functions:
 

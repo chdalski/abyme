@@ -8,8 +8,13 @@
 mod board;
 mod element;
 mod id;
+mod object_only;
+#[cfg(feature = "json-schema")]
+mod schema;
 mod untrusted;
 
 pub use board::{BOARD_FORMAT, Board, BoardError, Rect};
 pub use element::{Element, ElementError, ElementProblem, MAX_FRONTMATTER_BYTES, TypeRef};
 pub use id::{BoardId, BoardKind, ElementId, ElementKind, Id, IdError, IdKind, IdRule, MAX_ID_LEN};
+pub use object_only::ObjectOnly;
+pub use untrusted::shown;
