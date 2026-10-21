@@ -1,5 +1,5 @@
 **Repository:** root
-**Status:** NotStarted
+**Status:** InProgress
 **Created:** 2026-10-21
 
 ## Goal
@@ -41,7 +41,7 @@ the Cargo workspace with `abyme-model`, `abyme-core`, and
 ## Steps
 
 - [x] Settle the design of the skeleton core
-- [ ] Workspace and board file format
+- [x] Workspace and board file format
 - [ ] Run `/project-init` and commit its outputs: it fills the
       Build and Test section of the root `CLAUDE.md` and
       enables the rust-analyzer plugin
@@ -68,25 +68,25 @@ check as a generated one. The board file follows
 
 Review path: Security-Hybrid
 
-- [ ] The workspace builds, and `cargo clippy` with the
+- [x] The workspace builds, and `cargo clippy` with the
       workspace lint set reports nothing; every crate inherits
       the workspace lints
-- [ ] `target/` is ignored by Git, and `Cargo.lock` is
+- [x] `target/` is ignored by Git, and `Cargo.lock` is
       committed
-- [ ] A string that is not a valid slug cannot become an
+- [x] A string that is not a valid slug cannot become an
       `ElementId` or a `BoardId`; tests cover accepted and
       rejected forms, including 64 and 65 characters
-- [ ] A board written and read back is unchanged; the file has
+- [x] A board written and read back is unchanged; the file has
       one placement per line, sorted by element ID, and moving
       one placement changes exactly one line
-- [ ] A board file whose placements are not sorted is read and
+- [x] A board file whose placements are not sorted is read and
       written back sorted
-- [ ] A board file is rejected, with an error naming the file,
+- [x] A board file is rejected, with an error naming the file,
       when it has invalid JSON, an unknown field, an invalid
       ID, an `id` other than its file name, an unknown format
       version, or two placements of the same element; each case
       has a test
-- [ ] The status lines of the root `README.md` and
+- [x] The status lines of the root `README.md` and
       `docs/README.md` and the concept-phase statements of the
       root `CLAUDE.md` outside its Build and Test section say
       that the Working Skeleton is being built and that search

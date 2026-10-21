@@ -6,7 +6,7 @@ Abyme is a tool for developers to work visually with an AI. Project knowledge li
 
 ## Status
 
-Concept phase: there is no code yet. The concept lives in `docs/`; start at [docs/README.md](docs/README.md). To browse it with working wikilinks, open the project root as an Obsidian vault.
+The Working Skeleton is being built: its core comes first, then search and the canvas. The concept lives in `docs/`; start at [docs/README.md](docs/README.md). To browse it with working wikilinks, open the project root as an Obsidian vault.
 
 ## Stack
 

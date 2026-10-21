@@ -10,7 +10,7 @@ aliases:
 
 Abyme is a tool for developers to work visually with an AI. Project knowledge lives on linked canvas boards in the repo. Developers and the AI document, discuss, and update it there together. The developer works in the canvas, the AI through an MCP server, both on the same data.
 
-**Status:** concept phase, there is no code yet. The Working Skeleton and the MVP are defined in [[First Slice]]; the Working Skeleton gets built next.
+**Status:** The Working Skeleton is being built, as defined in [[First Slice]]: its core comes first, then search and the canvas. The MVP follows.
 
 **Visual entry point:** [[Architecture Overview]]
 

@@ -5,8 +5,8 @@ knowledge lives on linked canvas boards stored in the project's own Git
 repository; the developer works in a canvas app, the AI through an MCP
 server, both on the same data. Abyme keeps that knowledge honest: it
 detects when boards no longer match the code and flags dependent content.
-The project is in its concept phase — the concept lives in `docs/`, and
-there is no code yet.
+The concept lives in `docs/`. The Working Skeleton is being built: its
+core comes first, then search and the canvas.
 
 ## Build and Test
 
@@ -31,7 +31,7 @@ keywords.
 
 <!-- Agents: add non-obvious project conventions discovered during work — things a future agent would need to know to avoid mistakes. One line each. Remove when no longer true. -->
 
-- Concept phase: there is no code yet; write prototypes or code only when explicitly asked. The Working Skeleton comes first, as defined in `docs/5 Architecture/First Slice.md`.
+- Write code only when explicitly asked. The Working Skeleton is being built as defined in `docs/5 Architecture/First Slice.md`: its core first, then search and the canvas, each in its own plan under `.ai/plans/`.
 - `docs/` is an Obsidian vault whose root is the project root; its rules are in `docs/README.md` ("Rules"): docs describe the current state, not its history; proposals go in `> [!question] Proposal`, open points in `> [!todo] Open`; decisions are a table in `docs/Decisions.md`; links are wikilinks.
 - Render-check every new Mermaid diagram before adding it to `docs/`.
 - Comparisons with other tools stay in the chat; `docs/` takes only the adopted ideas, without naming the tool.
