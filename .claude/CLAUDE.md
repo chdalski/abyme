@@ -155,45 +155,68 @@ When the user asks you to implement:
    feature work. Record each declined design proposal with
    its reason in Decisions, so the Reviewer does not flag
    the structure the user chose to keep. Name risk
-   categories in Context; do not prescribe controls.
+   categories in Context; do not prescribe controls. When
+   the plan promises unchanged behavior, first find every
+   input state in which the planned design computes
+   something different from the current code — per
+   changed path, including states only test data reaches.
+   Settle each, asking the user where _Ask about
+   trade-offs_ says so, and record each outcome in
+   Decisions. A prior plan promised identical results and
+   left such states open; the plan-reviewer found them one
+   per pass.
 4. **Classify every task** with `risk-assessment.md` and
    record it in the task's `Review path:` line. If any task hits an escalation trigger, stop
    and escalate as that rule describes before presenting
    the plan.
-5. **Review the plan via subagent.** First fix the
+5. **Review the plan via subagents.** First fix the
    mechanical items from `plan-review-checklist.md`
-   yourself (§1, §2, §3, §7, §10, §14). Then launch
-   `plan-reviewer` without a `name`, passing the plan
-   path, the plans directory path, and the user's
-   original request in their own words. Fix each Blocking
-   finding or decline it with a reason in the plan's
-   Decisions section; re-launch after any fix, until it
-   reports "No blocking issues found" or every remaining
-   Blocking finding is declined. Do not skip this for "simple"
-   plans — you cannot see your own escape hatches.
-   Take Advisory findings in one batch per review cycle:
-   at the first pass that reports no Blocking findings,
-   decide once which of its Advisory findings to take,
-   apply them all in one revision, and run one more pass.
-   If you take none, no extra pass is needed. Every pass
-   after the batch is a closing pass: fix and re-pass its
-   Blocking findings as always, but do not apply its
-   Advisory findings — name them to the user with the
-   plan. A prior session applied Advisory findings one
-   round at a time and took a one-task plan through six
-   passes.
+   yourself (§1, §2, §3, §7, §10, §14). Then review it in
+   passes. Launch every `plan-reviewer` without a `name`,
+   passing the plan path, the plans directory path, and
+   the user's original request in their own words, plus
+   any change the user asked for at approval. Do not skip
+   this for "simple" plans — you cannot see your own
+   escape hatches.
+   a. **First pass:** launch three in one message, one per
+      focus — `scope`, `criteria`, `impact`. A single
+      reviewer covering the whole checklist finds a
+      different subset on every pass, and the rest
+      surfaces one revision at a time.
+   b. **Revise.** Before each revision, copy the plan as
+      the last pass reviewed it to a temporary file outside
+      the plans directory — the plan-reviewer reads every
+      file there as a sibling plan. Fix each Blocking
+      finding, or decline it with a reason in the plan's
+      Decisions section. When a finding names one instance,
+      fix every instance of its kind; the reviewer may have
+      reported only those it saw. Apply the Advisory
+      findings you agree with in the same revision.
+   c. **Follow-up pass:** launch one `plan-reviewer` with
+      the previous pass's Blocking findings and the output
+      of `diff -u <copy> <plan>` — it has no Bash. It
+      reviews the revision against the rest of the plan,
+      not the unchanged text again. Repeat b–c until a pass
+      reports "No blocking issues found" or every remaining
+      Blocking finding is declined.
+   d. **No pass for Advisory findings alone.** A pass
+      without Blocking findings ends the cycle, and its
+      Advisory findings are dropped — except after the
+      first pass, where you may apply them and run one
+      follow-up pass. A prior session applied Advisory
+      findings one round at a time and took a one-task plan
+      through six passes.
 6. **Present the plan to the user** via `AskUserQuestion`,
-   naming every declined finding, split suggestion, and
-   closing-pass Advisory finding. Present only plan text
-   the plan-reviewer has reviewed in its current form: any
-   edit after a review pass — a fix for a Blocking or an
-   Advisory finding, a change the user asked for, your own
-   correction, however small — goes through step 5 again
-   first. A prior session worked seven Advisory findings
-   into a plan and asked for approval without a review
-   pass. On changes, revise and restart the review cycle
-   (step 5); its first pass is a closing pass. A change of
-   approach goes back to step 2 first.
+   naming every declined finding and split suggestion.
+   Present only plan text the plan-reviewer has reviewed
+   in its current form: any edit after a review pass — a
+   fix for a Blocking or an Advisory finding, a change the
+   user asked for, your own correction, however small —
+   goes through a follow-up pass (step 5b–c) first. A
+   prior session worked seven Advisory findings into a
+   plan and asked for approval without a review pass. On
+   changes, revise and run follow-up passes (step 5b–d). A
+   change of approach goes back to step 2 first.
 7. **Commit the plan** after approval:
    `docs(<scope>): add plan for <feature>` — a committed
    plan survives a crashed session. Then start its first
