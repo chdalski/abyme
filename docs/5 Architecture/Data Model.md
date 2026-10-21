@@ -168,7 +168,7 @@ pub struct ChangeRequest {
     pub created_by: Actor,
 }
 
-pub struct Rect { pub x: i64, pub y: i64, pub width: i64, pub height: i64 }
+pub struct Rect { pub x: i32, pub y: i32, pub width: NonZeroU32, pub height: NonZeroU32 }
 ```
 
 ## Rules

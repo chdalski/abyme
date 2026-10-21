@@ -8,7 +8,6 @@ Only what is still open, with a link to the note where the question lives. Once 
 
 ## Before the Working Skeleton
 
-- **YAML library** for the element frontmatter, which the skeleton already reads and writes, see [[Storage in Git#Element File]].
 - **Embedding model** for the search the skeleton already contains, see [[Search and Index]].
 
 ## Before the MVP

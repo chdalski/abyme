@@ -22,7 +22,7 @@ cargo clean
 
 | Path | Purpose |
 |---|---|
-| `crates/abyme-model` | The Abyme format: identifiers and the files that hold boards |
+| `crates/abyme-model` | The Abyme format: identifiers and the files that hold elements and boards |
 
 ## Language
 

@@ -13,7 +13,7 @@ All Abyme data lies as files in Git, in the same repo as the code. Derived data 
 The folders are `abyme/`, in Git, and `.abyme/`, which Git ignores. Elements are Markdown files with YAML frontmatter, boards are JSON files.
 
 > [!question] Proposal
-> The file names inside the folders and the fields in the examples below are a draft.
+> The file names inside the folders, and the fields that come after the Working Skeleton, are a draft.
 
 ```
 project/
@@ -65,31 +65,25 @@ In [[Hexagonal Architecture#Runtime|stage A]], the canvas and the MCP server wri
 
 ## Element File
 
-An element is a Markdown file with frontmatter. The description follows below as Markdown. A change to the description is a normal text diff in the pull request. Since the vault lies in the project root, Obsidian shows the elements as notes.
+An element is a Markdown file with a YAML frontmatter. The description follows below as Markdown. A change to the description is a normal text diff in the pull request. Since the vault lies in the project root, Obsidian shows the elements as notes.
 
 ```markdown
 ---
-id: payment-service
-type: c4/container
-name: Payment Service
-summary: Payment processing through Stripe
-attributes:
-  technology: Go
-anchor: file://crates/payment-service/
-verified:
-  commit: 3f2a9c1
-  by: ai
-inner_board: payment-components
-relations:
-  - { kind: uses, to: stripe-adapter, label: "HTTPS" }
-  - { kind: depends_on, to: orders-db }
+id: "payment-service"
+type: "c4/container"
+name: "Payment Service"
+summary: "Payment processing through Stripe"
 ---
 Handles payments through Stripe. Refunds run asynchronously
 through the refund-worker.
 ```
 
-> [!todo] Open
-> **YAML library:** Which library reads and writes the frontmatter?
+- **Fields:** `id`, which equals the file name, `type`, which is never empty, `name`, and the optional `summary`. Other keys are rejected.
+- **Writing:** Abyme writes every value double-quoted. It escapes backslash, double quote, tab, line feed, carriage return, U+0085, U+2028, U+2029, and U+FEFF and keeps every other character as it is. Values written by hand may use any YAML scalar style.
+- **Limits:** `type`, `name`, and `summary` hold only characters YAML counts as printable: no control characters other than tab, line feed, carriage return, and U+0085, and neither U+FFFE nor U+FFFF. The frontmatter is at most 64 KiB, counted as Abyme writes it.
+- **Strict YAML:** The frontmatter is one flat mapping. Aliases, anchors, tags, directives, and document markers are rejected, so the file means the same to every reader.
+- **The body** below the closing `---` line is kept byte for byte.
+- **Later fields:** `attributes`, `anchor`, `statement`, `verified`, `inner_board`, `expected_anchor`, and `relations` from the [[Data Model#Types|data model]] come with the slices that need them.
 
 ## Board File
 
@@ -100,31 +94,26 @@ A board is a JSON file. Its structure follows JSON Canvas, so an export to `.can
   "format": 1,
   "id": "container-level",
   "title": "Container Level",
-  "owner": "shop-system",
-  "zone": { "preset": "current", "mode": "mirrored" },
-  "frames": [
-    { "id": "current", "title": "Current", "x": 0, "y": 0, "width": 900, "height": 600 }
-  ],
   "placements": [
-    { "element": "bottleneck-black-friday", "x": 420, "y": 320, "width": 160, "height": 80, "presentation": "note" },
-    { "element": "checkout-service", "frame": "current", "x": 80, "y": 200, "width": 180, "height": 90, "presentation": "box" },
-    { "element": "payment-service", "frame": "current", "x": 400, "y": 200, "width": 180, "height": 90, "presentation": "box", "pinned": true },
-    { "element": "question-retries", "frame": "current", "attached_to": "payment-service", "x": 120, "y": -40, "width": 140, "height": 70, "presentation": "note" }
+    {"element": "checkout-service", "x": 80, "y": 200, "width": 180, "height": 90},
+    {"element": "payment-service", "x": 400, "y": 200, "width": 180, "height": 90}
   ]
 }
 ```
 
+- **Fields:** `format`, which is 1, `id`, which equals the file name, `title`, and the placements with `element`, `x`, `y`, `width`, and `height`. Positions are integers, sizes positive integers. The file must be a JSON object; other fields and an element placed twice are rejected.
 - **One placement per line**, sorted by element ID. Moving a box changes exactly one line.
-- **Attached:** The note `question-retries` hangs on `payment-service`; its coordinates are relative to that element (see [[Presentation#Sticky Notes]]).
 - **Arrows are not in the file.** They follow from the relations of the elements.
+- **Later fields:** `owner`, `zone`, and `frames` on the board; `frame`, `presentation`, `pinned`, and `attached_to` on a placement. An attached sticky note's coordinates will be relative to the element it hangs on (see [[Presentation#Sticky Notes]]).
 
 ## Project File
 
 ```toml
 # abyme/abyme.toml
 format = 1
-type_packs = ["c4", "adr"]
 ```
+
+`type_packs`, the enabled [[Extensions#Type Packs|type packs]], comes later.
 
 ## What Is Not in Git
 

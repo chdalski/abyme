@@ -45,7 +45,7 @@ the Cargo workspace with `abyme-model`, `abyme-core`, and
 - [x] Run `/project-init` and commit its outputs: it fills the
       Build and Test section of the root `CLAUDE.md` and
       enables the rust-analyzer plugin
-- [ ] Element files
+- [x] Element files
 - [ ] Pure apply
 - [ ] Persisting operations
 - [ ] Board outline
@@ -110,32 +110,54 @@ frontmatter. Decided rules:
   optional; `id` must equal the file name, and `type` must not
   be empty. An absent summary is written as no key and read
   back as absent; an empty summary stays an empty string.
+- `type`, `name`, and `summary` hold only YAML-printable
+  characters: no C0 control other than tab, line feed, and
+  carriage return, no DEL, no C1 control other than U+0085,
+  and neither U+FFFE nor U+FFFF. The frontmatter, counted in
+  bytes between the two `---` lines as the emitter writes it,
+  is at most 64 KiB. Building an element checks both rules,
+  and reading builds the element through that same check
+  after rejecting a file whose frontmatter exceeds 64 KiB
+  before parsing; so every element read can be written again,
+  and no element can be written that the reader rejects.
 - Rejected: aliases, anchors, tags written in the file,
   non-scalar keys, non-scalar values, unknown keys, duplicate
-  keys, a missing required key, and more than one document.
+  keys, a missing required key, directives, document start or
+  end markers inside the frontmatter, and more than one
+  document.
 - The emitter writes the known keys plain and every value
-  double-quoted and fully escaped, so no written line can be
-  `---`.
+  double-quoted. It escapes backslash, double quote, tab,
+  line feed, carriage return, U+0085, U+2028, U+2029, and
+  U+FEFF and keeps every other character as it is, so no
+  written line can be `---`.
 
 Review path: Security-Hybrid
 
-- [ ] An element with arbitrary strings in `name`, `summary`,
-      and the body, a non-empty `type`, and a valid `id`,
-      including line breaks and lines that read `---`, is
+- [x] An element with arbitrary strings of YAML-printable
+      characters in `name` and `summary` within the frontmatter
+      limit, an arbitrary body, a non-empty `type`, and a valid
+      `id`, including line breaks and lines that read `---`, is
       unchanged after writing and reading back; a property test
       checks this, and its regression files are committed
-- [ ] Each decided rule has its own test: every rejection with
+- [x] A value with a character outside the allowed set, and a
+      frontmatter over 64 KiB, are rejected both when reading
+      and when building an element; tests cover each excluded
+      character class, an emitted frontmatter of exactly 64 KiB
+      and one byte more, and a file whose escapes would grow
+      its frontmatter past the limit when written
+- [x] Each decided rule has its own test: every rejection with
       a file that breaks only that rule, and every accepted
       form (CRLF, the body kept byte for byte, an absent and an
       empty summary)
-- [ ] The element example from `Storage in Git.md`, reduced to
+- [x] The element example from `Storage in Git.md`, reduced to
       this task's fields, reads into the expected element
-- [ ] A reader of `Storage in Git.md` can tell which fields the
+- [x] A reader of `Storage in Git.md` can tell which fields the
       Working Skeleton reads and writes in element, board, and
-      project files, which come later, and how frontmatter
-      values are written; the examples match what the skeleton
-      writes
-- [ ] The YAML library is no longer an open question in
+      project files, which come later, how frontmatter values
+      are written, and which characters and size `type`, `name`,
+      and `summary` may have; the examples match what the
+      skeleton writes
+- [x] The YAML library is no longer an open question in
       `Open Questions.md` or in `Storage in Git.md`, and
       `Decisions.md` holds `rlsp-yaml-parser` with its reason
 
@@ -170,8 +192,10 @@ Review path: Security-Hybrid
       created twice (also once for an element and once for a
       board), a key of a board used as an element and the
       reverse, placing an element that already has a home on
-      disk, placing one element twice in one request, and an
-      empty `type_ref`
+      disk, placing one element twice in one request, an
+      empty `type_ref`, a character outside the allowed set in
+      `type_ref`, name, and summary, and an element whose
+      frontmatter would exceed 64 KiB
 - [ ] Every file in the returned writes is accepted by the
       readers of Tasks 1 and 2; a property test over arbitrary
       names, summaries, bodies, and titles checks it
@@ -346,6 +370,10 @@ Review path: Security-Hybrid
   never creates a project inside another one, so a project
   root is never shadowed, and never overwrites a project
   file it rejects.
+- **Element values are limited** (rule in Task 2), because
+  `rlsp-yaml-parser` rejects non-printable characters even as
+  escapes and parses escapes slowly; the round trip holds
+  within the limits only.
 - **Apply writes only readable files:** input that would
   produce a file the readers reject, such as an empty
   `type_ref`, is rejected by apply, because a written invalid
