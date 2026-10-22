@@ -52,7 +52,7 @@ the Cargo workspace with `abyme-model`, `abyme-core`, and
 - [x] Element files
 - [x] Pure apply
 - [x] Persisting operations
-- [ ] Board outline
+- [x] Board outline
 - [ ] MCP server
 
 ## Tasks
@@ -317,16 +317,16 @@ happen after a merge or while a writer adds an element.
 
 Review path: Security-Hybrid
 
-- [ ] For a board with placed elements, the outline lists each
+- [x] For a board with placed elements, the outline lists each
       element on one line with slug, type, name, and summary,
       sorted by slug; a snapshot test fixes the format
-- [ ] Each element takes exactly one line of the outline, also
+- [x] Each element takes exactly one line of the outline, also
       when its name or summary contains line breaks
-- [ ] A placement whose element file is missing appears as its
+- [x] A placement whose element file is missing appears as its
       slug with the marker `missing`, and the rest of the
       outline is unaffected; the snapshot test covers such a
       line
-- [ ] An unknown board slug gives an error that names it
+- [x] An unknown board slug gives an error that names it
 
 ### Task 6: Serve apply and read_board over MCP
 

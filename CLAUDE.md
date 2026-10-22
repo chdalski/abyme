@@ -23,7 +23,7 @@ cargo clean
 | Path | Purpose |
 |---|---|
 | `crates/abyme-model` | The Abyme format: identifiers and the files that hold elements and boards |
-| `crates/abyme-core` | Operations on elements and boards: `apply` turns a request into the files to write, and `Project` finds a project, initializes it, and reads and writes its files |
+| `crates/abyme-core` | Operations on elements and boards: `apply` turns a request into the files to write, `Project` finds a project, initializes it, and reads and writes its files, and `outline` renders a board as text for the AI |
 
 ## Language
 
