@@ -87,7 +87,7 @@ flowchart TB
 | MCP server | tools for the AI | [[MCP Server]] |
 | Parsers | read known formats without the AI, optional | [[Extensions#Parsers]] |
 | Fetchers | connect external sources, later | [[Extensions#Fetchers]] |
-| Cache | search index and render cache, not in Git | [[Search and Index]] |
+| Cache | search index in the user's cache, render cache to come; neither in Git | [[Search and Index]] |
 | `abyme/` | the Abyme format in the project repo | [[Storage in Git]] |
 
 **Hooks** for Git and Claude Code trigger reconciliation, see [[Project Knowledge and AI Memory]].

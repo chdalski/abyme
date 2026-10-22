@@ -42,7 +42,7 @@ its own plan.
 ## Steps
 
 - [x] Share the outline's element rows
-- [ ] Document the decided search design
+- [x] Document the decided search design
 - [ ] Provide protoc in the devcontainer
 - [ ] Build the index in the user cache
 - [ ] Download, verify, and load the model
@@ -77,23 +77,23 @@ still open. The decisions below replace all of that.
 
 Review path: Security-Hybrid
 
-- [ ] From `Search and Index.md`, a reader can find:
+- [x] From `Search and Index.md`, a reader can find:
       - where search keeps its files, and how to reset them;
       - what is embedded per element, and what the index stores;
       - how a project chooses its model;
       - when the model is downloaded and how it is checked.
-- [ ] From `Storage in Git.md`, a reader can set the `embedding_model`
+- [x] From `Storage in Git.md`, a reader can set the `embedding_model`
       key of the project file. The `.abyme/` tree lists nothing Abyme
       does not use.
-- [ ] The Security Baseline in `Hexagonal Architecture.md` says where
+- [x] The Security Baseline in `Hexagonal Architecture.md` says where
       search writes and what it downloads.
-- [ ] No page under `docs/` still says any of these:
+- [x] No page under `docs/` still says any of these:
       - that the search index lives in `.abyme/`;
       - that its freshness comes from a file hash or `source_hash`;
       - that the model is downloaded on first use;
       - that the embedding model is an open question.
       This includes the search row of `Decisions.md`.
-- [ ] `Glossary.md` defines embedding model and search index.
+- [x] `Glossary.md` defines embedding model and search index.
 
 ### Task 3: Provide protoc in the devcontainer
 

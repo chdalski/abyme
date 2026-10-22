@@ -6,10 +6,6 @@ tags:
 
 Only what is still open, with a link to the note where the question lives. Once a question is settled, it goes into the [[Decisions]] and leaves this list.
 
-## Before the Working Skeleton
-
-- **Embedding model** for the search the skeleton already contains, see [[Search and Index]].
-
 ## Before the MVP
 
 - **Measuring the results:** How are the MVP's results measured, for example the share of justified review flags in the replay? See [[First Slice]].

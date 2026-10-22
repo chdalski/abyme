@@ -30,8 +30,7 @@ project/
 ├── .abyme/                            not in Git
 │   ├── .gitignore                     contains `*`, so Git ignores the folder
 │   ├── lock                           lock for writing
-│   ├── tmp/                           files being written, before their rename
-│   └── cache/                         search index and render cache
+│   └── tmp/                           files being written, before their rename
 ├── src/ …
 └── …
 ```
@@ -127,13 +126,18 @@ A board is a JSON file. Its structure follows JSON Canvas, so an export to `.can
 ```toml
 # abyme/abyme.toml
 format = 1
+embedding_model = "paraphrase-multilingual-minilm-l12-v2"
 ```
 
-`type_packs`, the enabled [[Extensions#Type Packs|type packs]], comes later.
+- **`format`** is 1.
+- **`embedding_model`** is optional and chooses the model search embeds with: `bge-small-en-v1.5`, the default, or `paraphrase-multilingual-minilm-l12-v2` (see [[Search and Index#Embedding Model]]). Any other value makes every call fail, like any other error in the project file.
+- **Later:** `type_packs`, the enabled [[Extensions#Type Packs|type packs]].
+
+Keys not listed here are rejected.
 
 ## What Is Not in Git
 
-- **Derived data** that can be regenerated at any time: search index and render caches
+- **Derived data** that can be regenerated at any time: the search index, which lives in the user's cache (see [[Search and Index#Where Search Keeps Its Files]]), and render caches
 - **Credentials**, in case fetchers come later
 - **Values that change continuously.** Such sources are [[Ideas#Deferred|deferred]].
 

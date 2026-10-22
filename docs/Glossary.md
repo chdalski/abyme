@@ -68,3 +68,5 @@ The docs, the UI, and the code use these terms alike. The type names are in [[Da
 | [[Canvas#Projecting a Board\|Projection]] | a board from the board graph, translated into what an interface displays |
 | [[Canvas#Visual Check\|Visual check]] | the AI fetches an image of the board to check its result |
 | [[Canvas#Visual Check\|Scene]] | shapes, geometry, style, and text of a board, from which the render tool draws |
+| [[Search and Index\|Search index]] | LanceDB table in the user's cache that ranks a project's elements for `search`; derived, never the source of data |
+| [[Search and Index#Embedding Model\|Embedding model]] | model that turns element text into vectors for search; each project picks one of the models built into Abyme |

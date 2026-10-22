@@ -112,6 +112,9 @@ The MCP server is started by the client per AI session, so “embedded” is the
 ## Security Baseline
 
 - **The core reads and writes only inside `abyme/` and `.abyme/`.**
+- **Search keeps its index and model files only in Abyme's directory of the user's cache (`~/.cache/abyme/`),** never in the repository. The paths there are built only from a hash of the project root and from built-in model names, never from repository content (see [[Search and Index#Where Search Keeps Its Files]]).
+- **Search downloads only the model files of a revision fixed in Abyme's source.** Every file the model loads, the tokenizer files included, is checked against a size and a SHA-256 built into Abyme, after the download and before every load. The download sends no project content and no credentials.
+- **The build downloads the ONNX Runtime library,** checked against the SHA-256 that the pinned `ort-sys` crate carries.
 - **Input is untrusted**, whether it comes from the AI or from files in the repository. Files in `abyme/` can arrive through a clone or a pull request.
 - **The canvas** has its own part, see [[Canvas#Security]].
 
@@ -120,3 +123,5 @@ The MCP server is started by the client per AI session, so “embedded” is the
 - Content in Abyme can carry a stored prompt injection that later AI sessions read as project knowledge. Only Git and pull-request review catch it.
 - The local Git configuration and hooks are trusted.
 - The AI client's own shell access is outside Abyme's scope.
+- Once their hashes match, the prebuilt ONNX Runtime and the pinned model files are trusted: a hash proves only that they are the files pinned when it was written. Native ONNX Runtime code parses the model.
+- The user's cache is trusted like the rest of the user's home. Abyme checks the model files there before every load, but not the index, so any process of the same user can change the ranking; `search` shows only the current files.
