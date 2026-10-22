@@ -43,7 +43,7 @@ its own plan.
 
 - [x] Share the outline's element rows
 - [x] Document the decided search design
-- [ ] Provide protoc in the devcontainer
+- [x] Provide protoc in the devcontainer
 - [ ] Build the index in the user cache
 - [ ] Download, verify, and load the model
 - [ ] Serve `search` over MCP
@@ -102,9 +102,9 @@ not install it.
 
 Review path: Security-Hybrid
 
-- [ ] The devcontainer image installs `protoc` from the distribution's
+- [x] The devcontainer image installs `protoc` from the distribution's
       packages, and after a rebuild `protoc --version` succeeds.
-- [ ] The root `CLAUDE.md` names `protoc` among the toolchains the
+- [x] The root `CLAUDE.md` names `protoc` among the toolchains the
       devcontainer provides.
 
 ### Task 4: Build the index in the user cache

@@ -51,7 +51,7 @@ keywords.
 - `docs/Glossary.md` defines the terms that docs, UI, and code share; add new terms there.
 - Decided stack: a Rust Cargo workspace with crates under `crates/`; the canvas is a Tauri app with React Flow, its UI in TypeScript.
 - License MIT: every dependency must be MIT-compatible.
-- `.devcontainer/` provides the toolchains: Rust (linked with mold), Node with pnpm, uv, and Go.
+- `.devcontainer/` provides the toolchains: Rust (linked with mold), protoc for LanceDB's build, Node with pnpm, uv, and Go.
 
 ## References
 
