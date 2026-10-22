@@ -25,12 +25,16 @@ the Cargo workspace with `abyme-model`, `abyme-core`, and
 - Library versions: `rlsp-yaml-parser` 0.11.2 (MIT), `rmcp`
   3.6.0 (Apache-2.0, depends on `schemars` ^1.0), `schemars`
   1.2.3 (MIT), `toml` 0.9.8 (MIT OR Apache-2.0), `proptest`
-  1.12.0 (MIT OR Apache-2.0).
+  1.12.0 (MIT OR Apache-2.0), `rustix` 1.1.5 (Apache-2.0 WITH
+  LLVM-exception OR Apache-2.0 OR MIT), `tempfile` 3.27.0 (MIT
+  OR Apache-2.0, tests only).
 - Risk categories: untrusted input from element, board, and
   project files that can arrive through a clone or a pull
   request, and from change sets the AI sends over MCP; file
   paths built from IDs; file persistence with two writing
-  processes; a new external input source (MCP over stdio).
+  processes; a project file that another local user places in
+  a directory above the working directory; a new external
+  input source (MCP over stdio).
   The security baseline and its accepted risks are in
   `Hexagonal Architecture.md#Security Baseline`.
 - Accepted limits of the skeleton: every call reads all
@@ -47,7 +51,7 @@ the Cargo workspace with `abyme-model`, `abyme-core`, and
       enables the rust-analyzer plugin
 - [x] Element files
 - [x] Pure apply
-- [ ] Persisting operations
+- [x] Persisting operations
 - [ ] Board outline
 - [ ] MCP server
 
@@ -225,7 +229,12 @@ Review path: Security-Hybrid
 `abyme-core` finds the project, initializes it on request, and
 applies operations to the files in it. A directory is an Abyme
 project when it contains `abyme/abyme.toml`; the project root
-is the nearest such ancestor. Init creates `abyme/abyme.toml`
+is the nearest such ancestor, also from inside a Git repository
+nested in the project. The root is accepted only when the root
+directory, `abyme/`, and `abyme/abyme.toml` belong to the user
+running Abyme; otherwise every call, init included, fails with
+an error naming the root, without looking further up. The
+skeleton builds for Unix only. Init creates `abyme/abyme.toml`
 with `format = 1` and `.abyme/` with its own `.gitignore`
 containing `*`. Inside an existing project, init changes
 nothing and names the project's root; where
@@ -246,45 +255,54 @@ temporary file.
 
 Review path: Security-Hybrid
 
-- [ ] From a directory inside a project, the project root is
+- [x] From a directory inside a project, the project root is
       found; without `abyme/abyme.toml` above, every call fails
       with an error that tells the developer to run init, and
       nothing is written
-- [ ] An `abyme/abyme.toml` that is not valid TOML, lacks
+- [x] From a directory inside a Git repository nested in a
+      project, the outer project's root is found; a project
+      whose root directory, `abyme/`, or `abyme/abyme.toml`
+      belongs to another user makes every call and init fail
+      with an error naming the root, also when a project
+      further up belongs to the user, and nothing is written;
+      tests cover each of the three paths
+- [x] An `abyme/abyme.toml` that is not valid TOML, lacks
       `format`, has an unknown `format`, or has an unknown key
       makes every call fail with an error naming the file
-- [ ] Init in a directory with no project in it or above it
+- [x] Init in a directory with no project in it or above it
       creates `abyme/abyme.toml` and the self-ignoring
       `.abyme/`; running it again, or in a subdirectory of the
       project, changes nothing and names the project root;
       with a rejected `abyme/abyme.toml` it fails and leaves
       the file unchanged; with only `.abyme/` present it
       creates `abyme/abyme.toml`; each case has a test
-- [ ] In a project without `.abyme/`, as after a fresh clone,
+- [x] In a project without `.abyme/`, as after a fresh clone,
       reading works, and the first write creates `.abyme/` with
       its `.gitignore`; in a project without `abyme/elements/`
       or `abyme/boards/`, reading works and writing creates the
       folder
-- [ ] Entries in `abyme/elements/` and `abyme/boards/` that are
+- [x] Entries in `abyme/elements/` and `abyme/boards/` that are
       not files named as a valid slug with the expected ending,
       including a directory with such a name, are ignored; a
       test shows it
-- [ ] After an apply, the files on disk hold what the pure
+- [x] After an apply, the files on disk hold what the pure
       apply decided; an apply that fails validation changes no
       file
-- [ ] Two processes that apply at the same time both land, and
+- [x] Two processes that apply at the same time both land, and
       neither overwrites the other's change; an integration
       test shows it
-- [ ] Leftover files in `.abyme/tmp/` from an earlier crash are
+- [x] Leftover files in `.abyme/tmp/` from an earlier crash are
       removed before the next apply writes, while that apply
       holds the lock, so a concurrent writer's temporary file
       is never removed
-- [ ] No read or write reaches outside `abyme/` and `.abyme/`;
+- [x] No read or write reaches outside `abyme/` and `.abyme/`;
       tests with an ID-shaped path and with a symlink inside
       `abyme/` show it
-- [ ] A reader of `Storage in Git.md` learns how a repository
-      becomes an Abyme project, what a fresh clone needs, where
-      temporary files go, and in which order files are written;
+- [x] A reader of `Storage in Git.md` learns how a repository
+      becomes an Abyme project, how Abyme finds the project
+      root and when it rejects one, what a fresh clone needs,
+      where temporary files go, and in which order files are
+      written;
       `Decisions.md` holds the explicit init with its reason
 
 ### Task 5: Read a board as an outline
@@ -370,6 +388,21 @@ Review path: Security-Hybrid
   never creates a project inside another one, so a project
   root is never shadowed, and never overwrites a project
   file it rejects.
+- **Discovery crosses nested repositories and checks the
+  owner:** Git repositories nested in a project, such as
+  clones and submodules, belong to it, so the walk up does
+  not stop at a Git boundary. A found root that belongs to
+  another user is rejected, not skipped, so that a project
+  file another local user places above the working directory,
+  as in `/tmp`, is never adopted. Rejected: stopping at the
+  Git boundary, because the outer project would not be found
+  from a nested repository; stopping at the first directory
+  that belongs to another user, because it misses a directory
+  the user owns but others can write to. Costs: a project
+  whose files belong to another user than the process, as in
+  some containers, is rejected, and there is no override; the
+  skeleton builds for Unix only until the check exists for
+  Windows.
 - **Element values are limited** (rule in Task 2), because
   `rlsp-yaml-parser` rejects non-printable characters even as
   escapes and parses escapes slowly; the round trip holds
@@ -414,3 +447,6 @@ Review path: Security-Hybrid
   canvas drag (plan after that)
 - Relations, anchors, review flags, references, deleting
   elements, and text measurement (MVP)
+- Recording in the concept docs that repositories nested in a
+  project belong to it, and that Abyme itself is the main test
+  project (separate plan after this one)

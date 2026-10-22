@@ -30,6 +30,7 @@ project/
 ├── .abyme/                            not in Git
 │   ├── .gitignore                     contains `*`, so Git ignores the folder
 │   ├── lock                           lock for writing
+│   ├── tmp/                           files being written, before their rename
 │   └── cache/                         search index and render cache
 ├── src/ …
 └── …
@@ -54,12 +55,27 @@ project/
 - **Merge-friendly:** many small files instead of one large one, so conflicts stay local
 - **Versioned:** The format has a version number, and there are migrations.
 
+## Project
+
+A directory becomes an Abyme project through `abyme-mcp init`, run in the directory that is to become the project's root. Init creates `abyme/abyme.toml` and `.abyme/`; inside an existing project it changes nothing and names the project's root. Writing never creates a project.
+
+- **Finding the root:** Abyme uses the nearest directory, from the working directory upwards, that holds `abyme/abyme.toml`. Git repositories nested in the project, such as clones and submodules, do not stop the search.
+- **Owner:** The project is used only when its root directory, `abyme/`, and `abyme/abyme.toml` belong to the user running Abyme. Otherwise every call fails, and Abyme does not look further up, so a project file that another user places above the working directory, for example in `/tmp`, is never used. The check exists for Unix only, so Abyme builds only there for now.
+- **Fresh clone:** Git does not carry `.abyme/`. Reading does not need it, and the first write creates it with its `.gitignore`. A missing `abyme/elements/` or `abyme/boards/` counts as empty.
+
+## Reading
+
+- **Only Abyme files:** In `abyme/elements/` and `abyme/boards/`, Abyme reads only regular files named `<id>.md` or `<id>.board.json` with a valid ID. Everything else, such as editor backups, folders, and symbolic links, is ignored.
+- **No symbolic links at fixed paths:** If `abyme/`, `abyme/abyme.toml`, `abyme/elements/`, `abyme/boards/`, `.abyme/`, `.abyme/tmp/`, or `.abyme/lock` is a symbolic link, every call that uses it fails, so a cloned repository cannot redirect reads, writes, or deletions outside the project.
+- **Limits:** Element and board files are at most 1 MiB, the project file at most 64 KiB. A larger file makes every call fail, and a request that would write one is rejected.
+
 ## Writing
 
 In [[Hexagonal Architecture#Runtime|stage A]], the canvas and the MCP server write the same files from two processes.
 
 - **Under a lock:** Every [[Data Model#Operations|operation]] is applied to the current files while the writer holds an advisory lock on `.abyme/lock`. A change therefore never overwrites one it has not seen.
-- **Atomically:** Every file is written to a temporary file and then renamed, so a file watcher never sees a half-written file.
+- **Atomically:** Every file is written to a temporary file in `.abyme/tmp/` and then renamed, so a file watcher never sees a half-written file. Before it writes, a writer removes the files that a crashed writer left there; it holds the lock, so no other writer's file is among them.
+- **In order:** New element files come first, then each new or changed board, so a board never places an element whose file is missing. A write that fails between two renames can leave an element without a home, which the [[Data Model#Rules|data model]] allows.
 - **No model in memory:** The MCP server reads the files on every call. The canvas holds only the board it shows and reloads it on file-watcher events, its own writes included.
 - **Outside the lock:** An editor or `git checkout` does not take the lock. The file watchers pick up such changes as well.
 
