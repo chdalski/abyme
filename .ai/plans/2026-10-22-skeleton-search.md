@@ -1,5 +1,5 @@
 **Repository:** root
-**Status:** NotStarted
+**Status:** InProgress
 **Created:** 2026-10-22
 
 ## Goal
@@ -41,7 +41,7 @@ its own plan.
 
 ## Steps
 
-- [ ] Share the outline's element rows
+- [x] Share the outline's element rows
 - [ ] Document the decided search design
 - [ ] Provide protoc in the devcontainer
 - [ ] Build the index in the user cache
@@ -59,12 +59,12 @@ becomes a function that both use. Behavior is unchanged.
 
 Review path: Security-Hybrid
 
-- [ ] `abyme-core` renders a given sequence of element IDs, in the
+- [x] `abyme-core` renders a given sequence of element IDs, in the
       given order, as the outline's element lines; `outline` uses that
       function.
-- [ ] A test shows that the given order is kept, and that an ID
+- [x] A test shows that the given order is kept, and that an ID
       without an element file shows as `⚠ missing`.
-- [ ] These tests pass with their assertions unchanged:
+- [x] These tests pass with their assertions unchanged:
       `crates/abyme-core/src/outline/tests.rs`,
       `crates/abyme-core/tests/outline.rs`, and
       `crates/abyme-mcp/tests/server.rs`.

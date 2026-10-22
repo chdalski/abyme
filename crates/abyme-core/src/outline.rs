@@ -65,18 +65,38 @@ pub fn outline(snapshot: &Snapshot, board: &BoardId) -> Result<String, UnknownBo
         .boards
         .get(board)
         .ok_or_else(|| UnknownBoard(board.clone()))?;
-    let rows: Vec<Vec<String>> = found
-        .placements
-        .keys()
+    Ok(format!(
+        "{}\n\n{}",
+        header(found),
+        element_list(snapshot, found.placements.keys())
+    ))
+}
+
+/// Renders the elements with the given IDs as the outline's element lines.
+///
+/// The lines come in the given order, without a header: one line per ID,
+/// each ending in a line feed, with the element's ID, type, name, and
+/// summary. An ID whose element is missing shows `⚠ missing`. An ID given
+/// twice is rendered twice; limiting and deduplicating is the caller's
+/// business.
+///
+/// All element text is escaped onto its line already, so callers must not
+/// escape it again.
+pub fn element_list<'a>(
+    snapshot: &Snapshot,
+    ids: impl IntoIterator<Item = &'a ElementId>,
+) -> String {
+    let rows: Vec<Vec<String>> = ids
+        .into_iter()
         .map(|id| row(id, snapshot.elements.get(id)))
         .collect();
     let widths = column_widths(&rows);
-    let mut text = format!("{}\n\n", header(found));
+    let mut text = String::new();
     for row in &rows {
         text.push_str(&aligned(row, &widths));
         text.push('\n');
     }
-    Ok(text)
+    text
 }
 
 fn header(board: &Board) -> String {
