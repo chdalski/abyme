@@ -67,7 +67,8 @@ Changes in the repo are detected without source-specific code, through anchors a
 **Parsers** are optional. Some things can be read exactly without the AI, such as crates and their dependencies from `Cargo.toml` (see [[Extensions#Parsers]]).
 
 > [!todo] Open
-> **Git access:** the git CLI or a Rust Git library?
+> - **Git access:** the git CLI or a Rust Git library?
+> - **Nested repositories:** Repositories nested in a project, such as clones and submodules, belong to it (see [[Storage in Git#Project]]), but each has its own history. `git diff` and `git status` of the project's repository report at most that a nested repository changed, not which files inside it changed, so those changes are not detected yet.
 
 ### Finer Review Flags
 

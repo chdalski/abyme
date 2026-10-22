@@ -139,4 +139,4 @@ format = 1
 
 > [!todo] Open
 > - Where do hints for arrow routing go, in case someone bends an arrow by hand?
-> - **Several repos:** How do projects work that consist of several repos? One option is a separate Abyme repo that points to the others.
+> - **Several repos:** How do projects work whose repos lie side by side rather than nested in one another? One option is a separate Abyme repo that points to the others.

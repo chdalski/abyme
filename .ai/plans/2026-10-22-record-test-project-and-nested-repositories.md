@@ -18,7 +18,7 @@ nested repositories is still open before the MVP.
 ## Steps
 
 - [x] Record Abyme as the main test project
-- [ ] Narrow "Several repos" and record the open detection point
+- [x] Narrow "Several repos" and record the open detection point
 
 ## Tasks
 
@@ -58,12 +58,12 @@ Changes` reads the history of one repository only.
 
 Review path: Reviewer-only
 
-- [ ] In `Storage in Git.md` and `Open Questions.md`, "Several repos"
+- [x] In `Storage in Git.md` and `Open Questions.md`, "Several repos"
       asks only about repositories that lie side by side.
-- [ ] A reader of `Reconciliation.md#Detecting Changes` learns, from
+- [x] A reader of `Reconciliation.md#Detecting Changes` learns, from
       an open point, that changes inside nested repositories are not
       yet detected.
-- [ ] `Open Questions.md` lists change detection across nested
+- [x] `Open Questions.md` lists change detection across nested
       repositories under "Before the MVP", with a link to that open
       point.
 

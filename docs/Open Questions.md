@@ -14,6 +14,7 @@ Only what is still open, with a link to the note where the question lives. Once 
 
 - **Measuring the results:** How are the MVP's results measured, for example the share of justified review flags in the replay? See [[First Slice]].
 - **Git access:** the git CLI or a Rust Git library? See [[Reconciliation#Detecting Changes]].
+- **Nested repositories:** How are changes inside repositories nested in the project detected? See [[Reconciliation#Detecting Changes]].
 - **Canvas:** Which library for text layout? How are arrows routed? See [[Canvas]].
 
 ## Later
@@ -29,7 +30,7 @@ Only what is still open, with a link to the note where the question lives. Once 
 - **Exports** and **reliability of the AI**, see [[Hourglass]]
 - **Provenance** of elements, see [[Ideas#Through Git]]
 - **Extensions:** runtime, security, versioning, see [[Extensions]]
-- **Several repos**, see [[Storage in Git]]
+- **Several repos** that lie side by side rather than nested, see [[Storage in Git]]
 - **Several projects:** one data set per project, or links across project boundaries?
 - **Roles and permissions**, when several people are involved
 - **At a glance:** How do you recognize references and pinned positions?
