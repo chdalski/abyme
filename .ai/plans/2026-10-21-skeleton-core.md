@@ -53,7 +53,7 @@ the Cargo workspace with `abyme-model`, `abyme-core`, and
 - [x] Pure apply
 - [x] Persisting operations
 - [x] Board outline
-- [ ] MCP server
+- [x] MCP server
 
 ## Tasks
 
@@ -335,35 +335,39 @@ project in the current directory; without arguments it runs an
 MCP server over stdio with the tools `apply` and `read_board`.
 `apply` takes the operations with the schema from the
 `json-schema` feature and reports the slug each key received;
-`read_board` returns the outline. Errors in the request's
-content come back as tool results marked as errors; malformed
-parameters are protocol errors. Standard output carries only
+`read_board` returns the outline. As the MCP specification
+asks, arguments that do not fit a tool's input schema and
+requests rejected for their content come back as tool results
+marked as errors, so the AI can correct them; only a request
+that is no valid tool call, such as one for an unknown tool,
+is a protocol error. Standard output carries only
 protocol messages, and logs go to standard error. The core
 stays synchronous, and the server calls it without blocking
 the async runtime.
 
 Review path: Security-Hybrid
 
-- [ ] Running `abyme-mcp init` in a directory with no project in
+- [x] Running `abyme-mcp init` in a directory with no project in
       it or above it creates the project there; inside an
       existing project it changes nothing and prints the
       project root
-- [ ] An integration test starts the built binary in a project
+- [x] An integration test starts the built binary in a project
       created by `abyme-mcp init`, lists the tools, creates a
       board and an element and places it with one `apply`,
       reads the board with `read_board`, and finds the
       element's slug in the outline and its files on disk
-- [ ] The result of `apply` maps each key to the slug it
+- [x] The result of `apply` maps each key to the slug it
       received
-- [ ] An apply rejected for its content returns an error result
-      that names the problem, malformed parameters return a
-      protocol error, and in both cases the server keeps
+- [x] An apply rejected for its content and arguments that do
+      not fit a tool's input schema each return an error result
+      that names the problem, a call of an unknown tool returns
+      a protocol error, and in every case the server keeps
       serving
-- [ ] In a directory without a project, both tools answer with
+- [x] In a directory without a project, both tools answer with
       the hint to run `abyme-mcp init`
-- [ ] Everything the server writes to standard output is a
+- [x] Everything the server writes to standard output is a
       protocol message; the integration test checks it
-- [ ] A developer learns from `crates/abyme-mcp/README.md` how
+- [x] A developer learns from `crates/abyme-mcp/README.md` how
       to install the server, initialize a repository, and
       register the server with Claude Code
 
@@ -403,6 +407,11 @@ Review path: Security-Hybrid
   some containers, is rejected, and there is no override; the
   skeleton builds for Unix only until the check exists for
   Windows.
+- **MCP errors follow the specification:** arguments that do
+  not fit a tool's input schema come back as tool errors.
+  Rejected: protocol errors for them, because MCP clients pass
+  tool errors to the model so it can correct its call, while
+  protocol errors often do not reach it.
 - **Element values are limited** (rule in Task 2), because
   `rlsp-yaml-parser` rejects non-printable characters even as
   escapes and parses escapes slowly; the round trip holds

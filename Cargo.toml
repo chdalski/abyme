@@ -10,9 +10,11 @@ license = "MIT"
 publish = false
 
 [workspace.dependencies]
+abyme-core = { path = "crates/abyme-core" }
 abyme-model = { path = "crates/abyme-model" }
 proptest = "1.12.0"
 rlsp-yaml-parser = "0.11.2"
+rmcp = { version = "3.6.0", default-features = false, features = ["server", "macros", "transport-io"] }
 rstest = "0.28.0"
 rustix = { version = "1.1.5", default-features = false, features = ["std", "process"] }
 schemars = "1.2.3"
@@ -20,6 +22,7 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 tempfile = "3.27.0"
 thiserror = "2.0.21"
+tokio = "1.54.1"
 # Never the `unbounded` feature: it lifts the parser's recursion limit.
 toml = { version = "0.9.8", default-features = false, features = ["std", "parse", "serde"] }
 
