@@ -1,5 +1,5 @@
 **Repository:** root
-**Status:** NotStarted
+**Status:** InProgress
 **Created:** 2026-10-22
 
 ## Goal
@@ -17,7 +17,7 @@ nested repositories is still open before the MVP.
 
 ## Steps
 
-- [ ] Record Abyme as the main test project
+- [x] Record Abyme as the main test project
 - [ ] Narrow "Several repos" and record the open detection point
 
 ## Tasks
@@ -39,12 +39,12 @@ and in a row of the "First Slice" section of `docs/Decisions.md`.
 
 Review path: Reviewer-only
 
-- [ ] A reader of `First Slice.md#Test Setup` learns:
+- [x] A reader of `First Slice.md#Test Setup` learns:
       - which repository the MVP is tested on first, and that its
         boards are committed there;
       - what the rlsp clone is still used for, that its boards are
         never pushed, and how long it stays.
-- [ ] The row about the test setup in `Decisions.md` states the
+- [x] The row about the test setup in `Decisions.md` states the
       current setup with its reason, and no row still names rlsp as
       the only test project.
 

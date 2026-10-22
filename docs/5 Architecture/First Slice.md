@@ -51,6 +51,9 @@ The MVP tests the core loop of [[Reconciliation]]: the AI builds the boards, a c
 
 ## Test Setup
 
-The MVP is tested on [rlsp](https://github.com/chdalski/rlsp), the developer's own Rust repo, whose Markdown docs describe its code. Abyme's data lives only in a local clone that is never pushed.
+The MVP is tested first on Abyme's own repository: the AI builds the C4 model and the docs map of Abyme, and the boards are committed in the Abyme repository together with the code they describe. Abyme is developed with Abyme, so its boards follow every real change, and gaps show up in daily work.
 
-**History replay:** A branch at a commit from early April 2026 receives the boards. Then `main` is merged into it commit by commit. Each merge is a code change, and the review flags must catch it. This makes the test repeatable even while the code itself is quiet.
+[rlsp](https://github.com/chdalski/rlsp), the developer's own Rust repo, whose Markdown docs describe its code, is the second test project. It carries two tests that Abyme's young repository cannot carry yet. Its boards live only in a local clone that is never pushed, and the clone stays only as long as these two tests need it.
+
+- **History replay:** A branch at a commit from early April 2026 receives the boards. Then `main` is merged into it commit by commit. Each merge is a code change, and the review flags must catch it. This makes the test repeatable even while the code itself is quiet.
+- **Size test:** rlsp's code base is larger than Abyme's and shows whether Abyme holds up at that size.
