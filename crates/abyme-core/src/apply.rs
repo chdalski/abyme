@@ -4,6 +4,7 @@
 //! are and returns the files a request changes, or an error and nothing.
 //! The caller writes the files.
 
+use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
@@ -256,26 +257,30 @@ impl<'snapshot> Draft<'snapshot> {
         if self.homed.contains(&element) {
             return Err(OperationProblem::AlreadyHomed(element));
         }
-        if !self.boards.contains_key(&board) {
-            let existing = self
-                .snapshot
-                .boards
-                .get(&board)
-                .ok_or_else(|| OperationProblem::UnknownBoard(board.clone()))?;
-            let layout = Layout::of(existing);
-            self.boards
-                .insert(board.clone(), (existing.clone(), layout));
-        }
-        let (draft_board, layout) = self
-            .boards
-            .get_mut(&board)
-            .ok_or_else(|| OperationProblem::UnknownBoard(board.clone()))?;
+        let (draft_board, layout) = self.draft_board(&board)?;
         let rect = layout
             .place()
             .ok_or_else(|| OperationProblem::BoardFull(board.clone()))?;
         draft_board.placements.insert(element.clone(), rect);
         self.homed.insert(element);
         Ok(())
+    }
+
+    /// The board as the request has changed it so far, with the layout of
+    /// its free space. A board the request has not touched yet is loaded
+    /// from the snapshot on first use.
+    fn draft_board(&mut self, board: &BoardId) -> Result<&mut (Board, Layout), OperationProblem> {
+        match self.boards.entry(board.clone()) {
+            Entry::Occupied(entry) => Ok(entry.into_mut()),
+            Entry::Vacant(entry) => {
+                let existing = self
+                    .snapshot
+                    .boards
+                    .get(board)
+                    .ok_or_else(|| OperationProblem::UnknownBoard(board.clone()))?;
+                Ok(entry.insert((existing.clone(), Layout::of(existing))))
+            }
+        }
     }
 
     fn resolve_element(&self, reference: &Ref<ElementId>) -> Result<ElementId, OperationProblem> {

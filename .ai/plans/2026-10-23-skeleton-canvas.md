@@ -1,5 +1,5 @@
 **Repository:** root
-**Status:** NotStarted
+**Status:** InProgress
 **Created:** 2026-10-23
 
 ## Goal
@@ -47,7 +47,7 @@ features depend on it.
 
 ## Steps
 
-- [ ] Extract loading a board into the request's draft
+- [x] Extract loading a board into the request's draft
 - [ ] Move an element with an operation
 - [ ] Show coordinates in `read_board` on request
 - [ ] Provide the canvas toolchain in the devcontainer
@@ -65,10 +65,10 @@ that both can use. Behavior is unchanged.
 
 Review path: Security-Hybrid
 
-- [ ] `place_element` loads an existing board into the draft through a
+- [x] `place_element` loads an existing board into the draft through a
       function that a second operation can call; no copy of that logic
       remains in `place_element`.
-- [ ] These tests pass with their assertions unchanged:
+- [x] These tests pass with their assertions unchanged:
       `crates/abyme-core/src/apply/tests.rs` and
       `crates/abyme-core/tests/apply_properties.rs`.
 
