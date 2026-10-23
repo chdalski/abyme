@@ -1,26 +1,35 @@
-import { useEffect, useState } from "react";
+import "./canvas.css";
+
+import { useCallback, useState } from "react";
 
 import { BoardList } from "./BoardList";
-import { type BoardsState, coalesced, loadBoards } from "./boards";
+import { BoardPane } from "./BoardPane";
+import { type BoardsState, loadBoards } from "./boards";
 import type { AbymeClient } from "./client";
+import { useLive } from "./live";
 
-/** The canvas: the project's boards, asked for again whenever its files change. */
+/**
+ * The canvas: the project's boards, and the board the user opened. Both are
+ * asked for again whenever the project's files change.
+ */
 export function App({ client }: { client: AbymeClient }) {
-  const [boards, setBoards] = useState<BoardsState>({ kind: "loading" });
-
-  useEffect(() => {
-    const refresh = coalesced(async () => setBoards(await loadBoards(client)));
-    void refresh();
-    const listening = client.onProjectChanged(() => void refresh());
-    return () => {
-      void listening.then((stop) => stop());
-    };
-  }, [client]);
+  const load = useCallback(() => loadBoards(client), [client]);
+  const boards = useLive<BoardsState>(client, load, { kind: "loading" });
+  const [open, setOpen] = useState<string | null>(null);
 
   return (
     <main>
-      <h1>Boards</h1>
-      <BoardList state={boards} />
+      <nav>
+        <h1>Boards</h1>
+        <BoardList state={boards} open={open} onOpen={setOpen} />
+      </nav>
+      <section className="board">
+        {open === null ? (
+          <p>Open a board from the list.</p>
+        ) : (
+          <BoardPane key={open} client={client} board={open} />
+        )}
+      </section>
     </main>
   );
 }

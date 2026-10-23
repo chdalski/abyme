@@ -1,0 +1,75 @@
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  font-family: system-ui, sans-serif;
+}
+
+main {
+  display: grid;
+  grid-template-columns: 16rem 1fr;
+  height: 100%;
+}
+
+nav {
+  overflow: auto;
+  padding: 0 1rem;
+  border-right: 1px solid #d0d4dc;
+}
+
+nav ul {
+  list-style: none;
+  padding: 0;
+}
+
+nav button {
+  width: 100%;
+  padding: 0.25rem 0.5rem;
+  border: none;
+  background: none;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+nav button[aria-current="page"] {
+  background: #e3e8f2;
+}
+
+.board {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0 1rem;
+}
+
+.flow {
+  flex: 1;
+  min-height: 0;
+}
+
+.element {
+  box-sizing: border-box;
+  height: 100%;
+  padding: 0.5rem;
+  overflow: hidden;
+  border: 1px solid #3b4a6b;
+  border-radius: 4px;
+  background: #ffffff;
+  font-size: 12px;
+}
+
+.element-type {
+  display: block;
+  color: #5b6577;
+}
+
+.element-summary {
+  margin: 0.25rem 0 0;
+}
+
+.element-missing {
+  border-style: dashed;
+  color: #8a5a00;
+}

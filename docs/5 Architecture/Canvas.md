@@ -31,7 +31,7 @@ Rejected:
 ## Structure
 
 - `crates/abyme-canvas` is the Tauri app. Its Rust side uses `abyme-core` directly, through the [[Hexagonal Architecture#Core API|core API]].
-  - `src/app.rs` holds the IPC commands and the event, `src/boards.rs` the data the UI receives, and `src/watcher.rs` the file watcher.
+  - `src/app.rs` holds the IPC commands, the event, and the window; `src/boards.rs` and `src/projection.rs` the data the UI receives; `src/watcher.rs` the file watcher; and `src/pages.rs` the pages the window may show.
   - `tauri.conf.json` and `capabilities/default.json` decide what the webview may reach. `build.rs` lists the canvas's own commands, so that Tauri checks them against the capabilities as well.
 - The web UI lies next to it, in `crates/abyme-canvas/ui/`: React, built and served by Vite and tested with Vitest. It talks to the Rust side only through an interface, `AbymeClient` (`ui/src/client.ts`), which runs over Tauri's IPC; tests give the UI a fake one.
 - The TypeScript types are generated from the Rust types with ts-rs into `ui/src/bindings.ts`. That way the format is defined only once, in `abyme-model`. A Rust test compares the committed file with the Rust types and fails when it is stale. The few IPC commands are typed by hand in `AbymeClient`.
@@ -39,14 +39,15 @@ Rejected:
 
 ## Live Updates
 
-The canvas keeps no copy of the project. Its command `list_boards` takes no argument and reads the boards through the core on every call, in the project that the directory the canvas started in lies in.
+The canvas keeps no copy of the project. Its commands `list_boards` and `open_board` read the project through the core on every call, in the project that the directory the canvas started in lies in.
 
-The Rust side watches the project's files itself: `abyme/`, `abyme/elements/`, and `abyme/boards/`, each on its own and only while it is a real directory. When a burst of changes has been quiet for a moment, it emits the event `project-changed`, which carries nothing, and the UI asks again. Reading a file raises no event, so the reads that answer an event cannot raise the next one. A write of the AI over MCP, of an editor, or of `git checkout` shows up the same way.
+The Rust side watches the project's files itself: `abyme/`, `abyme/elements/`, and `abyme/boards/`, each on its own and only while it is a real directory. When a burst of changes has been quiet for a moment, it emits the event `project-changed`, which carries nothing, and the UI asks again for the list and for the open board. Reading a file raises no event, so the reads that answer an event cannot raise the next one. A write of the AI over MCP, of an editor, or of `git checkout` shows up the same way.
 
 ## Security
 
 - **No raw HTML:** The canvas shows names, summaries, descriptions, and notes as text and renders no raw HTML from them. ESLint rejects the ways to write HTML into the page.
 - **Only Abyme's own commands:** The webview reaches the Rust side only through Abyme's own IPC commands and listening to events, not through plugins for files or the shell. The capability grants exactly these; a page from another origin reaches none of them.
+- **Only its own pages:** The window navigates only to the canvas's own origin, and to the dev server's while it is developed; it opens no other window.
 - **Only its own scripts:** The page's content security policy, in `ui/index.html`, lets it run only its own scripts. During development, Vite's dev server also sends the policy as a header, so that it covers the scripts Vite puts into the page.
 - **No widened watch:** The watcher follows no symbolic link and watches no directory recursively, so a link in a cloned repository does not make it walk other directories.
 
@@ -69,6 +70,8 @@ This includes camera, selection, moving, resizing, snapping, editing text in pla
 ## Projecting a Board
 
 React Flow knows only one surface, no [[Board Graph]]. That fits, because the graph lives in the core. The canvas always shows one board as a projection: the elements and references on it, the arrows between them, and stubs for relations to the outside. Edits go back to the core as operations, and the core sends the new projection.
+
+The canvas computes a board's projection from the core's snapshot, with pure functions in `src/projection.rs`: the command `open_board` takes a board ID and returns one entry per placement, with its rect from the board file and the element's type, name, and summary, or a mark that the element's file is missing. The projection names its fields one by one and never carries an element's body. Each entry becomes a box of the one node type `element`, at its position and size.
 
 | Abyme | in React Flow |
 |---|---|

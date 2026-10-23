@@ -10,3 +10,57 @@ id: string,
  * The title shown for the board, as the board file holds it.
  */
 title: string, };
+
+export type BoardView = { 
+/**
+ * The board's ID.
+ */
+id: string, 
+/**
+ * The title shown for the board.
+ */
+title: string, 
+/**
+ * One entry per element on the board, in element-ID order.
+ */
+placements: Array<Placement>, };
+
+export type Placement = { 
+/**
+ * The element's ID.
+ */
+element: string, 
+/**
+ * The left edge, from the board file.
+ */
+x: number, 
+/**
+ * The top edge, from the board file.
+ */
+y: number, 
+/**
+ * The width, from the board file.
+ */
+width: number, 
+/**
+ * The height, from the board file.
+ */
+height: number, 
+/**
+ * What the box shows.
+ */
+shown: Shown, };
+
+export type Shown = { "kind": "element", 
+/**
+ * The semantic type, such as `c4/container`.
+ */
+type_ref: string, 
+/**
+ * The name.
+ */
+name: string, 
+/**
+ * The one-line summary, if the element has one.
+ */
+summary: string | null, } | { "kind": "missing" };

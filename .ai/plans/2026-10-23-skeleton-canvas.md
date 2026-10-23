@@ -52,7 +52,7 @@ features depend on it.
 - [x] Show coordinates in `read_board` on request
 - [x] Provide the canvas toolchain in the devcontainer
 - [x] List the project's boards in the canvas, live
-- [ ] Show a board's elements in the canvas, live
+- [x] Show a board's elements in the canvas, live
 - [ ] Move an element by dragging it
 
 ## Tasks
@@ -200,23 +200,23 @@ open board appears without a reload.
 
 Review path: Security-Hybrid
 
-- [ ] An opened board shows one box per placement, at the rect from the
+- [x] An opened board shows one box per placement, at the rect from the
       board file, with the element's type, name, and summary; a
       placement whose element file is missing shows as missing. Rust
       tests show the board's projection, and Vitest tests show its
       mapping to React Flow nodes.
-- [ ] An element that `Project::apply` places on the open board appears
+- [x] An element that `Project::apply` places on the open board appears
       without a reload, also when it is the first element of the project
       and `abyme/elements/` did not exist before: Rust tests show that
       the write raises the change signal, and a Vitest test shows that
       the signal re-fetches the open board.
-- [ ] When the open board no longer exists or the core cannot read the
+- [x] When the open board no longer exists or the core cannot read the
       project, the board view shows the core's message in its place, and
       the list stays reachable; a Vitest test shows it.
-- [ ] The projection sent to the UI holds no element body.
-- [ ] Every npm and crate dependency the task adds is pinned exactly and
+- [x] The projection sent to the UI holds no element body.
+- [x] Every npm and crate dependency the task adds is pinned exactly and
       MIT-compatible, and the handoff lists their licenses.
-- [ ] From `docs/5 Architecture/Canvas.md#Projecting a Board`, a reader
+- [x] From `docs/5 Architecture/Canvas.md#Projecting a Board`, a reader
       learns that the canvas computes a board's projection from the
       core's snapshot.
 

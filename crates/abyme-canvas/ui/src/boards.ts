@@ -1,4 +1,4 @@
-import type { BoardEntry } from "./bindings";
+import type { BoardEntry, BoardView } from "./bindings";
 import type { AbymeClient } from "./client";
 
 /** What the board list shows. */
@@ -7,10 +7,28 @@ export type BoardsState =
   | { kind: "loaded"; boards: BoardEntry[] }
   | { kind: "failed"; message: string };
 
+/** What the open board shows. */
+export type BoardState =
+  | { kind: "loading" }
+  | { kind: "loaded"; view: BoardView }
+  | { kind: "failed"; message: string };
+
 /** Asks `client` for the boards; a rejection becomes the message shown. */
 export async function loadBoards(client: AbymeClient): Promise<BoardsState> {
   try {
     return { kind: "loaded", boards: await client.listBoards() };
+  } catch (error) {
+    return { kind: "failed", message: String(error) };
+  }
+}
+
+/** Asks `client` for the board `board`; a rejection becomes the message shown. */
+export async function loadBoard(
+  client: AbymeClient,
+  board: string,
+): Promise<BoardState> {
+  try {
+    return { kind: "loaded", view: await client.openBoard(board) };
   } catch (error) {
     return { kind: "failed", message: String(error) };
   }

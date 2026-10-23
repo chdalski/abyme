@@ -5,7 +5,7 @@ use super::*;
 use std::os::unix::fs::symlink;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use abyme_core::{LocalKey, Operation, Project};
+use abyme_core::{LocalKey, Operation, Project, Ref};
 use notify::event::{AccessKind, CreateKind, RemoveKind};
 
 /// How long a test waits for a signal that must come.
@@ -120,6 +120,29 @@ fn an_element_after_the_first_in_a_fresh_project_raises_a_signal() {
     assert_eq!(signals.recv_timeout(SIGNAL_DEADLINE), Ok(()));
 
     project.apply(&[create_element("Orders Database")]).unwrap();
+
+    assert_eq!(signals.recv_timeout(SIGNAL_DEADLINE), Ok(()));
+}
+
+#[test]
+fn placing_the_first_element_of_a_project_on_a_board_raises_a_signal() {
+    let root = tempfile::tempdir().unwrap();
+    let project = new_project(root.path());
+    project.apply(&[create_board("Context")]).unwrap();
+    // Git keeps no empty directory, so a clone of a project whose boards
+    // place nothing has no `abyme/elements/`.
+    fs::remove_dir(root.path().join("abyme/elements")).unwrap();
+    let (_watching, signals) = signals(root.path());
+
+    project
+        .apply(&[
+            create_element("Payment Service"),
+            Operation::PlaceElement {
+                element: Ref::New(LocalKey::try_from("element".to_owned()).unwrap()),
+                board: Ref::Existing("context".parse().unwrap()),
+            },
+        ])
+        .unwrap();
 
     assert_eq!(signals.recv_timeout(SIGNAL_DEADLINE), Ok(()));
 }

@@ -1,26 +1,9 @@
-//! Tests of the board list and of the UI's generated types.
+//! Tests of the board list.
 
 use super::*;
-use std::fs;
 use std::path::Path;
 
 use abyme_core::{LocalKey, Operation, Project};
-use ts_rs::{Config, TS as _};
-
-/// Where the UI's generated types lie, relative to this crate.
-const BINDINGS: &str = "ui/src/bindings.ts";
-
-/// The first lines of the generated file.
-const BINDINGS_HEADER: &str = "\
-// Generated from the Rust types of abyme-canvas with ts-rs; do not edit. When the test
-// `committed_bindings_match_the_rust_types` fails, replace this file with the text it expects.
-";
-
-/// The UI's types as the Rust types declare them.
-fn bindings() -> String {
-    let config = Config::new();
-    format!("{BINDINGS_HEADER}\nexport {}\n", BoardEntry::decl(&config))
-}
 
 fn create_board(title: &str) -> Operation {
     Operation::CreateBoard {
@@ -34,23 +17,6 @@ fn snapshot_with(root: &Path, operations: &[Operation]) -> Snapshot {
     let project = Project::discover(root).unwrap();
     project.apply(operations).unwrap();
     project.snapshot().unwrap()
-}
-
-#[test]
-fn committed_bindings_match_the_rust_types() {
-    let committed =
-        fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join(BINDINGS)).unwrap();
-    let expected = bindings();
-
-    assert!(
-        committed == expected,
-        "{BINDINGS} is stale; the Rust types expect this text:\n{expected}"
-    );
-}
-
-#[test]
-fn a_board_id_crosses_as_a_string() {
-    assert!(bindings().contains("id: string"));
 }
 
 #[test]

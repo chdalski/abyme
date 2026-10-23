@@ -4,12 +4,12 @@
 use super::*;
 use std::fs;
 
-use abyme_core::{LocalKey, Operation, ProjectError};
+use abyme_core::{LocalKey, Operation, ProjectError, UnknownBoard};
 use serde_json::{Value, json};
 use tauri::ipc::{CallbackFn, InvokeBody};
 use tauri::test::{INVOKE_KEY, MockRuntime, get_ipc_response, mock_builder};
 use tauri::webview::InvokeRequest;
-use tauri::{App, WebviewWindow, WebviewWindowBuilder};
+use tauri::{App, WebviewWindow};
 
 /// The origin the canvas's own page has while it is developed.
 const APP_ORIGIN: &str = "http://localhost:5173/";
@@ -18,18 +18,14 @@ const APP_ORIGIN: &str = "http://localhost:5173/";
 const CRATE: &str = env!("CARGO_MANIFEST_DIR");
 
 /// Builds the canvas as `main` does, on Tauri's mock runtime, started in
-/// `start`.
+/// `start`, and opens its window as its setup does. The mock runtime never
+/// becomes ready, so it does not run the setup itself.
 fn canvas(start: &Path) -> (App<MockRuntime>, WebviewWindow<MockRuntime>) {
     let app = configure(mock_builder(), start.to_path_buf())
         .build(tauri::generate_context!())
         .unwrap();
-    let [window] = app.config().app.windows.as_slice() else {
-        panic!("the configuration must declare exactly one window");
-    };
-    let window = WebviewWindowBuilder::from_config(&app, window)
-        .unwrap()
-        .build()
-        .unwrap();
+    open_window(&app).unwrap();
+    let window = app.get_webview_window("main").unwrap();
     (app, window)
 }
 
@@ -57,6 +53,27 @@ fn invoke(
 
 fn list_boards_from(window: &WebviewWindow<MockRuntime>) -> Result<Value, Value> {
     invoke(window, APP_ORIGIN, "list_boards", json!({}))
+}
+
+fn open_board_from(window: &WebviewWindow<MockRuntime>, body: Value) -> Result<Value, Value> {
+    invoke(window, APP_ORIGIN, "open_board", body)
+}
+
+/// A project with the board `context`, which places the elements
+/// `payment-service` and `orders`, whose file is then removed.
+fn project_with_a_board(root: &Path) {
+    Project::init(root).unwrap();
+    let operations = json!([
+        {"op": "create_board", "key": "b", "title": "Context"},
+        {"op": "create_element", "key": "p", "type_ref": "c4/container", "name": "Payment Service",
+         "summary": "Payment processing", "body": "SECRET-BODY handles payments."},
+        {"op": "create_element", "key": "o", "type_ref": "c4/container", "name": "Orders"},
+        {"op": "place_element", "element": {"new": "p"}, "board": {"new": "b"}},
+        {"op": "place_element", "element": {"new": "o"}, "board": {"new": "b"}},
+    ]);
+    let operations: Vec<Operation> = serde_json::from_value(operations).unwrap();
+    Project::discover(root).unwrap().apply(&operations).unwrap();
+    fs::remove_file(root.join("abyme/elements/orders.md")).unwrap();
 }
 
 fn project_with_boards(root: &Path, titles: &[&str]) {
@@ -136,6 +153,97 @@ fn list_boards_returns_the_core_s_message_when_the_project_cannot_be_read() {
 }
 
 #[test]
+fn open_board_returns_the_board_s_projection_without_bodies() {
+    let root = tempfile::tempdir().unwrap();
+    project_with_a_board(root.path());
+    let (_app, window) = canvas(root.path());
+
+    let view = open_board_from(&window, json!({"board": "context"})).unwrap();
+
+    assert_eq!(view["id"], json!("context"));
+    assert_eq!(view["title"], json!("Context"));
+    assert_eq!(
+        view["placements"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|placement| (&placement["element"], &placement["shown"]["kind"]))
+            .collect::<Vec<_>>(),
+        [
+            (&json!("orders"), &json!("missing")),
+            (&json!("payment-service"), &json!("element")),
+        ]
+    );
+    assert!(!view.to_string().contains("SECRET-BODY"));
+}
+
+#[test]
+fn open_board_names_only_the_id_of_an_unknown_board() {
+    let root = tempfile::tempdir().unwrap();
+    project_with_a_board(root.path());
+    let (_app, window) = canvas(root.path());
+
+    assert_eq!(
+        open_board_from(&window, json!({"board": "elsewhere"})),
+        Err(json!(
+            UnknownBoard("elsewhere".parse().unwrap()).to_string()
+        ))
+    );
+}
+
+#[test]
+fn open_board_outside_a_project_returns_the_hint_mcp_gives() {
+    let root = tempfile::tempdir().unwrap();
+    let (_app, window) = canvas(root.path());
+
+    assert_eq!(
+        open_board_from(&window, json!({"board": "context"})),
+        Err(json!(ProjectError::NotFound.to_string()))
+    );
+}
+
+#[test]
+fn open_board_refuses_an_invalid_id_before_looking_for_a_project() {
+    let root = tempfile::tempdir().unwrap();
+    let (_app, window) = canvas(root.path());
+    let not_found = json!(ProjectError::NotFound.to_string());
+
+    for body in [
+        json!({"board": "../x"}),
+        json!({"board": "A"}),
+        json!({"board": ""}),
+        json!({"board": "a".repeat(65)}),
+        json!({"board": "con"}),
+        json!({"board": 7}),
+        json!({}),
+    ] {
+        let message = open_board_from(&window, body.clone()).expect_err(&body.to_string());
+        assert_ne!(message, not_found, "{body}");
+        assert!(
+            message.to_string().contains("invalid args"),
+            "{body}: {message}"
+        );
+    }
+}
+
+#[test]
+fn a_remote_page_may_not_open_a_board() {
+    let root = tempfile::tempdir().unwrap();
+    project_with_a_board(root.path());
+    let (_app, window) = canvas(root.path());
+
+    let response = invoke(
+        &window,
+        "https://example.com/",
+        "open_board",
+        json!({"board": "context"}),
+    );
+
+    let message = response.expect_err("a remote page opened a board");
+    assert!(message.to_string().contains("not allowed"), "{message}");
+}
+
+#[test]
 fn the_page_may_listen_to_events() {
     let root = tempfile::tempdir().unwrap();
     let (_app, window) = canvas(root.path());
@@ -198,7 +306,7 @@ fn the_app_includes_no_tauri_plugin() {
 }
 
 #[test]
-fn the_capability_grants_the_list_of_boards_and_listening_only() {
+fn the_capability_grants_the_canvas_s_commands_and_listening_only() {
     let capability = read_json("capabilities/default.json");
 
     assert_eq!(capability["windows"], json!(["main"]));
@@ -207,7 +315,8 @@ fn the_capability_grants_the_list_of_boards_and_listening_only() {
         json!([
             "core:event:allow-listen",
             "core:event:allow-unlisten",
-            "allow-list-boards"
+            "allow-list-boards",
+            "allow-open-board"
         ])
     );
     assert_eq!(capability.get("remote"), None);

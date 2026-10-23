@@ -4,10 +4,15 @@
 //! The webview reaches the Rust side only through the commands in `app` and
 //! listens to one event, `project-changed`, after which it asks again for
 //! what it shows. The watcher in `watcher` raises that event when the
-//! project's files change.
+//! project's files change; `projection` computes what a board shows, and
+//! `pages` keeps the window on the canvas's own pages.
 
 mod app;
+#[cfg(test)]
+mod bindings;
 mod boards;
+mod pages;
+mod projection;
 mod watcher;
 
 use std::env;
