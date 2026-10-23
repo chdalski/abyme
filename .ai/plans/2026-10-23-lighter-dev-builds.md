@@ -1,5 +1,5 @@
 **Repository:** root
-**Status:** NotStarted
+**Status:** InProgress
 **Created:** 2026-10-23
 
 ## Goal
@@ -19,7 +19,7 @@ no longer rebuilds everything.
 
 ## Steps
 
-- [ ] Narrow the reviewer's first step
+- [x] Narrow the reviewer's first step
 - [ ] Build with less debug info
 
 ## Tasks
@@ -35,17 +35,17 @@ applies to this repository only.
 
 Review path: Reviewer-only
 
-- [ ] Step 1 of `reviewer.md` tells the reviewer to run the build and the
+- [x] Step 1 of `reviewer.md` tells the reviewer to run the build and the
       tests of the changed crates and of the crates that depend on them,
       in the foreground and one run at a time, and to run the clean
       command only when its results disagree with the handoff's or it
       suspects stale build state. For the exact commands, it points to the
       root `CLAUDE.md`.
-- [ ] No other passage of `reviewer.md` still assumes a clean build or the
+- [x] No other passage of `reviewer.md` still assumes a clean build or the
       full suite: the reason that step 1 gives, the approval condition on
       the build and the tests, and the drift checks that refer to a failing
       listed command, which then also cover its per-crate form.
-- [ ] No other file under `.claude/` changes.
+- [x] No other file under `.claude/` changes.
 
 ### Task 2: Build with less debug info
 

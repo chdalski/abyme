@@ -45,16 +45,22 @@ file list) or a rejection (with findings).
 
 ### When You Receive a Review Request
 
-1. **Run a clean build.** Check the project root `CLAUDE.md`
-   for build and test commands. Run the clean command, then
-   run all tests. If `CLAUDE.md` is missing or lacks build
+1. **Build and test what the changes touch.** Check the
+   project root `CLAUDE.md` for build and test commands and
+   for how to run them for a single component. Run the build
+   and the tests of the changed components and of the
+   components that depend on them — in the foreground, one
+   run at a time. If `CLAUDE.md` is missing or lacks build
    commands, reject immediately and tell the requester —
    build commands must be documented before review can
-   proceed. This avoids reacting to stale cached state.
-   If a listed command fails for a reason the changes do
-   not explain, report the entry as drift (see CLAUDE.md
-   Drift Detection) rather than as a defect in the
-   changes.
+   proceed. Run the clean command only when your results
+   disagree with the handoff's or you suspect stale build
+   state: a clean rebuild of a large workspace takes long
+   and can exhaust the machine's memory. If a listed
+   command, or its form for a single component, fails for a
+   reason the changes do not explain, report the entry as
+   drift (see CLAUDE.md Drift Detection) rather than as a
+   defect in the changes.
 
 2. **Verify the advisor consultation status** in the
    handoff. The handoff message must declare which
@@ -164,7 +170,7 @@ changed files:
   resolved differently per section by package managers,
   producing inconsistent behaviour between development
   and production environments.
-- All tests pass and the build is clean.
+- The build and the tests run in step 1 pass.
 - The implementor's handoff cites both ends of each
   operation the dispatch named (move, modify, delete,
   add, refactor). A scope citation that names only the
@@ -441,8 +447,9 @@ without user confirmation.
 
 Not all drift comes from the current changes — an entry
 can be wrong before the task starts and surface only when
-someone runs it. Treat as drift any listed command that
-fails in step 1 for a reason the changes do not explain,
+someone runs it. Treat as drift any listed command, or its
+form for a single component, that fails in step 1 for a
+reason the changes do not explain,
 and any stale entry the handoff reports without
 correcting. A correction the handoff names is a changed
 line like any other: step 1 already ran corrected
