@@ -24,8 +24,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libasound2-plugins \
     # Fast linker for Rust builds (cargo/config.toml, copied in post-create.sh)
     mold \
-    # protoc for the build scripts of LanceDB's lance crates (abyme-index)
-    protobuf-compiler
+    # protoc for the build scripts of LanceDB's lance crates (abyme-index),
+    # and the well-known .proto files their protos import
+    protobuf-compiler \
+    libprotobuf-dev
 
 # Route ALSA through PulseAudio so applications that use ALSA directly
 # don't fail when /dev/snd is unavailable (e.g., VM or remote host).

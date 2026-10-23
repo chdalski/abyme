@@ -11,7 +11,13 @@ publish = false
 
 [workspace.dependencies]
 abyme-core = { path = "crates/abyme-core" }
+abyme-index = { path = "crates/abyme-index" }
 abyme-model = { path = "crates/abyme-model" }
+futures = "0.3.34"
+# `remote` only because lancedb 0.40.0 does not compile without it (`Error::Http` used
+# unconditionally in src/job.rs); drop it once upstream fixes that. Abyme connects
+# only to absolute local paths, which never reach the remote client.
+lancedb = { version = "=0.40.0", default-features = false, features = ["remote"] }
 proptest = "1.12.0"
 rlsp-yaml-parser = "0.11.2"
 rmcp = { version = "3.6.0", default-features = false, features = ["server", "macros", "transport-io"] }
@@ -20,6 +26,7 @@ rustix = { version = "1.1.5", default-features = false, features = ["std", "proc
 schemars = "1.2.3"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
+sha2 = "0.11.1"
 tempfile = "3.27.0"
 thiserror = "2.0.21"
 tokio = "1.54.1"

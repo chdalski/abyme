@@ -44,7 +44,7 @@ its own plan.
 - [x] Share the outline's element rows
 - [x] Document the decided search design
 - [x] Provide protoc in the devcontainer
-- [ ] Build the index in the user cache
+- [x] Build the index in the user cache
 - [ ] Download, verify, and load the model
 - [ ] Serve `search` over MCP
 - [ ] Let each project choose its model
@@ -118,26 +118,26 @@ lets the tests run without a model.
 
 Review path: Security-Hybrid
 
-- [ ] For several elements, a query with a word that only one of them
+- [x] For several elements, a query with a word that only one of them
       contains ranks that element first. An element that shares no
       word with the query, but whose vector is nearest to the query's,
       appears in the results. Tests show both.
-- [ ] Only elements whose embedded text changed are embedded again,
+- [x] Only elements whose embedded text changed are embedded again,
       and an element removed from the snapshot is never returned;
       tests show both.
-- [ ] After its directory is deleted, the index is rebuilt from the
+- [x] After its directory is deleted, the index is rebuilt from the
       snapshot. An element added after the full-text index was built
       is found. A snapshot without elements yields no results, not an
       error. Tests show each.
-- [ ] Two processes that refresh the same project's index at the same
+- [x] Two processes that refresh the same project's index at the same
       time both complete without error, and each element is stored
       exactly once afterwards; a test with two processes shows it.
-- [ ] Every index file lies under the user cache's `abyme` directory,
+- [x] Every index file lies under the user cache's `abyme` directory,
       in a directory named from the project root's hash and the model.
       No path is built from element content.
-- [ ] `lancedb` is pinned exactly, every new dependency is
+- [x] `lancedb` is pinned exactly, every new dependency is
       MIT-compatible, and the handoff lists the licenses.
-- [ ] The root `CLAUDE.md` lists `abyme-index` among the components.
+- [x] The root `CLAUDE.md` lists `abyme-index` among the components.
 
 ### Task 5: Download, verify, and load the model
 
