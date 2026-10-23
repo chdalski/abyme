@@ -46,7 +46,7 @@ its own plan.
 - [x] Provide protoc in the devcontainer
 - [x] Build the index in the user cache
 - [x] Download, verify, and load the model
-- [ ] Serve `search` over MCP
+- [x] Serve `search` over MCP
 - [ ] Let each project choose its model
 
 ## Tasks
@@ -173,40 +173,40 @@ background, and `search` waits for it when it is not ready yet.
 
 Review path: Security-Hybrid
 
-- [ ] `search` answers with up to 10 element lines, best first, in the
+- [x] `search` answers with up to 10 element lines, best first, in the
       outline's format. A reply larger than `read_board` may return is
       an error.
-- [ ] A blank `query` and arguments that do not fit `search`'s input
+- [x] A blank `query` and arguments that do not fit `search`'s input
       schema come back as tool errors. In a project without elements,
       `search` answers that no element matches. Tests show each.
-- [ ] A server started where no project existed yet, or where the
+- [x] A server started where no project existed yet, or where the
       project file was rejected, loads the model at the first `search`
       once the project is valid; a test shows it.
-- [ ] A failed model download is a tool error of `search`, and the
+- [x] A failed model download is a tool error of `search`, and the
       next `search` tries again. With neither `XDG_CACHE_HOME` nor
       `HOME` set, `search` returns a tool error, and `apply` and
       `read_board` keep working. Tests show each case.
-- [ ] An in-process MCP test with the fake loader:
+- [x] An in-process MCP test with the fake loader:
       - `apply` creates several elements, and `search` ranks the
         intended one first;
       - preparing at start followed by a `search` loads the model
         once.
-- [ ] An ignored test runs the built binary with the real model:
+- [x] An ignored test runs the built binary with the real model:
       - `apply` writes elements, and `search` finds one by a word it
         contains and one by meaning, without a shared word;
       - everything on standard output is a protocol message;
       - the handoff reports the run.
-- [ ] The binary's tests cover `search` in two places:
+- [x] The binary's tests cover `search` in two places:
       - "no tool takes a path";
       - "without a project, every tool asks for init and writes
         nothing". Without a project, `search` neither downloads a model
         nor creates anything in the user cache.
       Apart from the ignored test, they never download a model or
       touch the user's cache.
-- [ ] After standard input closes, the process exits with a success
+- [x] After standard input closes, the process exits with a success
       code even while a download that never completes is running; a
       test with a blocking fake download source shows it.
-- [ ] From `crates/abyme-mcp/README.md`, a user learns:
+- [x] From `crates/abyme-mcp/README.md`, a user learns:
       - what `search` does;
       - that the server downloads a model when it starts in a project;
       - where that model and the index are cached.

@@ -1,5 +1,5 @@
-//! The MCP tools `apply` and `read_board`, on the project that the server's
-//! working directory lies in.
+//! The MCP tools `apply`, `read_board`, and `search`, on the project that
+//! the server's working directory lies in.
 //!
 //! Arguments come from an AI, so each tool takes them as a raw JSON object
 //! and reads them itself: a request that does not fit becomes a tool error
@@ -7,8 +7,10 @@
 //! runs on a blocking thread, and the project is found again on every call.
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
-use abyme_core::{Created, LocalKey, Operations, Project, outline};
+use abyme_core::{Created, LocalKey, Operations, Project, element_list, outline};
+use abyme_index::{BGE_SMALL_EN_V15_Q, Index, MAX_QUERY_CHARS};
 use abyme_model::{BoardId, shown};
 use rmcp::handler::server::common::schema_for_type;
 use rmcp::handler::server::router::tool::ToolRouter;
@@ -19,19 +21,33 @@ use rmcp::model::{
 use rmcp::{ErrorData, ServerHandler, tool, tool_handler, tool_router};
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
+use tokio::runtime::Handle;
+use tokio::task::JoinHandle;
+
+use crate::models::Models;
+
+#[cfg(test)]
+mod tests;
 
 /// How many characters of the description of rejected arguments a tool
 /// error shows.
 const SHOWN_LIMIT: usize = 300;
 
-/// The largest outline `read_board` returns, in bytes. A larger one is an
-/// error rather than cut, so the AI never acts on part of a board.
-const MAX_OUTLINE_BYTES: usize = 1024 * 1024;
+/// The largest reply `read_board` or `search` returns, in bytes. A larger
+/// one is an error rather than cut, so the AI never acts on part of it.
+const MAX_REPLY_BYTES: usize = 1024 * 1024;
+
+/// How many elements `search` returns at most.
+const SEARCH_RESULTS: usize = 10;
+
+/// What `search` answers when no element matches.
+const NO_MATCH: &str = "No element matches the query.";
 
 /// What the server tells the AI about itself when a session starts.
 const INSTRUCTIONS: &str = "Abyme keeps project knowledge on boards stored in this repository. \
-    Call read_board with a board ID to read the board as an outline, and apply to create boards \
-    and elements and place elements on boards.";
+    Call search with a query to find elements by the words they contain or by what they are \
+    about, read_board with a board ID to read the board as an outline, and apply to create \
+    boards and elements and place elements on boards.";
 
 /// The arguments of `apply`.
 #[derive(Deserialize, schemars::JsonSchema)]
@@ -49,22 +65,54 @@ struct ReadBoardArguments {
     board: BoardId,
 }
 
+/// The arguments of `search`.
+#[derive(Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct SearchArguments {
+    /// What to look for: words the elements contain, or what they are about.
+    query: String,
+}
+
 /// The MCP server of one project.
 #[derive(Clone)]
 pub struct AbymeServer {
     /// The directory the server runs in; the project is found from here.
     start: PathBuf,
+    /// The embedding model that `search` uses.
+    models: Arc<Models>,
     tool_router: ToolRouter<Self>,
 }
 
 #[tool_router]
 impl AbymeServer {
-    /// A server for the project that `start` lies in.
-    pub fn new(start: PathBuf) -> Self {
+    /// A server for the project that `start` lies in, whose `search` uses
+    /// `models`.
+    pub fn new(start: PathBuf, models: Arc<Models>) -> Self {
         Self {
             start,
+            models,
             tool_router: Self::tool_router(),
         }
+    }
+
+    /// Prepares the embedding model of the project the server starts in,
+    /// in the background, so that the first `search` waits less or not at
+    /// all. Without a project it does nothing; `search` loads the model once
+    /// there is one. A failure is one line on standard error, and `search`
+    /// tries again.
+    pub fn prefetch(&self) -> JoinHandle<()> {
+        let (start, models) = (self.start.clone(), Arc::clone(&self.models));
+        tokio::task::spawn_blocking(move || {
+            if Project::discover(&start).is_err() {
+                return;
+            }
+            if let Err(message) = models.with(&BGE_SMALL_EN_V15_Q, |_, _| Ok(())) {
+                eprintln!(
+                    "abyme-mcp: the embedding model is not ready, search tries again: {}",
+                    shown(&message, SHOWN_LIMIT)
+                );
+            }
+        })
     }
 
     #[tool(
@@ -114,7 +162,53 @@ impl AbymeServer {
             let project = Project::discover(&start).map_err(|error| error.to_string())?;
             let snapshot = project.snapshot().map_err(|error| error.to_string())?;
             let text = outline(&snapshot, &arguments.board).map_err(|error| error.to_string())?;
-            bounded(&arguments.board, text)
+            bounded(&format!("the outline of board {}", arguments.board), text)
+        })
+        .await
+    }
+
+    #[tool(
+        description = "Searches the elements of the Abyme project by the words they contain and by what \
+            they are about, and returns the 10 that match the query best, best first: one line per element \
+            with its ID, type, name, and summary, as in a board outline. Text from the repository is \
+            escaped onto one line. The first search after the server starts may wait until the embedding \
+            model is downloaded.",
+        input_schema = schema_for_type::<SearchArguments>()
+    )]
+    async fn search(
+        &self,
+        Parameters(arguments): Parameters<JsonObject>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let arguments: SearchArguments = match parsed(arguments) {
+            Ok(arguments) => arguments,
+            Err(result) => return Ok(result),
+        };
+        if let Err(message) = searchable(&arguments.query) {
+            return Ok(CallToolResult::error(vec![ContentBlock::text(message)]));
+        }
+        let (start, models) = (self.start.clone(), Arc::clone(&self.models));
+        let runtime = Handle::current();
+        on_core(move || {
+            let project = Project::discover(&start).map_err(|error| error.to_string())?;
+            let snapshot = project.snapshot().map_err(|error| error.to_string())?;
+            let spec = &BGE_SMALL_EN_V15_Q;
+            let found = models
+                .with(spec, |cache, embedder| {
+                    let index = Index::new(cache.clone(), project.root(), spec);
+                    let lock = index.lock().map_err(|error| error.to_string())?;
+                    runtime
+                        .block_on(async {
+                            lock.refresh(&snapshot, embedder).await?;
+                            lock.search(&snapshot, &arguments.query, embedder, SEARCH_RESULTS)
+                                .await
+                        })
+                        .map_err(|error| error.to_string())
+                })
+                .map_err(|message| shown(&message, SHOWN_LIMIT))?;
+            if found.is_empty() {
+                return Ok(NO_MATCH.to_owned());
+            }
+            bounded("the search result", element_list(&snapshot, &found))
         })
         .await
     }
@@ -176,68 +270,32 @@ fn report(created: &[(LocalKey, Created)]) -> String {
         .collect()
 }
 
-/// The outline, or an error when it is larger than [`MAX_OUTLINE_BYTES`].
-fn bounded(board: &BoardId, text: String) -> Result<String, String> {
-    if text.len() > MAX_OUTLINE_BYTES {
+/// Whether `query` can be searched, or the tool error that says why not.
+/// It is checked before anything is loaded, and the error never quotes it.
+fn searchable(query: &str) -> Result<(), String> {
+    if query.trim().is_empty() {
+        return Err(
+            "the query is empty: give words the elements contain or what they are about".to_owned(),
+        );
+    }
+    let length = query.chars().count();
+    if length > MAX_QUERY_CHARS {
+        return Err(format!(
+            "the query has {length} characters, more than the {MAX_QUERY_CHARS} a search takes"
+        ));
+    }
+    Ok(())
+}
+
+/// The reply, or an error naming `what` when it is larger than
+/// [`MAX_REPLY_BYTES`]; the error shows nothing of the reply.
+fn bounded(what: &str, text: String) -> Result<String, String> {
+    if text.len() > MAX_REPLY_BYTES {
         Err(format!(
-            "the outline of board {board} has {} bytes, more than the {MAX_OUTLINE_BYTES} a reply may hold",
+            "{what} has {} bytes, more than the {MAX_REPLY_BYTES} a reply may hold",
             text.len()
         ))
     } else {
         Ok(text)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use rmcp::handler::server::common::schema_for_input;
-
-    #[test]
-    fn rejects_an_outline_over_the_limit_instead_of_cutting_it() {
-        let board: BoardId = "big".parse().unwrap();
-
-        let error = bounded(&board, "x".repeat(MAX_OUTLINE_BYTES + 1)).unwrap_err();
-
-        assert!(error.contains("board big"), "{error}");
-        assert!(error.contains(&MAX_OUTLINE_BYTES.to_string()), "{error}");
-    }
-
-    #[test]
-    fn returns_an_outline_at_the_limit_whole() {
-        let board: BoardId = "big".parse().unwrap();
-        let text = "x".repeat(MAX_OUTLINE_BYTES);
-
-        assert_eq!(bounded(&board, text.clone()), Ok(text));
-    }
-
-    #[test]
-    fn advertises_object_schemas_as_mcp_requires() {
-        assert!(schema_for_input::<ApplyArguments>().is_ok());
-        assert!(schema_for_input::<ReadBoardArguments>().is_ok());
-    }
-
-    #[test]
-    fn says_so_when_a_request_created_nothing() {
-        assert_eq!(report(&[]), "The request created nothing.");
-    }
-
-    #[test]
-    fn reports_the_id_each_key_received() {
-        let created = vec![
-            (
-                LocalKey::try_from("b".to_owned()).unwrap(),
-                Created::Board("main".parse().unwrap()),
-            ),
-            (
-                LocalKey::try_from("pay".to_owned()).unwrap(),
-                Created::Element("payment-service".parse().unwrap()),
-            ),
-        ];
-
-        assert_eq!(
-            report(&created),
-            "b: board main\npay: element payment-service\n"
-        );
     }
 }

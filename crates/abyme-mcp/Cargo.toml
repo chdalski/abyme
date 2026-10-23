@@ -9,6 +9,7 @@ publish.workspace = true
 
 [dependencies]
 abyme-core = { workspace = true, features = ["json-schema"] }
+abyme-index.workspace = true
 abyme-model = { workspace = true, features = ["json-schema"] }
 rmcp.workspace = true
 schemars.workspace = true

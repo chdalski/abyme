@@ -25,7 +25,7 @@ cargo clean
 | `crates/abyme-model` | The Abyme format: identifiers and the files that hold elements and boards |
 | `crates/abyme-core` | Operations on elements and boards: `apply` turns a request into the files to write, `Project` finds a project, initializes it, and reads and writes its files, and `outline` renders a board as text for the AI |
 | `crates/abyme-index` | The search index: keeps a LanceDB table per project and model in the user's cache and ranks a project's elements for a query by full text and vectors; downloads a built-in embedding model's pinned files into that cache, checks them against the sizes and hashes in the source, and loads them with fastembed |
-| `crates/abyme-mcp` | The `abyme-mcp` binary: `abyme-mcp init` makes a directory an Abyme project; without arguments it serves the tools `apply` and `read_board` over MCP on stdio |
+| `crates/abyme-mcp` | The `abyme-mcp` binary: `abyme-mcp init` makes a directory an Abyme project; without arguments it serves the tools `apply`, `read_board`, and `search` over MCP on stdio and downloads the project's embedding model in the background |
 
 ## Language
 

@@ -4,20 +4,25 @@
 //! arguments, `abyme-mcp` serves the project that the current directory
 //! lies in to an AI over MCP on standard input and output; standard output
 //! then carries nothing but protocol messages, and errors go to standard
-//! error.
+//! error. When it starts in a project, it downloads that project's
+//! embedding model in the background.
 
+mod models;
 mod server;
 
 use std::env;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::sync::Arc;
 
 use abyme_core::{Init, Project};
+use abyme_index::UserCache;
 use abyme_model::shown;
 use rmcp::ServiceExt as _;
 use rmcp::transport::stdio;
 
+use crate::models::{Models, from_hugging_face};
 use crate::server::AbymeServer;
 
 const USAGE: &str = "usage: abyme-mcp [init]
@@ -70,9 +75,13 @@ fn init() -> ExitCode {
 /// standard input.
 fn serve() -> ExitCode {
     let result = current_dir().and_then(|start| {
-        tokio::runtime::Runtime::new()
-            .map_err(|error| format!("the async runtime cannot start: {error}"))?
-            .block_on(run(start))
+        let runtime = tokio::runtime::Runtime::new()
+            .map_err(|error| format!("the async runtime cannot start: {error}"))?;
+        let served = runtime.block_on(run(start));
+        // A model download may still run on a blocking thread; it must not
+        // keep the process alive once the client has closed the session.
+        runtime.shutdown_background();
+        served
     });
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -84,7 +93,13 @@ fn serve() -> ExitCode {
 }
 
 async fn run(start: PathBuf) -> Result<(), String> {
-    let service = AbymeServer::new(start)
+    let cache = UserCache::from_env(env::var_os("XDG_CACHE_HOME"), env::var_os("HOME"));
+    let server = AbymeServer::new(
+        start,
+        Arc::new(Models::new(Arc::new(from_hugging_face), cache)),
+    );
+    drop(server.prefetch());
+    let service = server
         .serve(stdio())
         .await
         .map_err(|error| format!("the MCP session cannot start: {error}"))?;

@@ -1,10 +1,16 @@
 //! The built `abyme-mcp` binary: `init` on the command line, and the MCP
 //! server on standard input and output, driven by an MCP client.
+//!
+//! The server runs without `HOME`, `XDG_CACHE_HOME`, and proxy settings, so
+//! no test touches the user's cache or the network unless it sets them; only
+//! the ignored test downloads the model.
 
 use std::collections::BTreeMap;
 use std::error::Error;
+use std::ffi::OsStr;
 use std::fs;
 use std::io;
+use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::sync::{Arc, Mutex};
@@ -23,7 +29,25 @@ type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 /// How long a call may take before the test gives up.
 const TIMEOUT: Duration = Duration::from_secs(30);
 
+/// How long the server may take to exit after its standard input closed.
+const EXIT_TIMEOUT: Duration = Duration::from_secs(10);
+
 const BINARY: &str = env!("CARGO_BIN_EXE_abyme-mcp");
+
+/// The environment variables that would lead the server to the user's cache
+/// or through a proxy; ureq reads the proxy variables in both cases.
+const REMOVED_VARIABLES: [&str; 10] = [
+    "HOME",
+    "XDG_CACHE_HOME",
+    "ALL_PROXY",
+    "all_proxy",
+    "HTTPS_PROXY",
+    "https_proxy",
+    "HTTP_PROXY",
+    "http_proxy",
+    "NO_PROXY",
+    "no_proxy",
+];
 
 /// A running server with an MCP client connected to it, and every line the
 /// server wrote to standard output.
@@ -36,7 +60,11 @@ struct Session {
 
 /// Runs `abyme-mcp` with `arguments` in `directory`.
 fn run(directory: &Path, arguments: &[&str]) -> io::Result<Output> {
-    Command::new(BINARY)
+    let mut command = Command::new(BINARY);
+    for variable in REMOVED_VARIABLES {
+        command.env_remove(variable);
+    }
+    command
         .args(arguments)
         .current_dir(directory)
         .stdin(Stdio::null())
@@ -74,7 +102,18 @@ fn files(root: &Path) -> io::Result<BTreeMap<PathBuf, Vec<u8>>> {
 /// passes each line of the server's standard output to the client and
 /// records it.
 async fn start(directory: &Path) -> TestResult<Session> {
-    let mut child = tokio::process::Command::new(BINARY)
+    start_with(directory, &[]).await
+}
+
+/// Starts the server like [`start`], with the environment variables in
+/// `variables` set.
+async fn start_with(directory: &Path, variables: &[(&str, &OsStr)]) -> TestResult<Session> {
+    let mut command = tokio::process::Command::new(BINARY);
+    for variable in REMOVED_VARIABLES {
+        command.env_remove(variable);
+    }
+    command.envs(variables.iter().copied());
+    let mut child = command
         .current_dir(directory)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -131,11 +170,26 @@ async fn call(
     tool: &'static str,
     arguments: Value,
 ) -> TestResult<Result<CallToolResult, ServiceError>> {
+    call_within(session, tool, arguments, TIMEOUT).await
+}
+
+/// Calls a tool like [`call`], giving up after `timeout`.
+async fn call_within(
+    session: &Session,
+    tool: &'static str,
+    arguments: Value,
+    timeout: Duration,
+) -> TestResult<Result<CallToolResult, ServiceError>> {
     let Value::Object(arguments) = arguments else {
         return Err("arguments must be an object".into());
     };
     let request = CallToolRequestParams::new(tool).with_arguments(arguments);
-    Ok(tokio::time::timeout(TIMEOUT, session.client.call_tool(request)).await?)
+    Ok(tokio::time::timeout(timeout, session.client.call_tool(request)).await?)
+}
+
+/// A proxy URL for `listener`, which accepts connections and never answers.
+fn proxy_url(listener: &TcpListener) -> io::Result<String> {
+    Ok(format!("http://{}", listener.local_addr()?))
 }
 
 /// The text of a tool result.
@@ -230,7 +284,7 @@ async fn applies_operations_and_reads_the_board_back() -> TestResult {
     let tools = tokio::time::timeout(TIMEOUT, session.client.list_all_tools()).await??;
     let mut names: Vec<&str> = tools.iter().map(|tool| tool.name.as_ref()).collect();
     names.sort_unstable();
-    assert_eq!(names, ["apply", "read_board"]);
+    assert_eq!(names, ["apply", "read_board", "search"]);
 
     let applied = call(&session, "apply", create_board_with_element()).await??;
     assert_eq!(applied.is_error, Some(false), "{applied:?}");
@@ -389,20 +443,92 @@ async fn an_unknown_tool_is_a_protocol_error_and_the_server_keeps_serving() -> T
     Ok(())
 }
 
+/// The server has a cache and a way out to the network here, so the test
+/// shows that without a project it uses neither.
 #[tokio::test]
-async fn without_a_project_both_tools_ask_for_init_and_write_nothing() -> TestResult {
+async fn without_a_project_every_tool_asks_for_init_and_writes_nothing() -> TestResult {
     let directory = tempfile::tempdir()?;
-    let session = start(directory.path()).await?;
+    let cache = tempfile::tempdir()?;
+    let proxy = TcpListener::bind("127.0.0.1:0")?;
+    proxy.set_nonblocking(true)?;
+    let proxy_url = proxy_url(&proxy)?;
+    let session = start_with(
+        directory.path(),
+        &[
+            ("XDG_CACHE_HOME", cache.path().as_os_str()),
+            ("ALL_PROXY", OsStr::new(&proxy_url)),
+        ],
+    )
+    .await?;
 
     let applied = call(&session, "apply", create_board_with_element()).await??;
     let read = call(&session, "read_board", json!({"board": "main"})).await??;
+    let searched = call(&session, "search", json!({"query": "payments"})).await??;
 
-    for result in [applied, read] {
+    for result in [applied, read, searched] {
         assert_eq!(result.is_error, Some(true), "{result:?}");
         assert!(text(&result).contains("abyme-mcp init"), "{result:?}");
     }
     assert_only_protocol_messages(&finish(session).await?);
     assert!(fs::read_dir(directory.path())?.next().is_none());
+    assert!(fs::read_dir(cache.path())?.next().is_none());
+    assert_eq!(
+        proxy.accept().map_err(|error| error.kind()).err(),
+        Some(io::ErrorKind::WouldBlock),
+        "the server tried to download"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn without_a_cache_search_fails_and_the_other_tools_keep_working() -> TestResult {
+    let directory = project()?;
+    let session = start(directory.path()).await?;
+
+    let searched = call(&session, "search", json!({"query": "payments"})).await??;
+    let applied = call(&session, "apply", create_board_with_element()).await??;
+    let read = call(&session, "read_board", json!({"board": "container-level"})).await??;
+
+    assert_eq!(searched.is_error, Some(true), "{searched:?}");
+    assert!(
+        text(&searched).contains("search needs a cache directory"),
+        "{searched:?}"
+    );
+    assert_eq!(applied.is_error, Some(false), "{applied:?}");
+    assert_eq!(read.is_error, Some(false), "{read:?}");
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+/// The download goes through a proxy that accepts the connection and never
+/// answers, so it hangs until the server exits.
+#[tokio::test]
+async fn exits_when_standard_input_closes_while_the_model_download_hangs() -> TestResult {
+    let directory = project()?;
+    let cache = tempfile::tempdir()?;
+    let proxy = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let proxy_url = format!("http://{}", proxy.local_addr()?);
+    let session = start_with(
+        directory.path(),
+        &[
+            ("XDG_CACHE_HOME", cache.path().as_os_str()),
+            ("ALL_PROXY", OsStr::new(&proxy_url)),
+        ],
+    )
+    .await?;
+
+    let (_connection, _) = tokio::time::timeout(EXIT_TIMEOUT, proxy.accept())
+        .await
+        .map_err(|_| "the server did not start the download")??;
+    let Session {
+        client, mut child, ..
+    } = session;
+    tokio::time::timeout(TIMEOUT, client.cancel()).await??;
+    let status = tokio::time::timeout(EXIT_TIMEOUT, child.wait())
+        .await
+        .map_err(|_| "the server did not exit while the download hung")??;
+
+    assert!(status.success(), "{status}");
     Ok(())
 }
 
@@ -454,10 +580,11 @@ async fn no_tool_takes_a_path() -> TestResult {
             .into_iter()
             .flatten()
             .collect();
-        let expected: &[&str] = if tool.name == "apply" {
-            &["operations"]
-        } else {
-            &["board"]
+        let expected: &[&str] = match tool.name.as_ref() {
+            "apply" => &["operations"],
+            "read_board" => &["board"],
+            "search" => &["query"],
+            other => return Err(format!("unexpected tool {other}").into()),
         };
         assert_eq!(properties, expected, "{}", tool.name);
         assert_eq!(
@@ -467,6 +594,59 @@ async fn no_tool_takes_a_path() -> TestResult {
             tool.name
         );
     }
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+#[tokio::test]
+#[ignore = "downloads the real model from Hugging Face"]
+async fn search_finds_elements_by_word_and_by_meaning_with_the_real_model() -> TestResult {
+    let directory = project()?;
+    let cache = tempfile::tempdir()?;
+    let session = start_with(
+        directory.path(),
+        &[("XDG_CACHE_HOME", cache.path().as_os_str())],
+    )
+    .await?;
+    let applied = call(
+        &session,
+        "apply",
+        json!({"operations": [
+            {"op": "create_element", "key": "pay", "type_ref": "c4/container",
+             "name": "Payment Service", "summary": "Charges credit cards through Stripe"},
+            {"op": "create_element", "key": "mail", "type_ref": "c4/container",
+             "name": "Mailer", "summary": "Sends newsletters to customers by email"},
+            {"op": "create_element", "key": "stock", "type_ref": "c4/container",
+             "name": "Inventory", "summary": "Tracks how many items the warehouse holds"}
+        ]}),
+    )
+    .await??;
+    assert_eq!(applied.is_error, Some(false), "{applied:?}");
+
+    let by_word = call_within(
+        &session,
+        "search",
+        json!({"query": "Stripe"}),
+        Duration::from_secs(600),
+    )
+    .await??;
+    let by_meaning = call(
+        &session,
+        "search",
+        json!({"query": "electronic messages for subscribers"}),
+    )
+    .await??;
+
+    eprintln!(
+        "by word:\n{}\nby meaning:\n{}",
+        text(&by_word),
+        text(&by_meaning)
+    );
+    assert!(
+        text(&by_word).starts_with("payment-service  "),
+        "{by_word:?}"
+    );
+    assert!(text(&by_meaning).starts_with("mailer  "), "{by_meaning:?}");
     assert_only_protocol_messages(&finish(session).await?);
     Ok(())
 }
