@@ -49,7 +49,7 @@ features depend on it.
 
 - [x] Extract loading a board into the request's draft
 - [x] Move an element with an operation
-- [ ] Show coordinates in `read_board` on request
+- [x] Show coordinates in `read_board` on request
 - [ ] Provide the canvas toolchain in the devcontainer
 - [ ] List the project's boards in the canvas, live
 - [ ] Show a board's elements in the canvas, live
@@ -112,7 +112,7 @@ for example after a drag in the canvas.
 
 Review path: Security-Hybrid
 
-- [ ] With coordinates requested, each element line shows the element's
+- [x] With coordinates requested, each element line shows the element's
       x, y, width, and height, in one format that the tests assert.
       Without the argument, the outline stays byte-for-byte as it is: the
       existing tests in `crates/abyme-core/src/outline/tests.rs` and
@@ -120,12 +120,12 @@ Review path: Security-Hybrid
       and `search` calls in `crates/abyme-mcp/tests/server.rs` and
       `crates/abyme-mcp/src/server/tests.rs`, pass with their assertions
       unchanged.
-- [ ] Through MCP, a `move_element` followed by `read_board` with
+- [x] Through MCP, a `move_element` followed by `read_board` with
       coordinates shows the new position; a test shows it.
-- [ ] The tool's input schema lists the new argument as an optional
+- [x] The tool's input schema lists the new argument as an optional
       boolean, and arguments that do not fit the schema come back as tool
       errors.
-- [ ] From `docs/4 AI Interface/MCP Server.md` and
+- [x] From `docs/4 AI Interface/MCP Server.md` and
       `crates/abyme-mcp/README.md`, a reader learns how to ask
       `read_board` for coordinates.
 

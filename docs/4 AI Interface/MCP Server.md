@@ -67,7 +67,7 @@ As a rough estimate, this takes 5 to 10 times fewer tokens than the same board a
 - **Real IDs:** The outline shows the element IDs themselves, which are short, readable slugs (see [[Data Model#Rules]]). The server needs no state between calls, and an ID from an older response never points to the wrong element.
 - **One line per element:** Text from boards and elements stays on its line. Backslashes, line breaks, control characters, and invisible format characters are written as escapes such as `\\`, `\n`, and `\u{202e}`, so content can neither break the outline nor hide text from a reader.
 - **Missing elements:** A placement whose element file does not exist, for example after a merge, shows its ID and `⚠ missing`.
-- **Coordinates** only on request, when the AI wants to arrange elements.
+- **Coordinates** only on request, when the AI wants to arrange elements: `read_board` with `"coordinates": true` shows each element's position and size right after its ID, such as `@400,200 180x90`.
 - **Geometry is translated into relations.** “Lies in frame X” is reliable and important. “Lies near Y” is only a hint.
 - **Summaries** of boards are maintained automatically. When the content below them changes, they get a review flag themselves.
 

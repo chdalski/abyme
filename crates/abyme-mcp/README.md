@@ -37,7 +37,7 @@ Claude Code starts the server in the directory it runs in, and the server serves
 ## Tools
 
 - **`apply`** takes `operations`, a list of `create_board`, `create_element`, `place_element`, and `move_element` operations, and applies all of them or none. `move_element` sets the position of an element on a board where it lies, with x and y from -1,000,000 to 1,000,000. It answers with the ID each key received, such as `pay: element payment-service`. [Data Model](../../docs/5%20Architecture/Data%20Model.md#operations) describes the operations.
-- **`read_board`** takes `board`, a board ID, and answers with the board's outline: one line per element with its ID, type, name, and summary.
+- **`read_board`** takes `board`, a board ID, and answers with the board's outline: one line per element with its ID, type, name, and summary. With `"coordinates": true`, each line also shows the element's position and size right after its ID, such as `@400,200 180x90`.
 - **`search`** takes `query`, words or a description of what to find, and answers with the 10 elements that match best, best first, in the same lines as an outline. It finds elements by the words they contain and by what they are about, also without a shared word.
 
 A request that does not fit a tool, or that the project rejects, comes back as a tool error that says why.

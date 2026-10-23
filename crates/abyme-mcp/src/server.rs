@@ -9,7 +9,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use abyme_core::{Created, LocalKey, Operations, Project, element_list, outline};
+use abyme_core::{Created, Geometry, LocalKey, Operations, Project, element_list, outline};
 use abyme_index::{Index, MAX_QUERY_CHARS, spec};
 use abyme_model::{BoardId, shown};
 use rmcp::handler::server::common::schema_for_type;
@@ -63,6 +63,10 @@ struct ApplyArguments {
 struct ReadBoardArguments {
     /// The ID of the board to read.
     board: BoardId,
+    /// Whether each line also shows the element's position and size on the
+    /// board.
+    #[serde(default)]
+    coordinates: bool,
 }
 
 /// The arguments of `search`.
@@ -148,7 +152,8 @@ impl AbymeServer {
     #[tool(
         description = "Returns a board of the Abyme project as an outline: a header with the board's ID and \
             title, then one line per element with its ID, type, name, and summary. Text from the repository \
-            is escaped onto one line.",
+            is escaped onto one line. With coordinates true, each line also shows the element's position and \
+            size right after its ID, as @x,y WIDTHxHEIGHT.",
         input_schema = schema_for_type::<ReadBoardArguments>()
     )]
     async fn read_board(
@@ -163,7 +168,13 @@ impl AbymeServer {
         on_core(move || {
             let project = Project::discover(&start).map_err(|error| error.to_string())?;
             let snapshot = project.snapshot().map_err(|error| error.to_string())?;
-            let text = outline(&snapshot, &arguments.board).map_err(|error| error.to_string())?;
+            let geometry = if arguments.coordinates {
+                Geometry::Shown
+            } else {
+                Geometry::Hidden
+            };
+            let text = outline(&snapshot, &arguments.board, geometry)
+                .map_err(|error| error.to_string())?;
             bounded(&format!("the outline of board {}", arguments.board), text)
         })
         .await

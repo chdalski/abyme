@@ -464,6 +464,93 @@ async fn apply_moves_an_element_and_refuses_a_position_out_of_range() -> TestRes
 }
 
 #[tokio::test]
+async fn read_board_shows_coordinates_only_on_request() -> TestResult {
+    let directory = project()?;
+    let session = start(directory.path()).await?;
+    call(&session, "apply", create_board_with_element()).await??;
+    let moved = call(
+        &session,
+        "apply",
+        json!({"operations": [{"op": "move_element", "element": {"existing": "payment-service"},
+                               "board": {"existing": "container-level"}, "x": 400, "y": 200}]}),
+    )
+    .await??;
+    assert_eq!(moved.is_error, Some(false), "{moved:?}");
+
+    let with = call(
+        &session,
+        "read_board",
+        json!({"board": "container-level", "coordinates": true}),
+    )
+    .await??;
+    let without = call(&session, "read_board", json!({"board": "container-level"})).await??;
+
+    assert_eq!(with.is_error, Some(false), "{with:?}");
+    assert_eq!(
+        text(&with),
+        "Board: container-level · Container Level\n\
+         \n\
+         payment-service  @400,200 180x90  c4/container  Payment Service  Payments through Stripe\n"
+    );
+    assert_eq!(
+        text(&without),
+        "Board: container-level · Container Level\n\
+         \n\
+         payment-service  c4/container  Payment Service  Payments through Stripe\n"
+    );
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+#[tokio::test]
+async fn read_board_takes_coordinates_only_as_an_optional_boolean() -> TestResult {
+    let directory = project()?;
+    let session = start(directory.path()).await?;
+
+    let tools = tokio::time::timeout(TIMEOUT, session.client.list_all_tools()).await??;
+    let read_board = tools
+        .iter()
+        .find(|tool| tool.name == "read_board")
+        .ok_or("no read_board")?;
+    let schema = &read_board.input_schema;
+    assert_eq!(
+        schema
+            .get("properties")
+            .and_then(|properties| properties.get("coordinates"))
+            .and_then(|coordinates| coordinates.get("type")),
+        Some(&json!("boolean")),
+        "{schema:?}"
+    );
+    assert_eq!(
+        schema.get("required"),
+        Some(&json!(["board"])),
+        "{schema:?}"
+    );
+    assert_eq!(
+        schema.get("additionalProperties"),
+        Some(&json!(false)),
+        "{schema:?}"
+    );
+
+    for arguments in [
+        json!({"board": "main", "coordinates": "yes"}),
+        json!({"board": "main", "coordinates": 1}),
+        json!({"board": "main", "coordinates": null}),
+        json!({"coordinates": true}),
+    ] {
+        let result = call(&session, "read_board", arguments.clone()).await??;
+
+        assert_eq!(result.is_error, Some(true), "{arguments}: {result:?}");
+        assert!(
+            text(&result).starts_with("invalid arguments: "),
+            "{result:?}"
+        );
+    }
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+#[tokio::test]
 async fn an_unknown_tool_is_a_protocol_error_and_the_server_keeps_serving() -> TestResult {
     let directory = project()?;
     let session = start(directory.path()).await?;
@@ -620,7 +707,7 @@ async fn no_tool_takes_a_path() -> TestResult {
             .collect();
         let expected: &[&str] = match tool.name.as_ref() {
             "apply" => &["operations"],
-            "read_board" => &["board"],
+            "read_board" => &["board", "coordinates"],
             "search" => &["query"],
             other => return Err(format!("unexpected tool {other}").into()),
         };

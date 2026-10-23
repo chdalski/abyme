@@ -52,7 +52,7 @@ fn snapshot(title: &str, elements: Vec<Element>, missing: &[&str]) -> Snapshot {
 }
 
 fn outline_of(snapshot: &Snapshot) -> String {
-    outline(snapshot, &"b".parse().unwrap()).unwrap()
+    outline(snapshot, &"b".parse().unwrap(), Geometry::Hidden).unwrap()
 }
 
 #[test]
@@ -123,7 +123,12 @@ fn shows_a_missing_element_without_affecting_the_others() {
 
 #[test]
 fn names_an_unknown_board() {
-    let error = outline(&Snapshot::default(), &"nowhere".parse().unwrap()).unwrap_err();
+    let error = outline(
+        &Snapshot::default(),
+        &"nowhere".parse().unwrap(),
+        Geometry::Hidden,
+    )
+    .unwrap_err();
 
     assert_eq!(error.to_string(), "no board has the ID nowhere");
 }
@@ -340,4 +345,78 @@ fn escapes_element_text_in_the_list() {
     let id: ElementId = "a".parse().unwrap();
 
     assert_eq!(element_list(&snapshot, [&id]), "a  t  x\\ny\\u{202e}z\n");
+}
+
+fn sized(x: i32, y: i32, width: u32, height: u32) -> Rect {
+    Rect {
+        x,
+        y,
+        width: NonZeroU32::new(width).unwrap(),
+        height: NonZeroU32::new(height).unwrap(),
+    }
+}
+
+/// `snapshot` with the placement of `id` on board `b` at `rect`.
+fn with_rect(mut snapshot: Snapshot, id: &str, rect: Rect) -> Snapshot {
+    snapshot
+        .boards
+        .get_mut(&"b".parse().unwrap())
+        .unwrap()
+        .placements
+        .insert(id.parse().unwrap(), rect);
+    snapshot
+}
+
+fn outline_with_geometry(snapshot: &Snapshot) -> String {
+    outline(snapshot, &"b".parse().unwrap(), Geometry::Shown).unwrap()
+}
+
+#[test]
+fn shows_position_and_size_after_the_id_on_request() {
+    let snapshot = snapshot(
+        "T",
+        vec![
+            element("a", "t", "A", Some("first")),
+            element("b", "t", "B", None),
+        ],
+        &["c"],
+    );
+    let snapshot = with_rect(snapshot, "a", sized(-40, 120, 180, 90));
+    let snapshot = with_rect(snapshot, "b", sized(400, -7, 300, 50));
+    let snapshot = with_rect(snapshot, "c", sized(10, 20, 1, 1));
+
+    assert_eq!(
+        outline_with_geometry(&snapshot),
+        "Board: b · T\n\
+         \n\
+         a  @-40,120 180x90  t  A  first\n\
+         b  @400,-7 300x50   t  B\n\
+         c  @10,20 1x1       ⚠ missing\n"
+    );
+}
+
+#[test]
+fn shows_the_extreme_positions_and_sizes_a_board_file_holds() {
+    let snapshot = snapshot("T", vec![element("a", "t", "A", None)], &[]);
+    let snapshot = with_rect(snapshot, "a", sized(i32::MIN, i32::MAX, u32::MAX, u32::MAX));
+
+    assert_eq!(
+        outline_with_geometry(&snapshot),
+        "Board: b · T\n\na  @-2147483648,2147483647 4294967295x4294967295  t  A\n"
+    );
+}
+
+#[test]
+fn shows_the_geometry_before_any_text_from_the_repository() {
+    let snapshot = snapshot(
+        "T",
+        vec![element("a", "t", "@1,2 3x4\nZ\u{202e}", None)],
+        &[],
+    );
+    let snapshot = with_rect(snapshot, "a", sized(5, 6, 7, 8));
+
+    assert_eq!(
+        outline_with_geometry(&snapshot),
+        "Board: b · T\n\na  @5,6 7x8  t  @1,2 3x4\\nZ\\u{202e}\n"
+    );
 }

@@ -7,7 +7,7 @@
 
 use std::ops::RangeInclusive;
 
-use abyme_model::{Board, BoardId, Element, ElementId};
+use abyme_model::{Board, BoardId, Element, ElementId, Rect};
 
 use crate::apply::Snapshot;
 
@@ -45,6 +45,16 @@ const FORMAT_AND_SEPARATORS: [RangeInclusive<char>; 21] = [
     '\u{e0020}'..='\u{e007f}',
 ];
 
+/// Whether an outline shows where each element lies on its board.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Geometry {
+    /// The lines show no position and size.
+    Hidden,
+    /// Each line shows the element's position and size right after its ID,
+    /// as `@x,y WIDTHxHEIGHT`.
+    Shown,
+}
+
 /// No board has the ID the outline was asked for.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("no board has the ID {0}")]
@@ -55,21 +65,34 @@ pub struct UnknownBoard(pub BoardId);
 /// The outline has a header line with the board's ID and title, a blank
 /// line, and one line per placed element, ordered by ID, with the element's
 /// ID, type, name, and summary. A placement whose element is missing shows
-/// its ID and `⚠ missing`.
+/// its ID and `⚠ missing`. With [`Geometry::Shown`], each line also shows
+/// the placement's position and size from the board file, right after the
+/// ID.
 ///
 /// # Errors
 ///
 /// Returns [`UnknownBoard`] when the snapshot has no such board.
-pub fn outline(snapshot: &Snapshot, board: &BoardId) -> Result<String, UnknownBoard> {
+pub fn outline(
+    snapshot: &Snapshot,
+    board: &BoardId,
+    geometry: Geometry,
+) -> Result<String, UnknownBoard> {
     let found = snapshot
         .boards
         .get(board)
         .ok_or_else(|| UnknownBoard(board.clone()))?;
-    Ok(format!(
-        "{}\n\n{}",
-        header(found),
-        element_list(snapshot, found.placements.keys())
-    ))
+    let rows: Vec<Vec<String>> = found
+        .placements
+        .iter()
+        .map(|(id, rect)| {
+            let mut columns = row(id, snapshot.elements.get(id));
+            if geometry == Geometry::Shown {
+                columns.insert(1, position(rect));
+            }
+            columns
+        })
+        .collect();
+    Ok(format!("{}\n\n{}", header(found), lines(&rows)))
 }
 
 /// Renders the elements with the given IDs as the outline's element lines.
@@ -90,13 +113,24 @@ pub fn element_list<'a>(
         .into_iter()
         .map(|id| row(id, snapshot.elements.get(id)))
         .collect();
-    let widths = column_widths(&rows);
+    lines(&rows)
+}
+
+/// The rows as aligned lines, each ending in a line feed.
+fn lines(rows: &[Vec<String>]) -> String {
+    let widths = column_widths(rows);
     let mut text = String::new();
-    for row in &rows {
+    for row in rows {
         text.push_str(&aligned(row, &widths));
         text.push('\n');
     }
     text
+}
+
+/// A placement's position and size, built from the board file's numbers
+/// only.
+fn position(rect: &Rect) -> String {
+    format!("@{},{} {}x{}", rect.x, rect.y, rect.width, rect.height)
 }
 
 fn header(board: &Board) -> String {

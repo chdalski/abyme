@@ -25,7 +25,7 @@ pub use apply::{
 pub use operation::{
     LocalKey, LocalKeyError, MAX_COORDINATE, MAX_KEY_LEN, Operation, Operations, Ref,
 };
-pub use outline::{UnknownBoard, element_list, outline};
+pub use outline::{Geometry, UnknownBoard, element_list, outline};
 pub use project::{
     EmbeddingModel, EntryKind, Init, MAX_FILE_BYTES, MAX_PROJECT_FILE_BYTES, PROJECT_FORMAT,
     Project, ProjectError,
