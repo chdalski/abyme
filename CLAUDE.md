@@ -13,6 +13,7 @@ core comes first, then search and the canvas.
 ```sh
 cargo build --workspace
 cargo test --workspace
+cargo test --workspace <filter>          # only the tests whose name contains <filter>; see Conventions
 cargo clippy --workspace --all-targets   # zero warnings: the workspace lints deny them
 cargo fmt --all                          # --check to verify only
 cargo clean
@@ -46,7 +47,8 @@ keywords.
 - Write code only when explicitly asked. The Working Skeleton is being built as defined in `docs/5 Architecture/First Slice.md`: its core first, then search and the canvas, each in its own plan under `.ai/plans/`.
 - `docs/` is an Obsidian vault whose root is the project root; its rules are in `docs/README.md` ("Rules"): docs describe the current state, not its history; proposals go in `> [!question] Proposal`, open points in `> [!todo] Open`; decisions are a table in `docs/Decisions.md`; links are wikilinks.
 - Render-check every new Mermaid diagram before adding it to `docs/`: `npx -y @mermaid-js/mermaid-cli@12.0.0 -q -i "<note>.md" -o "<scratch dir>/<note>.md"` exits non-zero on a broken diagram; it needs headless Chrome's libraries (`libnss3` and others), which the devcontainer image does not install yet.
-- The `json-schema` feature of `abyme-model` and `abyme-core` is off by default, and only `abyme-mcp` turns it on: workspace runs check it, but a run of `abyme-model` or `abyme-core` alone with `-p` needs `--all-features`, or that code goes unchecked.
+- The dev profile, which tests use too, keeps line tables for the workspace's crates and no debug info for dependencies (root `Cargo.toml`), so linking the test binaries stays light. For one build with full debug info, run `cargo --config 'profile.dev.debug=true' --config 'profile.dev.package."*".debug=true' build`, which rebuilds everything.
+- Builds and tests stay on the workspace selection, whose artifacts stay cached; narrow a test run by test, not by package: `cargo test --workspace <filter>`, or `--test <file>` for one integration test file. A run with `-p` resolves features for its own packages and compiles the dependencies a second time: without `abyme-mcp`, `serde` lacks `rc`, `indexmap` lacks `serde`, and the `json-schema` feature of `abyme-model` and `abyme-core`, off by default and turned on only by `abyme-mcp`, goes unchecked.
 - Crates inherit the workspace lint set with `[lints] workspace = true`; the set comes from `.claude/skills/project-init/rust-init.md`, and `clippy.toml` relaxes it only for tests.
 - Comparisons with other tools stay in the chat; `docs/` takes only the adopted ideas, without naming the tool.
 - `docs/Glossary.md` defines the terms that docs, UI, and code share; add new terms there.

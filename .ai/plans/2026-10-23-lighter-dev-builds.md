@@ -20,7 +20,7 @@ artifacts stay cached, so that a review no longer rebuilds everything.
 ## Steps
 
 - [x] Narrow the reviewer's first step
-- [ ] Build with less debug info
+- [x] Build with less debug info
 - [ ] Keep reviews on the workspace selection
 
 ## Tasks
@@ -57,17 +57,17 @@ the memory that linking the test binaries needs and the size of
 
 Review path: Reviewer-only
 
-- [ ] The workspace `Cargo.toml` gives the dev profile line tables for the
+- [x] The workspace `Cargo.toml` gives the dev profile line tables for the
       workspace's crates and no debug info for dependencies.
-- [ ] `cargo build --workspace`, `cargo clippy --workspace --all-targets`,
+- [x] `cargo build --workspace`, `cargo clippy --workspace --all-targets`,
       and `cargo test --workspace` pass.
-- [ ] The handoff reports the size of `target/debug` and of the largest
+- [x] The handoff reports the size of `target/debug` and of the largest
       test binary of `abyme-index` and of `abyme-mcp` before and after the
       change, each measured after one `cargo test --workspace --no-run`
       run in the foreground.
-- [ ] The handoff shows which crates a `cargo test -p abyme-index --no-run`
+- [x] The handoff shows which crates a `cargo test -p abyme-index --no-run`
       run compiles right after `cargo test --workspace --no-run`.
-- [ ] From the root `CLAUDE.md`, a reader learns that the dev profile
+- [x] From the root `CLAUDE.md`, a reader learns that the dev profile
       carries little debug info, how to build once with full debug info,
       and how to run only some tests without leaving the workspace
       selection, and why a run with `-p` builds a second set of
