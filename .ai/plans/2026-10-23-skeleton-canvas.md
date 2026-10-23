@@ -50,7 +50,7 @@ features depend on it.
 - [x] Extract loading a board into the request's draft
 - [x] Move an element with an operation
 - [x] Show coordinates in `read_board` on request
-- [ ] Provide the canvas toolchain in the devcontainer
+- [x] Provide the canvas toolchain in the devcontainer
 - [ ] List the project's boards in the canvas, live
 - [ ] Show a board's elements in the canvas, live
 - [ ] Move an element by dragging it
@@ -136,14 +136,14 @@ during development. The devcontainer image does not install either yet.
 
 Review path: Security-Hybrid
 
-- [ ] The Dockerfile installs Tauri's Linux prerequisites from Ubuntu's
+- [x] The Dockerfile installs Tauri's Linux prerequisites from Ubuntu's
       packages and the Tauri CLI at an exact version. The same install
       commands have run in the running container, where
       `pkg-config --modversion webkit2gtk-4.1` and `cargo tauri --version`
       succeed.
-- [ ] Each package name and the CLI version are checked against their
+- [x] Each package name and the CLI version are checked against their
       source, and the handoff says how.
-- [ ] The root `CLAUDE.md` names the canvas toolchain among the
+- [x] The root `CLAUDE.md` names the canvas toolchain among the
       toolchains the devcontainer provides.
 
 ### Task 5: List the project's boards in the canvas, live

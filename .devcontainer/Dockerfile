@@ -27,11 +27,42 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # protoc for the build scripts of LanceDB's lance crates (abyme-index),
     # and the well-known .proto files their protos import
     protobuf-compiler \
-    libprotobuf-dev
+    libprotobuf-dev \
+    # Tauri's Linux prerequisites for the canvas (abyme-canvas): WebKitGTK
+    # and the libraries and tools its build uses
+    libwebkit2gtk-4.1-dev \
+    build-essential \
+    curl \
+    wget \
+    file \
+    libxdo-dev \
+    libssl-dev \
+    libayatana-appindicator3-dev \
+    librsvg2-dev
 
 # Route ALSA through PulseAudio so applications that use ALSA directly
 # don't fail when /dev/snd is unavailable (e.g., VM or remote host).
 RUN printf 'pcm.default pulse\nctl.default pulse\n' > /etc/asound.conf
+
+# The Tauri CLI 2.12.4 for the canvas (abyme-canvas), prebuilt by the Tauri
+# project. The archive is checked against the digest of its GitHub release
+# before anything reads it; cargo then finds the binary as `cargo tauri`.
+RUN set -eu; \
+    case "$(dpkg --print-architecture)" in \
+      amd64) target=x86_64-unknown-linux-gnu; \
+        digest=820ae3c7580ca637cad15f65638960ee2a96e5a491e224691c86d6f25e6c9e8a ;; \
+      arm64) target=aarch64-unknown-linux-gnu; \
+        digest=4f601b9f462c3d3d10ce67b6ae963f099f6a5a3253920dae95a253abd558d723 ;; \
+      *) echo "no Tauri CLI build for $(dpkg --print-architecture)" >&2; exit 1 ;; \
+    esac; \
+    tmp=$(mktemp -d); \
+    curl -fsSL --proto '=https' --tlsv1.2 -o "$tmp/cargo-tauri.tgz" \
+      "https://github.com/tauri-apps/tauri/releases/download/tauri-cli-v2.12.4/cargo-tauri-$target.tgz"; \
+    printf '%s  %s\n' "$digest" "$tmp/cargo-tauri.tgz" > "$tmp/sha256sum"; \
+    sha256sum -c "$tmp/sha256sum"; \
+    tar -xzf "$tmp/cargo-tauri.tgz" -C "$tmp" cargo-tauri; \
+    install -o root -g root -m 0755 "$tmp/cargo-tauri" /usr/local/bin/cargo-tauri; \
+    rm -rf "$tmp"
 
 # Set `DEVCONTAINER` environment variable to help with orientation
 ENV DEVCONTAINER=true
