@@ -10,10 +10,13 @@ publish.workspace = true
 [dependencies]
 abyme-core.workspace = true
 abyme-model.workspace = true
+fastembed.workspace = true
 futures.workspace = true
 lancedb.workspace = true
+ort.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
+ureq.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true

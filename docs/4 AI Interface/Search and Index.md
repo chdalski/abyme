@@ -63,5 +63,5 @@ Each project chooses its model with the key `embedding_model` in `abyme/abyme.to
 
 - **When it is downloaded:** when the MCP server starts in a project, it downloads the project's model in the background, unless the model is already in the cache. `search` waits for it. A changed key takes effect at the next search.
 - **How it is checked:** Abyme downloads the files of a revision fixed in its source, from Hugging Face over HTTPS. Every file the model loads, the tokenizer files included, has a size and a SHA-256 built into Abyme. Abyme checks each file after the download and before every load, and never loads a file that does not match.
-- **Network:** this download is the only network access at runtime. It sends no project content and no credentials; Hugging Face settings such as `HF_TOKEN` and `HF_HOME` do not apply.
+- **Network:** this download is the only network access at runtime. It sends no project content and no credentials; Hugging Face settings such as `HF_TOKEN` and `HF_HOME` do not apply. It trusts the system's root certificates and goes through the proxy named in `ALL_PROXY`, `HTTPS_PROXY`, or `HTTP_PROXY`, except for hosts in `NO_PROXY`.
 - **ONNX Runtime**, which runs the model, comes prebuilt when Abyme is built, checked against the SHA-256 that the pinned `ort-sys` crate carries.

@@ -45,7 +45,7 @@ its own plan.
 - [x] Document the decided search design
 - [x] Provide protoc in the devcontainer
 - [x] Build the index in the user cache
-- [ ] Download, verify, and load the model
+- [x] Download, verify, and load the model
 - [ ] Serve `search` over MCP
 - [ ] Let each project choose its model
 
@@ -148,18 +148,18 @@ bytes.
 
 Review path: Security-Hybrid
 
-- [ ] A file whose hash or size does not match is never loaded. This
+- [x] A file whose hash or size does not match is never loaded. This
       holds for a fresh download and for a file changed in the cache
       afterwards; tests with a fake download source show both.
-- [ ] Leftovers of an interrupted download are removed before the next
+- [x] Leftovers of an interrupted download are removed before the next
       one, and two processes that fetch at once download each file
       once; tests show both.
-- [ ] `cargo tree -i hf-hub` finds nothing, and `fastembed` and `ort`
+- [x] `cargo tree -i hf-hub` finds nothing, and `fastembed` and `ort`
       are pinned exactly.
-- [ ] An ignored test downloads the real model and embeds two related
+- [x] An ignored test downloads the real model and embeds two related
       texts and an unrelated one. The related texts lie closer, and
       the handoff reports the run.
-- [ ] The repository, revision, file names, and hashes are checked
+- [x] The repository, revision, file names, and hashes are checked
       against Hugging Face, and the handoff says how.
 
 ### Task 6: Serve `search` over MCP

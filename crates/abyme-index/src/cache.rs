@@ -6,12 +6,15 @@
 
 use std::ffi::OsString;
 use std::fmt::{self, Write as _};
+use std::fs::{DirBuilder, File, OpenOptions};
+use std::io;
 use std::os::unix::ffi::OsStrExt as _;
+use std::os::unix::fs::{DirBuilderExt as _, OpenOptionsExt as _};
 use std::path::{Path, PathBuf};
 
 use sha2::{Digest as _, Sha256};
 
-use crate::model::ModelSpec;
+use crate::model::{ModelFile, ModelSpec};
 use crate::text::RECIPE_VERSION;
 
 /// Abyme's directory in the user's cache.
@@ -35,6 +38,14 @@ pub enum CacheEntry<'a> {
     /// `index/<key>/<model>-<revision>-r<recipe>/`, the `LanceDB` database of
     /// one project and model.
     Table(&'a ProjectKey, &'static ModelSpec),
+    /// `models/<model>/<revision>/`, the files of one model.
+    ModelDir(&'static ModelSpec),
+    /// `models/<model>/<revision>/lock`, the lock of one model's files.
+    ModelLock(&'static ModelSpec),
+    /// `models/<model>/<revision>/<file>`, one checked file of a model.
+    ModelFile(&'static ModelSpec, &'static ModelFile),
+    /// `models/<model>/<revision>/<file>.part`, one file while it is written.
+    ModelPart(&'static ModelSpec, &'static ModelFile),
 }
 
 impl UserCache {
@@ -68,6 +79,16 @@ impl UserCache {
             CacheEntry::Table(key, spec) => self
                 .path(CacheEntry::ProjectDir(key))
                 .join(format!("{}-{}-r{RECIPE_VERSION}", spec.name, spec.revision)),
+            CacheEntry::ModelDir(spec) => {
+                self.root.join("models").join(spec.name).join(spec.revision)
+            }
+            CacheEntry::ModelLock(spec) => self.path(CacheEntry::ModelDir(spec)).join("lock"),
+            CacheEntry::ModelFile(spec, file) => {
+                self.path(CacheEntry::ModelDir(spec)).join(file.name)
+            }
+            CacheEntry::ModelPart(spec, file) => self
+                .path(CacheEntry::ModelDir(spec))
+                .join(format!("{}.part", file.name)),
         }
     }
 }
@@ -77,13 +98,7 @@ impl ProjectKey {
     /// canonical path, so that one project always gets one key.
     #[must_use]
     pub fn of(root: &Path) -> Self {
-        let digest = Sha256::digest(root.as_os_str().as_bytes());
-        // Writing to a String cannot fail.
-        let hex = digest.iter().fold(String::new(), |mut hex, byte| {
-            let _ = write!(hex, "{byte:02x}");
-            hex
-        });
-        Self(hex)
+        Self(sha256_hex(root.as_os_str().as_bytes()))
     }
 }
 
@@ -93,11 +108,54 @@ impl fmt::Display for ProjectKey {
     }
 }
 
+/// The SHA-256 of `bytes` in lowercase hex.
+pub fn sha256_hex(bytes: &[u8]) -> String {
+    // Writing to a String cannot fail.
+    Sha256::digest(bytes)
+        .iter()
+        .fold(String::new(), |mut hex, byte| {
+            let _ = write!(hex, "{byte:02x}");
+            hex
+        })
+}
+
+/// Creates a directory in the cache and its parents, each new one readable
+/// only by the user.
+pub fn create_dir(path: &Path) -> io::Result<()> {
+    DirBuilder::new().recursive(true).mode(0o700).create(path)
+}
+
+/// Opens the lock file at `path`, creating it readable only by the user,
+/// and waits until this caller holds its lock. It blocks the thread.
+pub fn lock_file(path: &Path) -> io::Result<File> {
+    let file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .mode(0o600)
+        .open(path)?;
+    file.lock()?;
+    Ok(file)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::download::{self, ModelError, ModelSource};
     use crate::index::{Index, IndexError};
+    use crate::model::BGE_SMALL_EN_V15_Q;
     use rstest::rstest;
+    use std::io::Read;
+
+    /// A source that has no files.
+    struct NoSource;
+
+    impl ModelSource for NoSource {
+        fn open(&self, _spec: &ModelSpec, _file: &ModelFile) -> io::Result<Box<dyn Read>> {
+            Err(io::Error::other("no files"))
+        }
+    }
 
     #[rstest]
     #[case::absolute_xdg(Some("/x"), Some("/h"), Some("/x/abyme"))]
@@ -121,17 +179,24 @@ mod tests {
 
     #[test]
     fn refuses_a_relative_cache_before_lancedb_sees_it() {
-        static SPEC: ModelSpec = ModelSpec {
-            name: "model",
-            revision: "abc123",
-            dimension: 4,
-        };
         let cache = UserCache {
             root: PathBuf::from("dbcache/abyme"),
         };
-        let index = Index::new(cache, Path::new("/p"), &SPEC);
+        let index = Index::new(cache, Path::new("/p"), &BGE_SMALL_EN_V15_Q);
 
         assert!(matches!(index.lock(), Err(IndexError::RelativePath)));
+        assert!(!Path::new("dbcache").exists());
+    }
+
+    #[test]
+    fn refuses_a_relative_cache_before_fetching_a_model() {
+        let cache = UserCache {
+            root: PathBuf::from("dbcache/abyme"),
+        };
+
+        let error = download::fetch(&cache, &BGE_SMALL_EN_V15_Q, &NoSource).err();
+
+        assert!(matches!(error, Some(ModelError::RelativePath)), "{error:?}");
         assert!(!Path::new("dbcache").exists());
     }
 
@@ -151,21 +216,36 @@ mod tests {
 
     #[test]
     fn builds_paths_from_the_key_and_the_model_only() {
-        static SPEC: ModelSpec = ModelSpec {
-            name: "model",
-            revision: "abc123",
-            dimension: 4,
-        };
+        let spec = &BGE_SMALL_EN_V15_Q;
         let cache = UserCache::from_env(Some("/c".into()), None).unwrap();
         let key = ProjectKey::of(Path::new("/p"));
+        let models = "/c/abyme/models/bge-small-en-v1.5/aa8f8b060edb00e03bfdd08813a2949946c8ba55";
 
         assert_eq!(
             cache.path(CacheEntry::Lock(&key)),
             PathBuf::from(format!("/c/abyme/index/{key}/lock"))
         );
         assert_eq!(
-            cache.path(CacheEntry::Table(&key, &SPEC)),
-            PathBuf::from(format!("/c/abyme/index/{key}/model-abc123-r1"))
+            cache.path(CacheEntry::Table(&key, spec)),
+            PathBuf::from(format!(
+                "/c/abyme/index/{key}/bge-small-en-v1.5-aa8f8b060edb00e03bfdd08813a2949946c8ba55-r1"
+            ))
+        );
+        assert_eq!(
+            cache.path(CacheEntry::ModelDir(spec)),
+            PathBuf::from(models)
+        );
+        assert_eq!(
+            cache.path(CacheEntry::ModelLock(spec)),
+            PathBuf::from(format!("{models}/lock"))
+        );
+        assert_eq!(
+            cache.path(CacheEntry::ModelFile(spec, &spec.files.onnx)),
+            PathBuf::from(format!("{models}/model_optimized.onnx"))
+        );
+        assert_eq!(
+            cache.path(CacheEntry::ModelPart(spec, &spec.files.tokenizer)),
+            PathBuf::from(format!("{models}/tokenizer.json.part"))
         );
     }
 }

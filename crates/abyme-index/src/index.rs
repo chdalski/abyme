@@ -2,16 +2,15 @@
 //! holds.
 
 use std::collections::BTreeMap;
-use std::fs::{self, DirBuilder, File, OpenOptions};
+use std::fs::{self, File};
 use std::io;
-use std::os::unix::fs::{DirBuilderExt as _, OpenOptionsExt as _};
 use std::path::{Path, PathBuf};
 
 use abyme_core::Snapshot;
 use abyme_model::ElementId;
 use lancedb::Connection;
 
-use crate::cache::{CacheEntry, ProjectKey, UserCache};
+use crate::cache::{self, CacheEntry, ProjectKey, UserCache};
 use crate::changes::changes;
 use crate::embedder::{EmbedError, Embedder};
 use crate::model::ModelSpec;
@@ -128,15 +127,7 @@ impl Index {
         }
         create_dir(&self.cache.path(CacheEntry::ProjectDir(&self.key)))?;
         let path = self.cache.path(CacheEntry::Lock(&self.key));
-        let file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .mode(0o600)
-            .open(&path)
-            .and_then(|file| file.lock().map(|()| file))
-            .map_err(|source| IndexError::Io { path, source })?;
+        let file = cache::lock_file(&path).map_err(|source| IndexError::Io { path, source })?;
         Ok(IndexLock {
             index: self,
             _file: file,
@@ -270,14 +261,10 @@ impl IndexLock<'_> {
 /// Creates a directory and its parents, each new one readable only by the
 /// user.
 fn create_dir(path: &Path) -> Result<(), IndexError> {
-    DirBuilder::new()
-        .recursive(true)
-        .mode(0o700)
-        .create(path)
-        .map_err(|source| IndexError::Io {
-            path: path.to_path_buf(),
-            source,
-        })
+    cache::create_dir(path).map_err(|source| IndexError::Io {
+        path: path.to_path_buf(),
+        source,
+    })
 }
 
 /// The vectors, if there is one of `dimension` finite values per text.

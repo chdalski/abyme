@@ -125,3 +125,4 @@ The MCP server is started by the client per AI session, so “embedded” is the
 - The AI client's own shell access is outside Abyme's scope.
 - Once their hashes match, the prebuilt ONNX Runtime and the pinned model files are trusted: a hash proves only that they are the files pinned when it was written. Native ONNX Runtime code parses the model.
 - The user's cache is trusted like the rest of the user's home. Abyme checks the model files there before every load, but not the index, so any process of the same user can change the ranking; `search` shows only the current files.
+- The user's proxy settings and the system's root certificates are trusted for the model download. Since the hashes decide what loads, a proxy or an attacker on the network can stop the download but not swap the model.

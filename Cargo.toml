@@ -13,11 +13,18 @@ publish = false
 abyme-core = { path = "crates/abyme-core" }
 abyme-index = { path = "crates/abyme-index" }
 abyme-model = { path = "crates/abyme-model" }
+# Never `hf-hub*`, `online`, `qwen3`, or `nomic-v2-moe`: they pull in hf-hub, whose download
+# follows the latest revision unchecked and reads HF_TOKEN and HF_HOME. ONNX Runtime comes
+# prebuilt from ort's download, checked against the SHA-256 in ort-sys.
+fastembed = { version = "=7.2.0", default-features = false, features = ["ort-download-binaries-rustls-tls"] }
 futures = "0.3.34"
 # `remote` only because lancedb 0.40.0 does not compile without it (`Error::Http` used
 # unconditionally in src/job.rs); drop it once upstream fixes that. Abyme connects
 # only to absolute local paths, which never reach the remote client.
 lancedb = { version = "=0.40.0", default-features = false, features = ["remote"] }
+# Exactly the version fastembed pins; Abyme needs it only for the process-wide ONNX Runtime
+# environment. Never `load-dynamic`: it would load the library from ORT_DYLIB_PATH at runtime.
+ort = { version = "=2.0.0-rc.15", default-features = false }
 proptest = "1.12.0"
 rlsp-yaml-parser = "0.11.2"
 rmcp = { version = "3.6.0", default-features = false, features = ["server", "macros", "transport-io"] }
@@ -32,6 +39,8 @@ thiserror = "2.0.21"
 tokio = "1.54.1"
 # Never the `unbounded` feature: it lifts the parser's recursion limit.
 toml = { version = "0.9.8", default-features = false, features = ["std", "parse", "serde"] }
+# No `gzip`: model files arrive byte for byte as their pinned size and hash describe them.
+ureq = { version = "3.5.0", default-features = false, features = ["rustls", "platform-verifier"] }
 
 [workspace.lints.clippy]
 # https://github.com/rust-lang/cargo/issues/12918

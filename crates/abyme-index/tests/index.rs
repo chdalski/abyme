@@ -12,10 +12,11 @@ use std::sync::Arc;
 
 use abyme_core::Snapshot;
 use abyme_index::{
-    EmbedError, Embedder, Index, IndexError, MAX_QUERY_CHARS, MAX_RESULTS, ModelSpec, ProjectKey,
-    UserCache, indexed_text,
+    EmbedError, Embedder, Index, IndexError, MAX_QUERY_CHARS, MAX_RESULTS, ModelFile, ModelFiles,
+    ModelSpec, ProjectKey, UserCache, indexed_text,
 };
 use abyme_model::{Element, ElementId, TypeRef};
+use fastembed::{Pooling, QuantizationMode};
 use futures::TryStreamExt as _;
 use lancedb::arrow::arrow_array::types::Float32Type;
 use lancedb::arrow::arrow_array::{Array, FixedSizeListArray, RecordBatch, StringArray};
@@ -28,18 +29,45 @@ type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 /// The length of the fake embedder's vectors.
 const DIMENSION: usize = 32;
 
+/// The files of the fake model; the index never reads them.
+const NO_FILE: ModelFile = ModelFile {
+    name: "unused",
+    sha256: "",
+    size: 0,
+};
+
 static SPEC: ModelSpec = ModelSpec {
     name: "fake",
+    repository: "test/fake",
     revision: "r1",
+    files: ModelFiles {
+        onnx: NO_FILE,
+        tokenizer: NO_FILE,
+        config: NO_FILE,
+        special_tokens_map: NO_FILE,
+        tokenizer_config: NO_FILE,
+    },
     dimension: DIMENSION,
+    pooling: Pooling::Cls,
+    quantization: QuantizationMode::None,
 };
 
 /// The same model name and revision with another dimension, as if the
 /// stored table came from a different model build.
 static OTHER_DIMENSION: ModelSpec = ModelSpec {
     name: "fake",
+    repository: "test/fake",
     revision: "r1",
+    files: ModelFiles {
+        onnx: NO_FILE,
+        tokenizer: NO_FILE,
+        config: NO_FILE,
+        special_tokens_map: NO_FILE,
+        tokenizer_config: NO_FILE,
+    },
     dimension: 8,
+    pooling: Pooling::Cls,
+    quantization: QuantizationMode::None,
 };
 
 /// The environment variables that turn `child_refreshes` into the body of a
