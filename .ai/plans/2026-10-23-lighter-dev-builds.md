@@ -21,7 +21,7 @@ artifacts stay cached, so that a review no longer rebuilds everything.
 
 - [x] Narrow the reviewer's first step
 - [x] Build with less debug info
-- [ ] Keep reviews on the workspace selection
+- [x] Keep reviews on the workspace selection
 
 ## Tasks
 
@@ -84,16 +84,16 @@ tests.
 
 Review path: Reviewer-only
 
-- [ ] Step 1 of `reviewer.md` tells the reviewer to run the build and test
+- [x] Step 1 of `reviewer.md` tells the reviewer to run the build and test
       commands of the root `CLAUDE.md` for the whole workspace, in the
       foreground and one run at a time, to narrow a run only by selecting
       tests, never by selecting packages, and to run the clean command
       only when its results disagree with the handoff's or it suspects
       stale build state.
-- [ ] No passage of `reviewer.md` still tells the reviewer to build or
+- [x] No passage of `reviewer.md` still tells the reviewer to build or
       test single components, and the drift checks name only the listed
       commands and their narrowed form.
-- [ ] No other file under `.claude/` changes.
+- [x] No other file under `.claude/` changes.
 
 ## Decisions
 
