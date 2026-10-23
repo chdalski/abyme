@@ -47,7 +47,7 @@ const NO_MATCH: &str = "No element matches the query.";
 const INSTRUCTIONS: &str = "Abyme keeps project knowledge on boards stored in this repository. \
     Call search with a query to find elements by the words they contain or by what they are \
     about, read_board with a board ID to read the board as an outline, and apply to create \
-    boards and elements and place elements on boards.";
+    boards and elements, place elements on boards, and move them.";
 
 /// The arguments of `apply`.
 #[derive(Deserialize, schemars::JsonSchema)]
@@ -118,7 +118,9 @@ impl AbymeServer {
     #[tool(
         description = "Applies operations to the Abyme project in one transaction: either all of them or none. \
             create_board takes a key and a title; create_element takes a key, type_ref, name, and optionally \
-            summary and body; place_element gives an element its home on a board. A reference is \
+            summary and body; place_element gives an element its home on a board; move_element takes an \
+            element, the board it lies on, and a new x and y from -1000000 to 1000000, and keeps its size. \
+            A reference is \
             {\"new\": \"<key>\"} for something an earlier operation of the same request creates, or \
             {\"existing\": \"<id>\"}. Returns the ID each key received.",
         input_schema = schema_for_type::<ApplyArguments>()

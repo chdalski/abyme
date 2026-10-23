@@ -66,12 +66,29 @@ impl Layout {
             }
             None => below(self.lowest_bottom?)?,
         };
-        let new_bottom = bottom(&rect);
+        self.raise_bottom(&rect);
+        Some(rect)
+    }
+
+    /// Counts `rect`, where the request moved an element, as occupied, so
+    /// that no later placement of the request overlaps it. The cells the
+    /// element left stay counted as occupied.
+    pub fn occupy(&mut self, rect: &Rect) {
+        for (cell, occupied) in self.occupied.iter_mut().enumerate() {
+            if cell_rect(cell).is_some_and(|candidate| overlaps(rect, &candidate)) {
+                *occupied = true;
+            }
+        }
+        self.raise_bottom(rect);
+    }
+
+    /// Takes `rect` into account for the space below the board's content.
+    fn raise_bottom(&mut self, rect: &Rect) {
+        let new_bottom = bottom(rect);
         self.lowest_bottom = Some(
             self.lowest_bottom
                 .map_or(new_bottom, |lowest| lowest.max(new_bottom)),
         );
-        Some(rect)
     }
 }
 

@@ -48,7 +48,7 @@ features depend on it.
 ## Steps
 
 - [x] Extract loading a board into the request's draft
-- [ ] Move an element with an operation
+- [x] Move an element with an operation
 - [ ] Show coordinates in `read_board` on request
 - [ ] Provide the canvas toolchain in the devcontainer
 - [ ] List the project's boards in the canvas, live
@@ -80,25 +80,25 @@ elements through it, so MCP `apply` accepts it as well.
 
 Review path: Security-Hybrid
 
-- [ ] `{"op": "move_element", "element": …, "board": …, "x": …, "y": …}`
+- [x] `{"op": "move_element", "element": …, "board": …, "x": …, "y": …}`
       changes only x and y of that element's placement on that board.
       Width, height, other placements, other boards, and element files
       stay unchanged. Tests show it.
-- [ ] A move applies to the board as the request has changed it so far:
+- [x] A move applies to the board as the request has changed it so far:
       a request that creates an element, places it, and moves it writes
       the moved position, and of two moves of one element in a request,
       the later one holds. Tests show both.
-- [ ] A move is rejected, and the request writes nothing, when the
+- [x] A move is rejected, and the request writes nothing, when the
       element does not lie on that board, when the element or the board
       is unknown, or when a coordinate is not an integer from -1,000,000
       to 1,000,000 inclusive. Tests show each case through `apply`, with
       both bounds accepted and one value beyond each bound rejected, and
       one case through MCP `apply`.
-- [ ] In a request that moves an element and then places another
+- [x] In a request that moves an element and then places another
       element on the same board, the placed element does not overlap the
       moved one; a test shows it.
-- [ ] The message of a rejected move names only IDs and numbers.
-- [ ] The test of `apply`'s input schema covers `move_element`. From the
+- [x] The message of a rejected move names only IDs and numbers.
+- [x] The test of `apply`'s input schema covers `move_element`. From the
       description of the MCP tool `apply`, `crates/abyme-mcp/README.md`,
       and `docs/5 Architecture/Data Model.md#Operations`, a reader learns
       that `move_element` exists and what it takes; no sentence there

@@ -11,7 +11,7 @@ use std::fmt;
 use abyme_model::{Board, BoardId, Element, ElementId, ElementProblem, TypeRef};
 
 use crate::layout::Layout;
-use crate::operation::{LocalKey, Operation, Ref};
+use crate::operation::{LocalKey, MAX_COORDINATE, Operation, Ref};
 use crate::slug::free_slug;
 
 /// The most operations one request may carry. A thousand covers a C4 model
@@ -111,6 +111,22 @@ pub enum OperationProblem {
     /// No free position on the board fits the coordinate range.
     #[error("board {0} has no free position left")]
     BoardFull(BoardId),
+    /// The element has no placement on the board it is to move on.
+    #[error("element {element} does not lie on board {board}")]
+    NotOnBoard {
+        /// The element.
+        element: ElementId,
+        /// The board.
+        board: BoardId,
+    },
+    /// A move's position lies outside the range a move accepts.
+    #[error("the position x {x}, y {y} lies outside -{MAX_COORDINATE} to {MAX_COORDINATE}")]
+    OutOfRange {
+        /// The left edge asked for.
+        x: i32,
+        /// The top edge asked for.
+        y: i32,
+    },
     /// No free ID could be derived; the suffixes make this unreachable.
     #[error("no free ID is left for the name")]
     NoFreeId,
@@ -202,6 +218,12 @@ impl<'snapshot> Draft<'snapshot> {
             } => self.create_element(key, type_ref, name, summary.as_deref(), body),
             Operation::CreateBoard { key, title } => self.create_board(key, title),
             Operation::PlaceElement { element, board } => self.place_element(element, board),
+            Operation::MoveElement {
+                element,
+                board,
+                x,
+                y,
+            } => self.move_element(element, board, *x, *y),
         }
     }
 
@@ -263,6 +285,32 @@ impl<'snapshot> Draft<'snapshot> {
             .ok_or_else(|| OperationProblem::BoardFull(board.clone()))?;
         draft_board.placements.insert(element.clone(), rect);
         self.homed.insert(element);
+        Ok(())
+    }
+
+    fn move_element(
+        &mut self,
+        element: &Ref<ElementId>,
+        board: &Ref<BoardId>,
+        x: i32,
+        y: i32,
+    ) -> Result<(), OperationProblem> {
+        let element = self.resolve_element(element)?;
+        let board = self.resolve_board(board)?;
+        let range = -MAX_COORDINATE..=MAX_COORDINATE;
+        if !range.contains(&x) || !range.contains(&y) {
+            return Err(OperationProblem::OutOfRange { x, y });
+        }
+        let (draft_board, layout) = self.draft_board(&board)?;
+        let placement = draft_board.placements.get_mut(&element).ok_or_else(|| {
+            OperationProblem::NotOnBoard {
+                element: element.clone(),
+                board: board.clone(),
+            }
+        })?;
+        placement.x = x;
+        placement.y = y;
+        layout.occupy(placement);
         Ok(())
     }
 

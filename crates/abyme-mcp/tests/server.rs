@@ -426,6 +426,44 @@ async fn a_rejected_apply_is_a_tool_error_and_changes_no_file() -> TestResult {
 }
 
 #[tokio::test]
+async fn apply_moves_an_element_and_refuses_a_position_out_of_range() -> TestResult {
+    let directory = project()?;
+    let session = start(directory.path()).await?;
+    call(&session, "apply", create_board_with_element()).await??;
+    let board_file = directory
+        .path()
+        .join("abyme/boards/container-level.board.json");
+    let move_to = |x: i64, y: i64| {
+        json!({"operations": [{"op": "move_element", "element": {"existing": "payment-service"},
+                               "board": {"existing": "container-level"}, "x": x, "y": y}]})
+    };
+
+    let moved = call(&session, "apply", move_to(400, 200)).await??;
+
+    assert_eq!(moved.is_error, Some(false), "{moved:?}");
+    assert_eq!(text(&moved), "The request created nothing.");
+    let board = fs::read_to_string(&board_file)?;
+    assert!(
+        board.contains(
+            r#"{"element": "payment-service", "x": 400, "y": 200, "width": 180, "height": 90}"#
+        ),
+        "{board}"
+    );
+
+    let before = fs::read(&board_file)?;
+    let refused = call(&session, "apply", move_to(1_000_001, 0)).await??;
+
+    assert_eq!(refused.is_error, Some(true), "{refused:?}");
+    assert_eq!(
+        text(&refused),
+        "operation 1: the position x 1000001, y 0 lies outside -1000000 to 1000000"
+    );
+    assert_eq!(fs::read(&board_file)?, before);
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+#[tokio::test]
 async fn an_unknown_tool_is_a_protocol_error_and_the_server_keeps_serving() -> TestResult {
     let directory = project()?;
     let session = start(directory.path()).await?;

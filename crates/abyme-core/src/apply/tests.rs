@@ -163,6 +163,191 @@ fn places_two_elements_of_one_request_without_overlap() {
     assert_eq!(board.placements.get(&element_id("b")), Some(&rect(660, 0)));
 }
 
+/// `snapshot()` with `orders-db` sized 300 × 50 and a second board `side`
+/// on which `loose` lies.
+fn snapshot_with_two_boards() -> Snapshot {
+    let mut snapshot = snapshot();
+    snapshot
+        .boards
+        .get_mut(&board_id("main"))
+        .unwrap()
+        .placements
+        .insert(element_id("orders-db"), sized(0, 0, 300, 50));
+    snapshot.boards.insert(
+        board_id("side"),
+        Board {
+            id: board_id("side"),
+            title: "Side".to_owned(),
+            placements: BTreeMap::from([(element_id("loose"), rect(0, 0))]),
+        },
+    );
+    snapshot
+}
+
+fn sized(x: i32, y: i32, width: u32, height: u32) -> Rect {
+    Rect {
+        x,
+        y,
+        width: NonZeroU32::new(width).unwrap(),
+        height: NonZeroU32::new(height).unwrap(),
+    }
+}
+
+#[test]
+fn moves_only_the_position_of_that_placement() {
+    let json = r#"[{"op": "move_element", "element": {"existing": "orders-db"}, "board": {"existing": "main"}, "x": 500, "y": -300}]"#;
+    let before = snapshot_with_two_boards();
+
+    let applied = apply(&before, &operations(json)).unwrap();
+
+    assert!(matches!(applied.writes.as_slice(), [Write::Board(_)]));
+    let board = written_board(&applied, "main");
+    let mut expected = before.boards[&board_id("main")].clone();
+    expected
+        .placements
+        .insert(element_id("orders-db"), sized(500, -300, 300, 50));
+    assert_eq!(board, &expected);
+    assert_eq!(applied.created, Vec::new());
+}
+
+#[rstest]
+#[case::far_right_and_down(1_000_000, 1_000_000)]
+#[case::far_left_and_up(-1_000_000, -1_000_000)]
+fn accepts_a_move_to_the_ends_of_the_range(#[case] x: i32, #[case] y: i32) {
+    let json = format!(
+        r#"[{{"op": "move_element", "element": {{"existing": "orders-db"}}, "board": {{"existing": "main"}}, "x": {x}, "y": {y}}}]"#
+    );
+
+    let applied = apply(&snapshot(), &operations(&json)).unwrap();
+
+    let board = written_board(&applied, "main");
+    assert_eq!(
+        board.placements.get(&element_id("orders-db")),
+        Some(&rect(x, y))
+    );
+}
+
+#[test]
+fn moves_an_element_that_the_request_creates_and_places() {
+    let json = r#"[
+        {"op": "create_board", "key": "b", "title": "B"},
+        {"op": "create_element", "key": "e", "type_ref": "t", "name": "E"},
+        {"op": "place_element", "element": {"new": "e"}, "board": {"new": "b"}},
+        {"op": "move_element", "element": {"new": "e"}, "board": {"new": "b"}, "x": 1000, "y": -50}
+    ]"#;
+
+    let applied = apply(&snapshot(), &operations(json)).unwrap();
+
+    let board = written_board(&applied, "b");
+    assert_eq!(
+        board.placements.get(&element_id("e")),
+        Some(&rect(1000, -50))
+    );
+}
+
+#[test]
+fn keeps_the_later_of_two_moves() {
+    let json = r#"[
+        {"op": "move_element", "element": {"existing": "orders-db"}, "board": {"existing": "main"}, "x": 10, "y": 20},
+        {"op": "move_element", "element": {"existing": "orders-db"}, "board": {"existing": "main"}, "x": 30, "y": 40}
+    ]"#;
+
+    let applied = apply(&snapshot(), &operations(json)).unwrap();
+
+    let board = written_board(&applied, "main");
+    assert_eq!(
+        board.placements.get(&element_id("orders-db")),
+        Some(&rect(30, 40))
+    );
+}
+
+#[test]
+fn places_no_element_on_a_free_cell_that_a_move_took() {
+    let json = r#"[
+        {"op": "move_element", "element": {"existing": "orders-db"}, "board": {"existing": "main"}, "x": 440, "y": 0},
+        {"op": "place_element", "element": {"existing": "loose"}, "board": {"existing": "main"}}
+    ]"#;
+
+    let applied = apply(&snapshot(), &operations(json)).unwrap();
+
+    let board = written_board(&applied, "main");
+    assert_eq!(
+        board.placements.get(&element_id("orders-db")),
+        Some(&rect(440, 0))
+    );
+    assert_eq!(
+        board.placements.get(&element_id("loose")),
+        Some(&rect(660, 0))
+    );
+}
+
+#[test]
+fn places_no_element_where_a_move_went_below_the_content() {
+    let mut walled = snapshot();
+    let wall = sized(0, 0, 4 * 220, 64 * 130);
+    walled
+        .boards
+        .get_mut(&board_id("main"))
+        .unwrap()
+        .placements
+        .insert(element_id("wall"), wall);
+    // Without the move, the next placement would go to y 8320 + 40.
+    let json = r#"[
+        {"op": "move_element", "element": {"existing": "orders-db"}, "board": {"existing": "main"}, "x": 0, "y": 8360},
+        {"op": "place_element", "element": {"existing": "loose"}, "board": {"existing": "main"}}
+    ]"#;
+
+    let applied = apply(&walled, &operations(json)).unwrap();
+
+    let board = written_board(&applied, "main");
+    assert_eq!(
+        board.placements.get(&element_id("loose")),
+        Some(&rect(0, 8360 + 90 + 40))
+    );
+}
+
+/// The element covers every grid cell before it moves, and its bottom
+/// after the move lies beyond `i32`, so no position is left; the request
+/// fails without a panic.
+#[test]
+fn reports_a_full_board_after_moving_an_element_of_the_largest_size() {
+    let mut large = snapshot();
+    large
+        .boards
+        .get_mut(&board_id("main"))
+        .unwrap()
+        .placements
+        .insert(element_id("orders-db"), sized(0, 0, u32::MAX, u32::MAX));
+    let json = r#"[
+        {"op": "move_element", "element": {"existing": "orders-db"}, "board": {"existing": "main"}, "x": 1000000, "y": 1000000},
+        {"op": "place_element", "element": {"existing": "loose"}, "board": {"existing": "main"}}
+    ]"#;
+
+    assert_eq!(
+        apply(&large, &operations(json)),
+        Err(ApplyError::Operation {
+            position: 2,
+            problem: OperationProblem::BoardFull(board_id("main"))
+        })
+    );
+}
+
+#[rstest]
+#[case::not_on_the_board(
+    r#"[{"op": "move_element", "element": {"existing": "loose"}, "board": {"existing": "main"}, "x": 0, "y": 0}]"#,
+    "element loose does not lie on board main"
+)]
+#[case::out_of_range(
+    r#"[{"op": "move_element", "element": {"existing": "orders-db"}, "board": {"existing": "main"}, "x": 1000001, "y": -5}]"#,
+    "the position x 1000001, y -5 lies outside -1000000 to 1000000"
+)]
+fn names_only_ids_and_numbers_when_it_rejects_a_move(#[case] json: &str, #[case] expected: &str) {
+    let mut marked = snapshot();
+    marked.boards.get_mut(&board_id("main")).unwrap().title = "MARKER \u{1b}[31m".to_owned();
+
+    assert_eq!(problem(&marked, json).to_string(), expected);
+}
+
 #[test]
 fn gives_colliding_names_suffixes() {
     let json = r#"[
@@ -301,6 +486,57 @@ fn shortens_a_long_name_to_a_valid_slug() {
         {"op": "place_element", "element": {"existing": "loose"}, "board": {"existing": "main"}}
     ]"#,
     OperationProblem::AlreadyHomed(element_id("loose"))
+)]
+#[case::move_of_an_element_on_no_board(
+    r#"[{"op": "move_element", "element": {"existing": "loose"}, "board": {"existing": "main"}, "x": 0, "y": 0}]"#,
+    OperationProblem::NotOnBoard { element: element_id("loose"), board: board_id("main") }
+)]
+#[case::move_on_a_board_where_the_element_does_not_lie(
+    r#"[
+        {"op": "create_board", "key": "b", "title": "B"},
+        {"op": "move_element", "element": {"existing": "orders-db"}, "board": {"new": "b"}, "x": 0, "y": 0}
+    ]"#,
+    OperationProblem::NotOnBoard { element: element_id("orders-db"), board: board_id("b") }
+)]
+#[case::move_of_an_orphan_placement(
+    r#"[{"op": "move_element", "element": {"existing": "ghost"}, "board": {"existing": "main"}, "x": 0, "y": 0}]"#,
+    OperationProblem::UnknownElement(element_id("ghost"))
+)]
+#[case::move_of_an_unknown_element(
+    r#"[{"op": "move_element", "element": {"existing": "nope"}, "board": {"existing": "main"}, "x": 0, "y": 0}]"#,
+    OperationProblem::UnknownElement(element_id("nope"))
+)]
+#[case::move_on_an_unknown_board(
+    r#"[{"op": "move_element", "element": {"existing": "orders-db"}, "board": {"existing": "nope"}, "x": 0, "y": 0}]"#,
+    OperationProblem::UnknownBoard(board_id("nope"))
+)]
+#[case::move_of_an_unknown_key(
+    r#"[{"op": "move_element", "element": {"new": "x"}, "board": {"existing": "main"}, "x": 0, "y": 0}]"#,
+    OperationProblem::UnknownKey(key("x"))
+)]
+#[case::move_right_of_the_range(
+    r#"[{"op": "move_element", "element": {"existing": "orders-db"}, "board": {"existing": "main"}, "x": 1000001, "y": 0}]"#,
+    OperationProblem::OutOfRange { x: 1_000_001, y: 0 }
+)]
+#[case::move_left_of_the_range(
+    r#"[{"op": "move_element", "element": {"existing": "orders-db"}, "board": {"existing": "main"}, "x": -1000001, "y": 0}]"#,
+    OperationProblem::OutOfRange { x: -1_000_001, y: 0 }
+)]
+#[case::move_below_the_range(
+    r#"[{"op": "move_element", "element": {"existing": "orders-db"}, "board": {"existing": "main"}, "x": 0, "y": 1000001}]"#,
+    OperationProblem::OutOfRange { x: 0, y: 1_000_001 }
+)]
+#[case::move_above_the_range(
+    r#"[{"op": "move_element", "element": {"existing": "orders-db"}, "board": {"existing": "main"}, "x": 0, "y": -1000001}]"#,
+    OperationProblem::OutOfRange { x: 0, y: -1_000_001 }
+)]
+#[case::move_to_the_largest_i32(
+    r#"[{"op": "move_element", "element": {"existing": "orders-db"}, "board": {"existing": "main"}, "x": 2147483647, "y": 0}]"#,
+    OperationProblem::OutOfRange { x: i32::MAX, y: 0 }
+)]
+#[case::move_to_the_smallest_i32(
+    r#"[{"op": "move_element", "element": {"existing": "orders-db"}, "board": {"existing": "main"}, "x": 0, "y": -2147483648}]"#,
+    OperationProblem::OutOfRange { x: 0, y: i32::MIN }
 )]
 #[case::empty_type(
     r#"[{"op": "create_element", "key": "e", "type_ref": "", "name": "E"}]"#,

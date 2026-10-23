@@ -22,7 +22,9 @@ mod slug;
 pub use apply::{
     Applied, ApplyError, Created, Kind, MAX_OPERATIONS, OperationProblem, Snapshot, Write, apply,
 };
-pub use operation::{LocalKey, LocalKeyError, MAX_KEY_LEN, Operation, Operations, Ref};
+pub use operation::{
+    LocalKey, LocalKeyError, MAX_COORDINATE, MAX_KEY_LEN, Operation, Operations, Ref,
+};
 pub use outline::{UnknownBoard, element_list, outline};
 pub use project::{
     EmbeddingModel, EntryKind, Init, MAX_FILE_BYTES, MAX_PROJECT_FILE_BYTES, PROJECT_FORMAT,

@@ -13,6 +13,11 @@ use serde::{Deserialize, Serialize};
 /// The longest local key, in characters.
 pub const MAX_KEY_LEN: usize = 64;
 
+/// The largest distance of a moved element's position from the origin,
+/// in each direction: a position near the `i32` limit would leave later
+/// placements on that board no room below it.
+pub const MAX_COORDINATE: i32 = 1_000_000;
+
 /// How many characters of a rejected key an error shows.
 const SHOWN_LIMIT: usize = 80;
 
@@ -49,6 +54,26 @@ pub enum Operation {
         element: Ref<ElementId>,
         /// The board to place it on.
         board: Ref<BoardId>,
+    },
+    /// Moves an element on a board where it lies: sets the position of its
+    /// placement there and keeps its size.
+    MoveElement {
+        /// The element to move.
+        element: Ref<ElementId>,
+        /// The board it lies on.
+        board: Ref<BoardId>,
+        /// The new left edge, from -1,000,000 to 1,000,000.
+        #[cfg_attr(
+            feature = "json-schema",
+            schemars(range(min = -MAX_COORDINATE, max = MAX_COORDINATE))
+        )]
+        x: i32,
+        /// The new top edge, from -1,000,000 to 1,000,000.
+        #[cfg_attr(
+            feature = "json-schema",
+            schemars(range(min = -MAX_COORDINATE, max = MAX_COORDINATE))
+        )]
+        y: i32,
     },
 }
 
@@ -190,6 +215,23 @@ mod tests {
         );
     }
 
+    #[test]
+    fn reads_a_move() {
+        let json = r#"[{"op": "move_element", "element": {"existing": "orders-db"}, "board": {"new": "b"}, "x": -40, "y": 1000000}]"#;
+
+        let operations = read(json).unwrap();
+
+        assert_eq!(
+            operations,
+            vec![Operation::MoveElement {
+                element: Ref::Existing("orders-db".parse().unwrap()),
+                board: Ref::New(LocalKey::try_from("b".to_owned()).unwrap()),
+                x: -40,
+                y: 1_000_000,
+            }]
+        );
+    }
+
     #[rstest]
     #[case::summary_null(
         r#"[{"op": "create_element", "key": "k", "type_ref": "t", "name": "n", "summary": null}]"#
@@ -203,6 +245,34 @@ mod tests {
     #[case::create_board_as_array(r#"[["create_board", "k", "t"]]"#)]
     #[case::create_element_as_array(r#"[["create_element", "k", "t", "n", null, ""]]"#)]
     #[case::place_element_as_array(r#"[["place_element", {"new": "a"}, {"new": "b"}]]"#)]
+    #[case::move_element_as_array(r#"[["move_element", {"new": "a"}, {"new": "b"}, 0, 0]]"#)]
+    #[case::move_x_as_fraction(
+        r#"[{"op": "move_element", "element": {"new": "a"}, "board": {"new": "b"}, "x": 1.5, "y": 0}]"#
+    )]
+    #[case::move_x_as_exponent(
+        r#"[{"op": "move_element", "element": {"new": "a"}, "board": {"new": "b"}, "x": 1e3, "y": 0}]"#
+    )]
+    #[case::move_x_as_text(
+        r#"[{"op": "move_element", "element": {"new": "a"}, "board": {"new": "b"}, "x": "1", "y": 0}]"#
+    )]
+    #[case::move_x_null(
+        r#"[{"op": "move_element", "element": {"new": "a"}, "board": {"new": "b"}, "x": null, "y": 0}]"#
+    )]
+    #[case::move_without_x(
+        r#"[{"op": "move_element", "element": {"new": "a"}, "board": {"new": "b"}, "y": 0}]"#
+    )]
+    #[case::move_x_twice(
+        r#"[{"op": "move_element", "element": {"new": "a"}, "board": {"new": "b"}, "x": 1, "x": 2, "y": 0}]"#
+    )]
+    #[case::move_x_beyond_i32(
+        r#"[{"op": "move_element", "element": {"new": "a"}, "board": {"new": "b"}, "x": 2147483648, "y": 0}]"#
+    )]
+    #[case::move_y_beyond_i32(
+        r#"[{"op": "move_element", "element": {"new": "a"}, "board": {"new": "b"}, "x": 0, "y": -2147483649}]"#
+    )]
+    #[case::move_with_a_size(
+        r#"[{"op": "move_element", "element": {"new": "a"}, "board": {"new": "b"}, "x": 0, "y": 0, "width": 9}]"#
+    )]
     #[case::unknown_field(r#"[{"op": "create_board", "key": "k", "title": "t", "zone": {}}]"#)]
     #[case::duplicate_field(r#"[{"op": "create_board", "key": "k", "key": "j", "title": "t"}]"#)]
     #[case::duplicate_op(
@@ -290,12 +360,46 @@ mod tests {
             .filter_map(|definition| definition.pointer("/oneOf")?.as_array())
             .flatten()
             .collect();
-        assert_eq!(variants.len(), 3 + 2 + 2, "{schema}");
+        assert_eq!(variants.len(), 4 + 2 + 2, "{schema}");
         for variant in variants {
             assert_eq!(
                 variant.pointer("/additionalProperties"),
                 Some(&serde_json::Value::Bool(false)),
                 "{variant}"
+            );
+        }
+    }
+
+    #[cfg(feature = "json-schema")]
+    #[test]
+    fn schema_bounds_the_coordinates_of_a_move_as_the_core_does() {
+        let schema = serde_json::to_value(schemars::schema_for!(Operations)).unwrap();
+
+        let definitions = schema
+            .pointer("/$defs")
+            .and_then(serde_json::Value::as_object)
+            .unwrap();
+        let movement = definitions
+            .values()
+            .filter_map(|definition| definition.pointer("/oneOf")?.as_array())
+            .flatten()
+            .find(|variant| {
+                variant.pointer("/properties/op/const") == Some(&serde_json::json!("move_element"))
+            })
+            .unwrap();
+        for coordinate in ["x", "y"] {
+            let property = movement
+                .pointer(&format!("/properties/{coordinate}"))
+                .unwrap();
+            assert_eq!(
+                property.get("minimum"),
+                Some(&serde_json::json!(-MAX_COORDINATE)),
+                "{property}"
+            );
+            assert_eq!(
+                property.get("maximum"),
+                Some(&serde_json::json!(MAX_COORDINATE)),
+                "{property}"
             );
         }
     }
