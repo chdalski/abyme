@@ -17,6 +17,10 @@ cargo test --workspace <filter>          # only the tests whose name contains <f
 cargo clippy --workspace --all-targets   # zero warnings: the workspace lints deny them
 cargo fmt --all                          # --check to verify only
 cargo clean
+pnpm --dir crates/abyme-canvas/ui install --frozen-lockfile   # the canvas UI's packages; none runs a build script
+pnpm --dir crates/abyme-canvas/ui check   # TypeScript, ESLint, and Prettier; `format` rewrites
+pnpm --dir crates/abyme-canvas/ui test    # Vitest
+pnpm --dir crates/abyme-canvas/ui dev     # the UI's dev server, which the canvas loads; see Conventions to run it
 ```
 
 ## Components
@@ -26,6 +30,7 @@ cargo clean
 | `crates/abyme-model` | The Abyme format: identifiers and the files that hold elements and boards |
 | `crates/abyme-core` | Operations on elements and boards: `apply` turns a request into the files to write, `Project` finds a project, initializes it, and reads and writes its files, and `outline` renders a board as text for the AI |
 | `crates/abyme-index` | The search index: keeps a LanceDB table per project and model in the user's cache and ranks a project's elements for a query by full text and vectors; downloads a built-in embedding model's pinned files into that cache, checks them against the sizes and hashes in the source, and loads them with fastembed |
+| `crates/abyme-canvas` | The `abyme-canvas` binary, a Tauri app: started in a project, it lists the project's boards and asks again whenever a file watcher sees the project's files change; its UI, React with Vite, lies in `ui/` |
 | `crates/abyme-mcp` | The `abyme-mcp` binary: `abyme-mcp init` makes a directory an Abyme project; without arguments it serves the tools `apply`, `read_board`, and `search` over MCP on stdio and downloads the project's embedding model in the background |
 
 ## Language
@@ -48,7 +53,9 @@ keywords.
 - `docs/` is an Obsidian vault whose root is the project root; its rules are in `docs/README.md` ("Rules"): docs describe the current state, not its history; proposals go in `> [!question] Proposal`, open points in `> [!todo] Open`; decisions are a table in `docs/Decisions.md`; links are wikilinks.
 - Render-check every new Mermaid diagram before adding it to `docs/`: `npx -y @mermaid-js/mermaid-cli@12.0.0 -q -i "<note>.md" -o "<scratch dir>/<note>.md"` exits non-zero on a broken diagram; it needs headless Chrome's libraries (`libnss3` and others), which the devcontainer image does not install yet.
 - The dev profile, which tests use too, keeps line tables for the workspace's crates and no debug info for dependencies (root `Cargo.toml`), so linking the test binaries stays light. For one build with full debug info, run `cargo --config 'profile.dev.debug=true' --config 'profile.dev.package."*".debug=true' build`, which rebuilds everything.
-- Builds and tests stay on the workspace selection, whose artifacts stay cached; narrow a test run by test, not by package: `cargo test --workspace <filter>`, or `--test <file>` for one integration test file. A run with `-p` resolves features for its own packages and compiles the dependencies a second time: without `abyme-mcp`, `serde` lacks `rc`, `indexmap` lacks `serde`, and the `json-schema` feature of `abyme-model` and `abyme-core`, off by default and turned on only by `abyme-mcp`, goes unchecked.
+- Builds and tests stay on the workspace selection, whose artifacts stay cached; narrow a test run by test, not by package: `cargo test --workspace <filter>`, or `--test <file>` for one integration test file. A run with `-p` resolves features for its own packages and compiles the dependencies a second time: without `abyme-mcp`, `serde` lacks `rc`, `indexmap` lacks `serde`, and the `json-schema` feature of `abyme-model` and `abyme-core`, off by default and turned on only by `abyme-mcp`, goes unchecked. So does the `ts` feature of `abyme-model`, which only the tests of `abyme-canvas` turn on: `cargo clippy --workspace --all-targets` and `cargo test --workspace` check it, `cargo build --workspace` does not compile it.
+- Run the canvas in a project: start `pnpm --dir crates/abyme-canvas/ui dev`, then run this repository's `target/debug/abyme-canvas` from the project's directory, after `cargo build --workspace`. A debug build loads its UI from that dev server; `cargo tauri dev` in `crates/abyme-canvas` starts both but runs the app in the crate's directory, which lies in no project.
+- `crates/abyme-canvas/ui/src/bindings.ts` holds the TypeScript types that ts-rs generates from the Rust types the UI receives. Do not edit it: when the test `committed_bindings_match_the_rust_types` fails, replace the file with the text the test prints.
 - Crates inherit the workspace lint set with `[lints] workspace = true`; the set comes from `.claude/skills/project-init/rust-init.md`, and `clippy.toml` relaxes it only for tests.
 - Comparisons with other tools stay in the chat; `docs/` takes only the adopted ideas, without naming the tool.
 - `docs/Glossary.md` defines the terms that docs, UI, and code share; add new terms there.

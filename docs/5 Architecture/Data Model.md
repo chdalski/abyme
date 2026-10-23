@@ -210,11 +210,13 @@ A request is a list of operations, each a JSON object with the field `op`. The W
 
 The MCP server and the canvas use the same core functions:
 
+- find the project a directory lies in, and read all of its elements and boards
 - read and query, in [[MCP Server#Detail Levels|detail levels]]
 - apply operations, transactionally
 - place and auto-layout ([[Placement and Layout]])
 - fetch and resolve checks and change requests
-- subscribe to changes, for the live view in the canvas
+
+The core offers no subscription to changes. The canvas watches the project's files itself and reads them through the core again after a change (see [[Canvas#Live Updates]]).
 
 > [!todo] Open
 > **Provenance** (who created an element?) is not in yet, see [[Ideas]].

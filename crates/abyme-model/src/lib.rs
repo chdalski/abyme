@@ -11,6 +11,8 @@ mod id;
 mod object_only;
 #[cfg(feature = "json-schema")]
 mod schema;
+#[cfg(feature = "ts")]
+mod ts;
 mod untrusted;
 
 pub use board::{BOARD_FORMAT, Board, BoardError, Rect};

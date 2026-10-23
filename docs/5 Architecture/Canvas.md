@@ -31,14 +31,24 @@ Rejected:
 ## Structure
 
 - `crates/abyme-canvas` is the Tauri app. Its Rust side uses `abyme-core` directly, through the [[Hexagonal Architecture#Core API|core API]].
-- The web UI lies next to it, in `crates/abyme-canvas/ui/`. It talks to the Rust side only through an interface, `AbymeClient`, which runs over Tauri's IPC.
-- The TypeScript types are generated from the Rust types with ts-rs. That way the format is defined only once, in `abyme-model`. The few IPC commands are typed by hand in `AbymeClient`.
+  - `src/app.rs` holds the IPC commands and the event, `src/boards.rs` the data the UI receives, and `src/watcher.rs` the file watcher.
+  - `tauri.conf.json` and `capabilities/default.json` decide what the webview may reach. `build.rs` lists the canvas's own commands, so that Tauri checks them against the capabilities as well.
+- The web UI lies next to it, in `crates/abyme-canvas/ui/`: React, built and served by Vite and tested with Vitest. It talks to the Rust side only through an interface, `AbymeClient` (`ui/src/client.ts`), which runs over Tauri's IPC; tests give the UI a fake one.
+- The TypeScript types are generated from the Rust types with ts-rs into `ui/src/bindings.ts`. That way the format is defined only once, in `abyme-model`. A Rust test compares the committed file with the Rust types and fails when it is stale. The few IPC commands are typed by hand in `AbymeClient`.
 - Layout and text measurement stay in Rust. The AI places things without a canvas too, so layout must work without a screen.
+
+## Live Updates
+
+The canvas keeps no copy of the project. Its command `list_boards` takes no argument and reads the boards through the core on every call, in the project that the directory the canvas started in lies in.
+
+The Rust side watches the project's files itself: `abyme/`, `abyme/elements/`, and `abyme/boards/`, each on its own and only while it is a real directory. When a burst of changes has been quiet for a moment, it emits the event `project-changed`, which carries nothing, and the UI asks again. Reading a file raises no event, so the reads that answer an event cannot raise the next one. A write of the AI over MCP, of an editor, or of `git checkout` shows up the same way.
 
 ## Security
 
-- **No raw HTML:** The canvas shows names, summaries, descriptions, and notes as text and renders no raw HTML from them.
-- **Only Abyme's own commands:** The webview reaches the Rust side only through Abyme's own IPC commands, not through plugins for files or the shell.
+- **No raw HTML:** The canvas shows names, summaries, descriptions, and notes as text and renders no raw HTML from them. ESLint rejects the ways to write HTML into the page.
+- **Only Abyme's own commands:** The webview reaches the Rust side only through Abyme's own IPC commands and listening to events, not through plugins for files or the shell. The capability grants exactly these; a page from another origin reaches none of them.
+- **Only its own scripts:** The page's content security policy, in `ui/index.html`, lets it run only its own scripts. During development, Vite's dev server also sends the policy as a header, so that it covers the scripts Vite puts into the page.
+- **No widened watch:** The watcher follows no symbolic link and watches no directory recursively, so a link in a cloned repository does not make it walk other directories.
 
 The core's part is in [[Hexagonal Architecture#Security Baseline]].
 

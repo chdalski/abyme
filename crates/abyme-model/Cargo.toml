@@ -13,10 +13,13 @@ schemars = { workspace = true, optional = true }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+ts-rs = { workspace = true, optional = true }
 
 [features]
 # JSON Schemas for the types an AI sends over MCP; off unless a client needs them.
 json-schema = ["dep:schemars"]
+# TypeScript declarations for the types the canvas's UI receives; off unless the canvas needs them.
+ts = ["dep:ts-rs"]
 
 [dev-dependencies]
 proptest.workspace = true

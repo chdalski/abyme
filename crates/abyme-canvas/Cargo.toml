@@ -1,0 +1,28 @@
+[package]
+name = "abyme-canvas"
+description = "The Abyme canvas: a desktop app that shows the boards of an Abyme project and keeps them live"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+abyme-core.workspace = true
+abyme-model.workspace = true
+notify.workspace = true
+serde.workspace = true
+tauri.workspace = true
+
+[build-dependencies]
+tauri-build.workspace = true
+
+[dev-dependencies]
+abyme-model = { workspace = true, features = ["ts"] }
+serde_json.workspace = true
+tauri = { workspace = true, features = ["test"] }
+tempfile.workspace = true
+ts-rs.workspace = true
+
+[lints]
+workspace = true

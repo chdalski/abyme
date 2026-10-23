@@ -1,0 +1,6 @@
+# No dependency runs a build script: none is approved, and one that needs a
+# build fails the install instead of being skipped quietly.
+allowBuilds: {}
+strictDepBuilds: true
+# A version published with weaker provenance than an earlier one fails the install.
+trustPolicy: no-downgrade

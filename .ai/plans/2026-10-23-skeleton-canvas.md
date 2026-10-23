@@ -26,7 +26,7 @@ features depend on it.
   the display through VS Code.
 - Libraries, each pinned exactly by the task that adds it:
   - Rust: `tauri` 2.12.5 with `tauri-build` 2.7.4, `ts-rs` 12.0.1,
-    `notify` 8.2.0 with `notify-debouncer-mini` 0.7.0;
+    `notify` 8.2.0;
   - npm through pnpm, lockfile committed: `@tauri-apps/api` 2.12.4,
     `@xyflow/react` 12.12.0, `react` and `react-dom` 19.3.1; for
     development `vite` 8.3.5, `@vitejs/plugin-react` 6.1.2,
@@ -51,7 +51,7 @@ features depend on it.
 - [x] Move an element with an operation
 - [x] Show coordinates in `read_board` on request
 - [x] Provide the canvas toolchain in the devcontainer
-- [ ] List the project's boards in the canvas, live
+- [x] List the project's boards in the canvas, live
 - [ ] Show a board's elements in the canvas, live
 - [ ] Move an element by dragging it
 
@@ -155,38 +155,38 @@ the Rust types with ts-rs.
 
 Review path: Security-Hybrid
 
-- [ ] The app started in a project shows the titles of the project's
+- [x] The app started in a project shows the titles of the project's
       boards, or a note that the project has no boards yet. Started
       outside a project, it shows the same hint as MCP: run
       `abyme-mcp init`. When the core cannot read the project, it shows
       the core's message as MCP does. Tests of the command and of the
       list view show each case.
-- [ ] A board created by `Project::apply` appears in the list without a
+- [x] A board created by `Project::apply` appears in the list without a
       reload, also in a project that `abyme-mcp init` just created and
       that has no `abyme/boards/` yet: Rust tests show that the write
       raises the change signal, and a Vitest test shows that the signal
       leads to the new list.
-- [ ] A symbolic link inside a watched directory is not followed, and a
+- [x] A symbolic link inside a watched directory is not followed, and a
       write under `.abyme/` raises no change signal; Rust tests show
       both.
-- [ ] The webview reaches the Rust side only through Abyme's own
+- [x] The webview reaches the Rust side only through Abyme's own
       commands and listening to its events; the app includes no Tauri
       plugin; the UI renders repository text as text only. Tests show
       each.
-- [ ] The TypeScript types that describe Rust data are generated from
+- [x] The TypeScript types that describe Rust data are generated from
       the Rust types, and a test fails when the committed generated file
       differs from what the Rust types produce.
-- [ ] On a checkout without a UI build, `cargo build --workspace`,
+- [x] On a checkout without a UI build, `cargo build --workspace`,
       `cargo clippy --workspace --all-targets`, and
       `cargo test --workspace` pass, and none of them runs pnpm or npm.
-- [ ] Every npm and crate dependency the task adds is pinned exactly,
+- [x] Every npm and crate dependency the task adds is pinned exactly,
       the pnpm lockfile is committed, and the handoff lists the licenses
       of the new dependencies, all MIT-compatible.
-- [ ] The root `CLAUDE.md` lists `crates/abyme-canvas` among the
+- [x] The root `CLAUDE.md` lists `crates/abyme-canvas` among the
       components, gives the commands to install, check, test, and run the
       UI, and tells which runs need `--all-features` for the new `ts`
       feature, as it does for `json-schema`.
-- [ ] From `docs/5 Architecture/Canvas.md`, a reader learns the crate's
+- [x] From `docs/5 Architecture/Canvas.md`, a reader learns the crate's
       layout and how the UI learns about changes; from
       `docs/5 Architecture/Data Model.md`, which functions the core
       provides and that the canvas itself watches for changes.
@@ -287,10 +287,17 @@ Review path: Security-Hybrid
   and takes a closure, without a trait until a second implementation
   exists. Rejected: a recursive watch of `abyme/`, because a symbolic
   link in a cloned repository could make it watch the whole file system.
-- **ts-rs is behind a feature `ts`** of `abyme-model` and `abyme-core`
-  that only `abyme-canvas` enables, like `json-schema`. The generated
-  file is committed, and a test compares it, so a stale file fails
-  instead of being rewritten.
+- **The watcher debounces itself,** without `notify-debouncer-mini`:
+  inotify reports opening a file, and that debouncer passes every event
+  on, so the reads that answer a signal would raise the next one. The
+  watcher drops read events and signals once changes have been quiet for
+  100 ms.
+- **ts-rs is behind a feature `ts`,** like `json-schema`, that only the
+  tests of `abyme-canvas` enable: the binary needs no TypeScript. So far
+  only `abyme-model` has it, since only its IDs cross IPC; `abyme-core`
+  gets it when one of its types does. The generated file is committed,
+  and a test compares it, so a stale file fails instead of being
+  rewritten.
 - **The canvas is a workspace member,** and workspace builds compile it
   without a UI build. If Tauri needs the frontend at compile time, a
   committed placeholder serves it.

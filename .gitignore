@@ -1,1 +1,3 @@
 /target/
+# pnpm keeps its package store at the root of the file system that holds the project.
+/.pnpm-store/
