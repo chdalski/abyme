@@ -627,7 +627,7 @@ async fn search_finds_elements_by_word_and_by_meaning_with_the_real_model() -> T
         &session,
         "search",
         json!({"query": "Stripe"}),
-        Duration::from_secs(600),
+        Duration::from_mins(10),
     )
     .await??;
     let by_meaning = call(
@@ -647,6 +647,60 @@ async fn search_finds_elements_by_word_and_by_meaning_with_the_real_model() -> T
         "{by_word:?}"
     );
     assert!(text(&by_meaning).starts_with("mailer  "), "{by_meaning:?}");
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+/// Also embeds an element far longer than the 512 tokens the model reads,
+/// which the tokenizer must cut instead of failing the search.
+#[tokio::test]
+#[ignore = "downloads the real multilingual model from Hugging Face"]
+async fn search_finds_an_english_element_through_a_german_query_with_the_multilingual_model()
+-> TestResult {
+    let directory = project()?;
+    fs::write(
+        directory.path().join("abyme/abyme.toml"),
+        "format = 1\nembedding_model = \"paraphrase-multilingual-minilm-l12-v2\"\n",
+    )?;
+    let cache = tempfile::tempdir()?;
+    let session = start_with(
+        directory.path(),
+        &[("XDG_CACHE_HOME", cache.path().as_os_str())],
+    )
+    .await?;
+    let long_body = "The archive keeps every report of the year. ".repeat(200);
+    let applied = call(
+        &session,
+        "apply",
+        json!({"operations": [
+            {"op": "create_element", "key": "pay", "type_ref": "c4/container",
+             "name": "Payment Service", "summary": "Charges credit cards through Stripe"},
+            {"op": "create_element", "key": "mail", "type_ref": "c4/container",
+             "name": "Mailer", "summary": "Sends newsletters to customers by email"},
+            {"op": "create_element", "key": "stock", "type_ref": "c4/container",
+             "name": "Inventory", "summary": "Tracks how many items the warehouse holds"},
+            {"op": "create_element", "key": "archive", "type_ref": "c4/container",
+             "name": "Archive", "summary": "Keeps old reports", "body": long_body}
+        ]}),
+    )
+    .await??;
+    assert_eq!(applied.is_error, Some(false), "{applied:?}");
+
+    let found = call_within(
+        &session,
+        "search",
+        json!({"query": "Rundbriefe an Kunden verschicken"}),
+        Duration::from_mins(15),
+    )
+    .await??;
+
+    eprintln!("Rundbriefe an Kunden verschicken:\n{}", text(&found));
+    assert_eq!(found.is_error, Some(false), "{found:?}");
+    assert!(text(&found).starts_with("mailer  "), "{found:?}");
+    let models: Vec<String> = fs::read_dir(cache.path().join("abyme/models"))?
+        .map(|entry| entry.map(|entry| entry.file_name().to_string_lossy().into_owned()))
+        .collect::<Result<_, _>>()?;
+    assert_eq!(models, ["paraphrase-multilingual-minilm-l12-v2"]);
     assert_only_protocol_messages(&finish(session).await?);
     Ok(())
 }

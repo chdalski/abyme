@@ -44,6 +44,20 @@ A request that does not fit a tool, or that the project rejects, comes back as a
 
 ## The embedding model
 
-`search` needs an embedding model, which the server downloads from Hugging Face (about 70 MB) when it starts in a project, in the background. The first `search` waits for the download if it has not finished. If the download fails, `search` answers with the error and tries again at the next call.
+`search` needs an embedding model, which the server downloads from Hugging Face when it starts in a project, in the background. The first `search` waits for the download if it has not finished. If the download fails, `search` answers with the error and tries again at the next call.
+
+Each project chooses its model with the key `embedding_model` in `abyme/abyme.toml`:
+
+```toml
+format = 1
+embedding_model = "paraphrase-multilingual-minilm-l12-v2"
+```
+
+| `embedding_model` | For | Download |
+|---|---|---|
+| `bge-small-en-v1.5` (default, also without the key) | English | about 70 MB |
+| `paraphrase-multilingual-minilm-l12-v2` | 50+ languages; finds English text through a German query and the other way round | about 250 MB |
+
+Any other value makes every tool fail with an error that names `abyme/abyme.toml`. A changed key takes effect at the next `search`, which then loads the other model and builds its own index.
 
 The model and the search index live in your cache, `$XDG_CACHE_HOME/abyme/` or, without that, `~/.cache/abyme/`, never in the repository. Deleting that directory is safe: the server downloads the model and rebuilds the index again. Without `XDG_CACHE_HOME` and `HOME`, `search` answers with an error, and the other tools keep working. [Search and Index](../../docs/4%20AI%20Interface/Search%20and%20Index.md) describes how the model is checked and which network settings apply.

@@ -24,5 +24,5 @@ pub use download::{HuggingFace, Mismatch, ModelError, ModelSource};
 pub use embedder::{EmbedError, Embedder};
 pub use index::{Index, IndexError, IndexLock, MAX_QUERY_CHARS, MAX_RESULTS};
 pub use loader::{LoadedModel, load_model};
-pub use model::{BGE_SMALL_EN_V15_Q, ModelFile, ModelFiles, ModelSpec};
+pub use model::{ModelFile, ModelFiles, ModelSpec, spec};
 pub use text::{RECIPE_VERSION, indexed_text};

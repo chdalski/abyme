@@ -25,5 +25,6 @@ pub use apply::{
 pub use operation::{LocalKey, LocalKeyError, MAX_KEY_LEN, Operation, Operations, Ref};
 pub use outline::{UnknownBoard, element_list, outline};
 pub use project::{
-    EntryKind, Init, MAX_FILE_BYTES, MAX_PROJECT_FILE_BYTES, PROJECT_FORMAT, Project, ProjectError,
+    EmbeddingModel, EntryKind, Init, MAX_FILE_BYTES, MAX_PROJECT_FILE_BYTES, PROJECT_FORMAT,
+    Project, ProjectError,
 };

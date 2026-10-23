@@ -8,9 +8,9 @@ use std::fs;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
+use abyme_core::EmbeddingModel;
 use abyme_index::{
-    BGE_SMALL_EN_V15_Q, Embedder, HuggingFace, ModelFile, ModelSource, ModelSpec, UserCache,
-    load_model,
+    Embedder, HuggingFace, ModelFile, ModelSource, ModelSpec, UserCache, load_model, spec,
 };
 use tempfile::TempDir;
 
@@ -57,7 +57,8 @@ fn the_real_model_places_related_texts_closer() -> TestResult {
     let directory = TempDir::new()?;
     let cache = UserCache::from_env(Some(directory.path().into()), None).ok_or("no cache")?;
 
-    let mut model = load_model(&cache, &BGE_SMALL_EN_V15_Q, &HuggingFace::default())?;
+    let english = spec(EmbeddingModel::BgeSmallEnV15);
+    let mut model = load_model(&cache, english, &HuggingFace::default())?;
     let texts = [
         "The cat sleeps on the sofa.",
         "A kitten naps on the couch.",
@@ -69,7 +70,7 @@ fn the_real_model_places_related_texts_closer() -> TestResult {
     let [cat, kitten, taxes] = vectors.as_slice() else {
         return Err(format!("{} vectors for three texts", vectors.len()).into());
     };
-    assert_eq!(cat.len(), BGE_SMALL_EN_V15_Q.dimension);
+    assert_eq!(cat.len(), english.dimension);
     let (related, unrelated) = (cosine(cat, kitten), cosine(cat, taxes));
     eprintln!("cosine of the related texts {related}, of the unrelated ones {unrelated}");
     assert!(related > unrelated);
@@ -83,13 +84,13 @@ fn the_real_model_places_related_texts_closer() -> TestResult {
             .collect();
     expected.insert(model_dir.clone());
     expected.insert(model_dir.join("lock"));
-    for file in BGE_SMALL_EN_V15_Q.files.all() {
+    for file in english.files.all() {
         expected.insert(model_dir.join(file.name));
     }
     assert_eq!(tree(directory.path())?, expected);
     assert!(!Path::new(".fastembed_cache").exists());
 
-    let mut cached = load_model(&cache, &BGE_SMALL_EN_V15_Q, &Offline)?;
+    let mut cached = load_model(&cache, english, &Offline)?;
     let again = cached.embed(&texts[..1])?;
     let [cat_again] = again.as_slice() else {
         return Err(format!("{} vectors for one text", again.len()).into());

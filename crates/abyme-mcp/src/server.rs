@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use abyme_core::{Created, LocalKey, Operations, Project, element_list, outline};
-use abyme_index::{BGE_SMALL_EN_V15_Q, Index, MAX_QUERY_CHARS};
+use abyme_index::{Index, MAX_QUERY_CHARS, spec};
 use abyme_model::{BoardId, shown};
 use rmcp::handler::server::common::schema_for_type;
 use rmcp::handler::server::router::tool::ToolRouter;
@@ -97,16 +97,16 @@ impl AbymeServer {
 
     /// Prepares the embedding model of the project the server starts in,
     /// in the background, so that the first `search` waits less or not at
-    /// all. Without a project it does nothing; `search` loads the model once
-    /// there is one. A failure is one line on standard error, and `search`
-    /// tries again.
+    /// all. Without a valid project it does nothing; `search` loads the
+    /// model once there is one. A failure is one line on standard error,
+    /// and `search` tries again.
     pub fn prefetch(&self) -> JoinHandle<()> {
         let (start, models) = (self.start.clone(), Arc::clone(&self.models));
         tokio::task::spawn_blocking(move || {
-            if Project::discover(&start).is_err() {
+            let Ok(project) = Project::discover(&start) else {
                 return;
-            }
-            if let Err(message) = models.with(&BGE_SMALL_EN_V15_Q, |_, _| Ok(())) {
+            };
+            if let Err(message) = models.with(spec(project.embedding_model()), |_, _| Ok(())) {
                 eprintln!(
                     "abyme-mcp: the embedding model is not ready, search tries again: {}",
                     shown(&message, SHOWN_LIMIT)
@@ -171,8 +171,8 @@ impl AbymeServer {
         description = "Searches the elements of the Abyme project by the words they contain and by what \
             they are about, and returns the 10 that match the query best, best first: one line per element \
             with its ID, type, name, and summary, as in a board outline. Text from the repository is \
-            escaped onto one line. The first search after the server starts may wait until the embedding \
-            model is downloaded.",
+            escaped onto one line. The first search after the server starts, and the first after the \
+            project file names another embedding model, may wait until that model is downloaded.",
         input_schema = schema_for_type::<SearchArguments>()
     )]
     async fn search(
@@ -191,7 +191,7 @@ impl AbymeServer {
         on_core(move || {
             let project = Project::discover(&start).map_err(|error| error.to_string())?;
             let snapshot = project.snapshot().map_err(|error| error.to_string())?;
-            let spec = &BGE_SMALL_EN_V15_Q;
+            let spec = spec(project.embedding_model());
             let found = models
                 .with(spec, |cache, embedder| {
                     let index = Index::new(cache.clone(), project.root(), spec);

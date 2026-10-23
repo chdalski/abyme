@@ -1,5 +1,6 @@
-//! The embedding model that `search` uses: loaded at most once per model,
-//! kept for the session, and replaced when a search needs another one.
+//! The embedding model that `search` uses: loaded once, kept for the
+//! session, and replaced when a search needs another one, as after the
+//! project file chose another model.
 
 use std::ptr;
 use std::sync::{Arc, Mutex};
@@ -58,9 +59,12 @@ impl Models {
             self.loaded.clear_poison();
             poisoned.into_inner()
         });
-        let mut loaded = match slot.take() {
-            Some(loaded) if ptr::eq(loaded.spec, spec) => loaded,
-            Some(_) | None => Loaded {
+        // A model loaded for another spec is dropped here, before the new
+        // one loads, so that the two are never in memory together.
+        let kept = slot.take().filter(|loaded| ptr::eq(loaded.spec, spec));
+        let mut loaded = match kept {
+            Some(loaded) => loaded,
+            None => Loaded {
                 spec,
                 embedder: (self.loader)(spec, cache)?,
             },

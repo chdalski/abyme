@@ -13,7 +13,7 @@ use super::files::{
     read_limited,
 };
 use super::location::Location;
-use super::{EntryKind, Init, Project, ProjectError};
+use super::{EmbeddingModel, EntryKind, Init, Project, ProjectError};
 
 /// The version of the project file this crate reads and writes.
 pub const PROJECT_FORMAT: u32 = 1;
@@ -26,6 +26,8 @@ const DETAIL_LIMIT: usize = 200;
 #[serde(deny_unknown_fields)]
 struct ProjectFile {
     format: u32,
+    #[serde(default)]
+    embedding_model: EmbeddingModel,
 }
 
 /// The effective user ID of this process: projects must belong to it.
@@ -59,7 +61,10 @@ pub fn init(start: &Path, user: u32) -> Result<Init, ProjectError> {
         &format!("format = {PROJECT_FORMAT}\n"),
     )
     .map_err(io_error(Location::ProjectFile))?;
-    Ok(Init::Created(Project { root: start }))
+    Ok(Init::Created(Project {
+        root: start,
+        embedding_model: EmbeddingModel::default(),
+    }))
 }
 
 /// Fails unless the root directory, `abyme/`, and `abyme/abyme.toml` all
@@ -128,6 +133,7 @@ fn accept(root: &Path, user: u32) -> Result<Project, ProjectError> {
     }
     Ok(Project {
         root: root.to_path_buf(),
+        embedding_model: file.embedding_model,
     })
 }
 

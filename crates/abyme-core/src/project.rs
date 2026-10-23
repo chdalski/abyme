@@ -34,6 +34,21 @@ const SHOWN_PATH_LIMIT: usize = 200;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Project {
     root: PathBuf,
+    embedding_model: EmbeddingModel,
+}
+
+/// The embedding model a project's search uses, from the key
+/// `embedding_model` of its project file: a closed set of built-in models.
+/// The names carry the model's version.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Deserialize)]
+pub enum EmbeddingModel {
+    /// BGE small en v1.5, quantized, for English.
+    #[default]
+    #[serde(rename = "bge-small-en-v1.5")]
+    BgeSmallEnV15,
+    /// paraphrase-multilingual-MiniLM-L12-v2, quantized, for 50+ languages.
+    #[serde(rename = "paraphrase-multilingual-minilm-l12-v2")]
+    ParaphraseMultilingualMiniLmL12V2,
 }
 
 /// What [`Project::init`] did.
@@ -171,6 +186,12 @@ impl Project {
     #[must_use]
     pub fn root(&self) -> &Path {
         &self.root
+    }
+
+    /// The embedding model the project file chooses, or the default.
+    #[must_use]
+    pub const fn embedding_model(&self) -> EmbeddingModel {
+        self.embedding_model
     }
 
     /// Reads every element and board of the project.

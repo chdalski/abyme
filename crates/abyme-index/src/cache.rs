@@ -144,7 +144,7 @@ mod tests {
     use super::*;
     use crate::download::{self, ModelError, ModelSource};
     use crate::index::{Index, IndexError};
-    use crate::model::BGE_SMALL_EN_V15_Q;
+    use crate::model::{BGE_SMALL_EN_V15_Q, PARAPHRASE_ML_MINILM_L12_V2_Q};
     use rstest::rstest;
     use std::io::Read;
 
@@ -246,6 +246,24 @@ mod tests {
         assert_eq!(
             cache.path(CacheEntry::ModelPart(spec, &spec.files.tokenizer)),
             PathBuf::from(format!("{models}/tokenizer.json.part"))
+        );
+        let multilingual = &PARAPHRASE_ML_MINILM_L12_V2_Q;
+        assert_eq!(
+            cache.path(CacheEntry::ModelFile(
+                multilingual,
+                &multilingual.files.onnx
+            )),
+            PathBuf::from(
+                "/c/abyme/models/paraphrase-multilingual-minilm-l12-v2/\
+                 faf4aa4225822f3bc6376869cb1164e8e3feedd0/model_optimized.onnx"
+            )
+        );
+        assert_eq!(
+            cache.path(CacheEntry::Table(&key, multilingual)),
+            PathBuf::from(format!(
+                "/c/abyme/index/{key}/paraphrase-multilingual-minilm-l12-v2-\
+                 faf4aa4225822f3bc6376869cb1164e8e3feedd0-r1"
+            ))
         );
     }
 }

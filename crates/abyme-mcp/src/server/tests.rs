@@ -3,6 +3,7 @@
 
 use std::error::Error;
 use std::fs;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use abyme_index::{EmbedError, Embedder, ModelSpec, UserCache};
@@ -18,16 +19,24 @@ use crate::models::Loader;
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 
-/// Counts words into a vector, so texts that share words lie close.
+/// The name of the multilingual model in a project file.
+const MULTILINGUAL: &str = "paraphrase-multilingual-minilm-l12-v2";
+
+/// Counts words into a vector, so texts that share words lie close, and
+/// records how many texts it embedded for its model.
 struct WordsEmbedder {
+    model: &'static str,
     dimension: usize,
+    loads: Arc<FakeLoads>,
 }
 
 /// What the fake loader did and is to do.
 #[derive(Default)]
 struct FakeLoads {
-    /// How often it was called.
-    calls: AtomicUsize,
+    /// The name of the model of each call, in order.
+    loaded: Mutex<Vec<&'static str>>,
+    /// The model and the number of texts of each embedding.
+    embedded: Mutex<Vec<(&'static str, usize)>>,
     /// How many calls are still to fail.
     failures_left: AtomicUsize,
     /// The error a failing call returns.
@@ -43,6 +52,11 @@ struct Setup {
 
 impl Embedder for WordsEmbedder {
     fn embed(&mut self, texts: &[String]) -> Result<Vec<Vec<f32>>, EmbedError> {
+        self.loads
+            .embedded
+            .lock()
+            .unwrap()
+            .push((self.model, texts.len()));
         Ok(texts
             .iter()
             .map(|text| {
@@ -67,7 +81,8 @@ impl Setup {
             project: TempDir::new()?,
             cache: TempDir::new()?,
             loads: Arc::new(FakeLoads {
-                calls: AtomicUsize::new(0),
+                loaded: Mutex::new(Vec::new()),
+                embedded: Mutex::new(Vec::new()),
                 failures_left: AtomicUsize::new(failures),
                 failure: failure.to_owned(),
             }),
@@ -88,7 +103,48 @@ impl Setup {
     }
 
     fn loads(&self) -> usize {
-        self.loads.calls.load(Ordering::SeqCst)
+        self.loaded().len()
+    }
+
+    /// The name of the model of each load, in order.
+    fn loaded(&self) -> Vec<&'static str> {
+        self.loads.loaded.lock().unwrap().clone()
+    }
+
+    /// How many texts the model named `model` embedded, in all.
+    fn embedded_by(&self, model: &str) -> usize {
+        self.loads
+            .embedded
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(embedder, _)| *embedder == model)
+            .map(|(_, texts)| texts)
+            .sum()
+    }
+
+    /// Writes the project file, with `embedding_model` set to `model`.
+    fn choose_model(&self, model: &str) -> TestResult {
+        fs::write(
+            self.project.path().join("abyme/abyme.toml"),
+            format!("format = 1\nembedding_model = \"{model}\"\n"),
+        )?;
+        Ok(())
+    }
+
+    /// The directories of the project's index in the cache, one per model.
+    fn table_dirs(&self) -> TestResult<Vec<String>> {
+        let index = self.cache.path().join("abyme/index");
+        let project = fs::read_dir(&index)?
+            .next()
+            .ok_or("no project in the index")??
+            .path();
+        let mut names: Vec<String> = fs::read_dir(project)?
+            .map(|entry| entry.map(|entry| entry.file_name().to_string_lossy().into_owned()))
+            .collect::<Result<_, _>>()?;
+        names.retain(|name| name != "lock");
+        names.sort();
+        Ok(names)
     }
 
     fn cache_is_empty(&self) -> TestResult<bool> {
@@ -98,7 +154,7 @@ impl Setup {
 
 fn fake_loader(loads: Arc<FakeLoads>) -> Loader {
     Arc::new(move |spec: &'static ModelSpec, _cache: &UserCache| {
-        loads.calls.fetch_add(1, Ordering::SeqCst);
+        loads.loaded.lock().unwrap().push(spec.name);
         let failing = loads
             .failures_left
             .try_update(Ordering::SeqCst, Ordering::SeqCst, |left| {
@@ -109,7 +165,9 @@ fn fake_loader(loads: Arc<FakeLoads>) -> Loader {
             return Err(loads.failure.clone());
         }
         Ok(Box::new(WordsEmbedder {
+            model: spec.name,
             dimension: spec.dimension,
+            loads: Arc::clone(&loads),
         }) as Box<dyn Embedder + Send>)
     })
 }
@@ -388,6 +446,92 @@ async fn answers_queries_it_cannot_search_with_tool_errors_before_loading() -> T
     .await?;
 
     assert_eq!(longest.is_error, Some(false), "{longest:?}");
+    client.cancel().await?;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn prepares_and_searches_with_the_model_the_project_file_names() -> TestResult {
+    let setup = Setup::new(true, 0, "")?;
+    setup.choose_model(MULTILINGUAL)?;
+    let server = setup.server()?;
+
+    server.prefetch().await?;
+    let client = connect(server).await?;
+    create(&client, &[("Mailer", "sends newsletters")]).await?;
+    let found = call(&client, "search", json!({"query": "newsletters"})).await?;
+
+    assert!(text(&found).starts_with("mailer  "), "{found:?}");
+    assert_eq!(setup.loaded(), [MULTILINGUAL]);
+    assert_eq!(setup.embedded_by("bge-small-en-v1.5"), 0);
+    client.cancel().await?;
+    Ok(())
+}
+
+/// Each model keeps its own index: the second model embeds every element
+/// itself, and back on the first, only the query is embedded.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_changed_model_takes_effect_at_the_next_search_with_its_own_index() -> TestResult {
+    let setup = Setup::new(true, 0, "")?;
+    let client = connect(setup.server()?).await?;
+    create(
+        &client,
+        &[
+            ("Mailer", "sends newsletters"),
+            ("Payment Service", "charges cards"),
+            ("Inventory", "counts stock"),
+        ],
+    )
+    .await?;
+
+    call(&client, "search", json!({"query": "newsletters"})).await?;
+    setup.choose_model(MULTILINGUAL)?;
+    let changed = call(&client, "search", json!({"query": "newsletters"})).await?;
+
+    assert!(text(&changed).starts_with("mailer  "), "{changed:?}");
+    assert_eq!(setup.loaded(), ["bge-small-en-v1.5", MULTILINGUAL]);
+    assert_eq!(setup.embedded_by(MULTILINGUAL), 3 + 1);
+    let tables = setup.table_dirs()?;
+    assert_eq!(tables.len(), 2, "{tables:?}");
+    assert!(tables[0].starts_with("bge-small-en-v1.5-"), "{tables:?}");
+    assert!(
+        tables[1].starts_with("paraphrase-multilingual-minilm-l12-v2-"),
+        "{tables:?}"
+    );
+
+    let embedded_by_bge = setup.embedded_by("bge-small-en-v1.5");
+    setup.choose_model("bge-small-en-v1.5")?;
+    call(&client, "search", json!({"query": "newsletters"})).await?;
+
+    assert_eq!(
+        setup.loaded(),
+        ["bge-small-en-v1.5", MULTILINGUAL, "bge-small-en-v1.5"]
+    );
+    assert_eq!(setup.embedded_by("bge-small-en-v1.5"), embedded_by_bge + 1);
+    client.cancel().await?;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_unknown_model_fails_every_call_and_loads_nothing() -> TestResult {
+    let setup = Setup::new(true, 0, "")?;
+    setup.choose_model("../x")?;
+    let server = setup.server()?;
+
+    server.prefetch().await?;
+    let client = connect(server).await?;
+    let searched = call(&client, "search", json!({"query": "anything"})).await?;
+    let read = call(&client, "read_board", json!({"board": "main"})).await?;
+
+    for result in [searched, read] {
+        assert_eq!(result.is_error, Some(true), "{result:?}");
+        assert!(
+            text(&result).starts_with("abyme/abyme.toml: "),
+            "{result:?}"
+        );
+    }
+    assert_eq!(setup.loads(), 0);
+    assert!(setup.cache_is_empty()?);
     client.cancel().await?;
     Ok(())
 }

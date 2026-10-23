@@ -47,7 +47,7 @@ its own plan.
 - [x] Build the index in the user cache
 - [x] Download, verify, and load the model
 - [x] Serve `search` over MCP
-- [ ] Let each project choose its model
+- [x] Let each project choose its model
 
 ## Tasks
 
@@ -223,19 +223,19 @@ project names.
 
 Review path: Security-Hybrid
 
-- [ ] The project file is accepted without the key and with either
+- [x] The project file is accepted without the key and with either
       value. Another value makes every call fail with an error naming
       the project file. Tests cover each case.
-- [ ] `search` uses the project's model, and a change of the key
+- [x] `search` uses the project's model, and a change of the key
       during a session takes effect at the next `search`; tests with
       the fake loader show both.
-- [ ] The multilingual model's repository, revision, file names, and
+- [x] The multilingual model's repository, revision, file names, and
       hashes are checked against Hugging Face, and the handoff says
       how.
-- [ ] An ignored test with the real multilingual model finds an
+- [x] An ignored test with the real multilingual model finds an
       English element through a German query, and the handoff reports
       the run.
-- [ ] From `crates/abyme-mcp/README.md`, a user learns how a project
+- [x] From `crates/abyme-mcp/README.md`, a user learns how a project
       picks its model.
 
 ## Decisions

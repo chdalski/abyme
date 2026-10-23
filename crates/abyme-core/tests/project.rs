@@ -16,8 +16,8 @@ use std::thread;
 use std::time::Duration;
 
 use abyme_core::{
-    ApplyError, Created, EntryKind, Init, MAX_FILE_BYTES, MAX_PROJECT_FILE_BYTES, Operation,
-    Operations, Project, ProjectError, Snapshot, Write, apply,
+    ApplyError, Created, EmbeddingModel, EntryKind, Init, MAX_FILE_BYTES, MAX_PROJECT_FILE_BYTES,
+    Operation, Operations, Project, ProjectError, Snapshot, Write, apply,
 };
 use abyme_model::{BoardId, ElementId};
 use rstest::rstest;
@@ -178,11 +178,53 @@ fn without_a_project_every_call_asks_for_init_and_writes_nothing() {
 }
 
 #[rstest]
+#[case::without_a_model("format = 1\n", EmbeddingModel::BgeSmallEnV15)]
+#[case::english_model(
+    "format = 1\nembedding_model = \"bge-small-en-v1.5\"\n",
+    EmbeddingModel::BgeSmallEnV15
+)]
+#[case::multilingual_model(
+    "format = 1\nembedding_model = \"paraphrase-multilingual-minilm-l12-v2\"\n",
+    EmbeddingModel::ParaphraseMultilingualMiniLmL12V2
+)]
+fn reads_the_embedding_model_from_the_project_file(
+    #[case] content: &str,
+    #[case] expected: EmbeddingModel,
+) {
+    let (directory, _) = new_project().unwrap();
+    fs::write(directory.path().join("abyme/abyme.toml"), content).unwrap();
+
+    let project = Project::discover(directory.path()).unwrap();
+
+    assert_eq!(project.embedding_model(), expected);
+}
+
+#[test]
+fn init_chooses_the_default_model_without_writing_the_key() {
+    let (directory, project) = new_project().unwrap();
+
+    assert_eq!(project.embedding_model(), EmbeddingModel::BgeSmallEnV15);
+    assert_eq!(
+        fs::read_to_string(directory.path().join("abyme/abyme.toml")).unwrap(),
+        "format = 1\n"
+    );
+}
+
+#[rstest]
 #[case::not_toml("format = \n")]
 #[case::missing_format("")]
 #[case::unknown_format("format = 2\n")]
 #[case::format_as_text("format = \"1\"\n")]
 #[case::unknown_key("format = 1\ntype_packs = []\n")]
+#[case::unknown_model("format = 1\nembedding_model = \"gpt\"\n")]
+#[case::model_as_path("format = 1\nembedding_model = \"../x\"\n")]
+#[case::model_in_capitals("format = 1\nembedding_model = \"BGE-SMALL-EN-V1.5\"\n")]
+#[case::model_with_a_trailing_space("format = 1\nembedding_model = \"bge-small-en-v1.5 \"\n")]
+#[case::empty_model("format = 1\nembedding_model = \"\"\n")]
+#[case::model_as_number("format = 1\nembedding_model = 1\n")]
+#[case::model_as_table("format = 1\nembedding_model = { name = \"bge-small-en-v1.5\" }\n")]
+#[case::model_as_array("format = 1\nembedding_model = [\"bge-small-en-v1.5\"]\n")]
+#[case::model_in_a_subtable("format = 1\n[x]\nembedding_model = \"bge-small-en-v1.5\"\n")]
 fn rejects_an_invalid_project_file_in_every_call(#[case] content: &str) {
     let (directory, _) = new_project().unwrap();
     let project_file = directory.path().join("abyme").join("abyme.toml");
@@ -202,6 +244,29 @@ fn rejects_an_invalid_project_file_in_every_call(#[case] content: &str) {
         );
     }
     assert_eq!(fs::read_to_string(&project_file).unwrap(), content);
+}
+
+#[rstest]
+#[case::control_characters(
+    "format = 1\nembedding_model = \"a\\nb\\u001b[31m\"\n",
+    "a\\nb\\u{1b}[31m"
+)]
+#[case::long_value(&format!("format = 1\nembedding_model = \"{}\"\n", "x".repeat(300)), "…")]
+fn shows_a_rejected_model_name_escaped_and_shortened(
+    #[case] content: &str,
+    #[case] expected: &str,
+) {
+    let (directory, _) = new_project().unwrap();
+    fs::write(directory.path().join("abyme/abyme.toml"), content).unwrap();
+
+    let message = Project::discover(directory.path()).unwrap_err().to_string();
+
+    assert!(message.starts_with("abyme/abyme.toml: "), "{message}");
+    assert!(message.contains(expected), "{message}");
+    assert!(
+        !message.contains('\n') && !message.contains('\u{1b}'),
+        "{message}"
+    );
 }
 
 #[test]
