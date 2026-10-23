@@ -8,7 +8,11 @@ use tauri_build::{AppManifest, Attributes};
 
 fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     tauri_build::try_build(
-        Attributes::new().app_manifest(AppManifest::new().commands(&["list_boards", "open_board"])),
+        Attributes::new().app_manifest(AppManifest::new().commands(&[
+            "list_boards",
+            "open_board",
+            "apply",
+        ])),
     )?;
     Ok(())
 }

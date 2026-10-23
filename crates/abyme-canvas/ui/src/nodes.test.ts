@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { BoardView } from "./bindings";
-import { toNodes } from "./nodes";
+import { finishedMoves, keepUiState, returnHome, toNodes } from "./nodes";
 
 const VIEW: BoardView = {
   id: "context",
@@ -53,17 +53,21 @@ describe("toNodes", () => {
     ]);
   });
 
-  it("makes boxes that can neither be dragged nor connected", () => {
+  it("makes boxes that can be dragged but not connected", () => {
     expect(
       toNodes(VIEW).every(
-        (node) => node.draggable === false && node.connectable === false,
+        (node) => node.draggable === true && node.connectable === false,
       ),
     ).toBe(true);
   });
 
   it("hands the projection's content to the box", () => {
     expect(toNodes(VIEW).map((node) => node.data)).toEqual([
-      { element: "orders", shown: { kind: "missing" } },
+      {
+        element: "orders",
+        shown: { kind: "missing" },
+        home: { x: -20, y: 300 },
+      },
       {
         element: "payments",
         shown: {
@@ -72,7 +76,83 @@ describe("toNodes", () => {
           name: "Payments",
           summary: null,
         },
+        home: { x: 40, y: 80 },
       },
     ]);
+  });
+});
+
+describe("keepUiState", () => {
+  it("leaves a dragged box where the drag holds it and takes the rest from the board file", () => {
+    const current = toNodes(VIEW).map((node) =>
+      node.id === "payments"
+        ? { ...node, position: { x: 1, y: 2 }, dragging: true }
+        : { ...node, position: { x: 3, y: 4 } },
+    );
+
+    const kept = keepUiState(toNodes(VIEW), current);
+
+    expect(kept.map((node) => [node.id, node.position, node.dragging])).toEqual(
+      [
+        ["orders", { x: -20, y: 300 }, undefined],
+        ["payments", { x: 1, y: 2 }, true],
+      ],
+    );
+  });
+
+  it("keeps a selected box selected, at its position from the board file", () => {
+    const current = toNodes(VIEW).map((node) =>
+      node.id === "orders"
+        ? { ...node, position: { x: 3, y: 4 }, selected: true }
+        : node,
+    );
+
+    const kept = keepUiState(toNodes(VIEW), current);
+
+    expect(kept.map((node) => [node.id, node.position, node.selected])).toEqual(
+      [
+        ["orders", { x: -20, y: 300 }, true],
+        ["payments", { x: 40, y: 80 }, undefined],
+      ],
+    );
+  });
+});
+
+describe("returnHome", () => {
+  it("puts the named boxes back at their positions in the board file", () => {
+    const moved = toNodes(VIEW).map((node) => ({
+      ...node,
+      position: { x: 9, y: 9 },
+    }));
+
+    const returned = returnHome(moved, ["payments"]);
+
+    expect(returned.map((node) => [node.id, node.position])).toEqual([
+      ["orders", { x: 9, y: 9 }],
+      ["payments", { x: 40, y: 80 }],
+    ]);
+  });
+});
+
+describe("finishedMoves", () => {
+  it("takes the position changes that end a move, and nothing else", () => {
+    expect(
+      finishedMoves([
+        {
+          type: "position",
+          id: "payments",
+          position: { x: 1, y: 2 },
+          dragging: true,
+        },
+        {
+          type: "position",
+          id: "orders",
+          position: { x: 3, y: 4 },
+          dragging: false,
+        },
+        { type: "select", id: "payments", selected: true },
+        { type: "position", id: "payments", dragging: false },
+      ]),
+    ).toEqual([{ element: "orders", position: { x: 3, y: 4 } }]);
   });
 });

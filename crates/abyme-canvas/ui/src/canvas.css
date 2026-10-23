@@ -73,3 +73,10 @@ nav button[aria-current="page"] {
   border-style: dashed;
   color: #8a5a00;
 }
+
+/* React Flow marks a selected box with the class `selected` on its node;
+   its own styles cover only its built-in node types. */
+.react-flow__node.selected .element {
+  border-color: #2f6fdb;
+  box-shadow: 0 0 0 3px #b9cff5;
+}

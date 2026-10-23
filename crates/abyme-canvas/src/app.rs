@@ -1,5 +1,6 @@
 //! The canvas's side of the IPC boundary: its commands, its one event, its
-//! window, and the watcher that raises the event.
+//! window, and the watcher that raises the event. The one command that
+//! writes, `apply`, passes a request on only when `admission` admits it.
 //!
 //! No command takes a path: every command works on the project that the
 //! directory the canvas started in lies in, found anew by the core on each
@@ -8,11 +9,12 @@
 use std::error::Error;
 use std::path::{Path, PathBuf};
 
-use abyme_core::{Project, Snapshot};
+use abyme_core::{Operations, Project, Snapshot};
 use abyme_model::BoardId;
 use tauri::webview::NewWindowResponse;
 use tauri::{App, Builder, Emitter as _, Manager as _, Runtime, State, WebviewWindowBuilder};
 
+use crate::admission::admit;
 use crate::boards::{BoardEntry, board_list};
 use crate::projection::{BoardView, project};
 use crate::{pages, watcher};
@@ -33,7 +35,7 @@ struct Start(PathBuf);
 pub fn configure<R: Runtime>(builder: Builder<R>, start: PathBuf) -> Builder<R> {
     builder
         .manage(Start(start))
-        .invoke_handler(tauri::generate_handler![list_boards, open_board])
+        .invoke_handler(tauri::generate_handler![list_boards, open_board, apply])
         .setup(|app| {
             open_window(app)?;
             watch_project(app);
@@ -98,6 +100,24 @@ async fn list_boards(start: State<'_, Start>) -> Result<Vec<BoardEntry>, String>
 async fn open_board(start: State<'_, Start>, board: BoardId) -> Result<BoardView, String> {
     let start = start.0.clone();
     on_core(move || project(&snapshot(&start)?, &board).map_err(|error| error.to_string())).await
+}
+
+/// Applies `operations` to the project, all or none, once the canvas may
+/// send every one of them; the check comes before any access to the
+/// project.
+#[tauri::command]
+async fn apply(start: State<'_, Start>, operations: Operations) -> Result<(), String> {
+    let operations = operations.into_vec();
+    admit(&operations).map_err(|refused| refused.to_string())?;
+    let start = start.0.clone();
+    on_core(move || {
+        let project = Project::discover(&start).map_err(|error| error.to_string())?;
+        project
+            .apply(&operations)
+            .map(|_created| ())
+            .map_err(|error| error.to_string())
+    })
+    .await
 }
 
 /// Runs work of the synchronous core on a blocking thread.

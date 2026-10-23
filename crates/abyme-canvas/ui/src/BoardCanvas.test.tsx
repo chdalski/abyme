@@ -38,7 +38,11 @@ describe("BoardCanvas", () => {
 
     const { container } = render(
       <div style={{ width: 800, height: 600 }}>
-        <BoardCanvas view={view} />
+        <BoardCanvas
+          view={view}
+          move={() => Promise.resolve()}
+          onMoveFailed={() => {}}
+        />
       </div>,
     );
 

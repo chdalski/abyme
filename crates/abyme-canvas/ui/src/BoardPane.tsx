@@ -1,9 +1,11 @@
-import { useCallback } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { BoardCanvas } from "./BoardCanvas";
-import { type BoardState, loadBoard } from "./boards";
+import { type BoardState, inOrder, loadBoard } from "./boards";
 import type { AbymeClient } from "./client";
 import { useLive } from "./live";
+import { toMove } from "./moves";
+import type { Move } from "./nodes";
 
 /**
  * The open board: its title and boxes, or the core's message in their place.
@@ -19,6 +21,27 @@ export function BoardPane({
 }) {
   const load = useCallback(() => loadBoard(client, board), [client, board]);
   const state = useLive<BoardState>(client, load, { kind: "loading" });
+  const [moveFailure, setMoveFailure] = useState<string | null>(null);
+  // Moves reach the core in the order the user made them, so that the
+  // board file ends at the last one, however fast the arrow keys repeat.
+  const send = useMemo(
+    () =>
+      inOrder((moves: Move[]) =>
+        client.apply(
+          moves.map(({ element, position }) =>
+            toMove(board, element, position),
+          ),
+        ),
+      ),
+    [client, board],
+  );
+  const move = useCallback(
+    async (moves: Move[]) => {
+      await send(moves);
+      setMoveFailure(null);
+    },
+    [send],
+  );
 
   switch (state.kind) {
     case "loading":
@@ -29,8 +52,13 @@ export function BoardPane({
       return (
         <>
           <h2>{state.view.title}</h2>
+          {moveFailure !== null && <p role="alert">{moveFailure}</p>}
           <div className="flow">
-            <BoardCanvas view={state.view} />
+            <BoardCanvas
+              view={state.view}
+              move={move}
+              onMoveFailed={setMoveFailure}
+            />
           </div>
         </>
       );

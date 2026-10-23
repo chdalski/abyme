@@ -53,7 +53,7 @@ features depend on it.
 - [x] Provide the canvas toolchain in the devcontainer
 - [x] List the project's boards in the canvas, live
 - [x] Show a board's elements in the canvas, live
-- [ ] Move an element by dragging it
+- [x] Move an element by dragging it
 
 ## Tasks
 
@@ -229,25 +229,25 @@ and the Rust side admits only the operations the canvas may send: today
 
 Review path: Security-Hybrid
 
-- [ ] Releasing a dragged element sends one request with one
+- [x] Releasing a dragged element sends one request with one
       `move_element` at integer coordinates, and the board file holds the
       new position afterwards. A Vitest test shows the translation, and a
       Rust test shows the command from the request to the board file.
-- [ ] When a move fails, the box returns to the position in the board
+- [x] When a move fails, the box returns to the position in the board
       file, and the UI shows the error; a Vitest test shows it.
-- [ ] Every operation that the canvas may not send is refused before any
+- [x] Every operation that the canvas may not send is refused before any
       access to the project, and a request with any refused operation
       writes nothing. Tests cover each kind of operation and a request
       that mixes admitted and refused ones.
-- [ ] A refusal names the operation's position and kind and nothing of
+- [x] A refusal names the operation's position and kind and nothing of
       its content.
-- [ ] The UI's typed client accepts only the operations that the Rust
+- [x] The UI's typed client accepts only the operations that the Rust
       side admits.
-- [ ] A reload that arrives during a drag does not move the dragged
+- [x] A reload that arrives during a drag does not move the dragged
       element back; a Vitest test shows it.
-- [ ] Every npm and crate dependency the task adds is pinned exactly and
+- [x] Every npm and crate dependency the task adds is pinned exactly and
       MIT-compatible, and the handoff lists their licenses.
-- [ ] From `docs/5 Architecture/Canvas.md`, a reader learns which IPC
+- [x] From `docs/5 Architecture/Canvas.md`, a reader learns which IPC
       commands the canvas has, which writes the Rust side admits and how
       that set grows, and what the webview can reach.
 
@@ -308,6 +308,15 @@ Review path: Security-Hybrid
 - **The user rebuilds the image at their own pace,** outside any task
   gate; the review compares the Dockerfile with the commands that ran in
   the container.
+- **The page freezes `Object.prototype` itself,** in `ui/src/main.tsx`
+  once its modules have loaded, not through Tauri's `freezePrototype`:
+  d3-color, which React Flow loads, sets `constructor` on its own
+  prototypes while it loads, and a prototype frozen before that leaves
+  the window blank. Repository data arrives only after the first render.
+  Rejected (the user's choice):
+  - no freeze, because it drops a defense against prototype pollution;
+  - a patch of d3-color, because it must be maintained and the next
+    library with the same pattern breaks the window again.
 - **Boxes have the sizes in the board file;** text measurement comes
   with the MVP.
 - **No end-to-end tests in a webview:** Rust tests for the commands and

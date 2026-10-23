@@ -11,7 +11,10 @@ export function ElementBox({ data }: NodeProps<ElementNode>) {
  * What a box shows: the element's type, name, and summary, or a note that
  * its file is missing. Text from the repository is rendered as text only.
  */
-export function ElementContent({ element, shown }: ElementData) {
+export function ElementContent({
+  element,
+  shown,
+}: Pick<ElementData, "element" | "shown">) {
   switch (shown.kind) {
     case "element":
       return (

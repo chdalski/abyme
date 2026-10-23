@@ -4,6 +4,19 @@ import { listen } from "@tauri-apps/api/event";
 import type { BoardEntry, BoardView } from "./bindings";
 
 /**
+ * An operation the canvas may send: the operations `src/admission.rs`
+ * admits, typed by hand. Today that is moving an element that exists on a
+ * board that exists, to integer coordinates.
+ */
+export type AdmittedOperation = {
+  op: "move_element";
+  element: { existing: string };
+  board: { existing: string };
+  x: number;
+  y: number;
+};
+
+/**
  * What the UI asks of the canvas's Rust side. The UI reaches it only through
  * this interface, so tests give the UI a fake one.
  */
@@ -12,6 +25,11 @@ export interface AbymeClient {
   listBoards(): Promise<BoardEntry[]>;
   /** What the board `board` shows; rejects with the core's message. */
   openBoard(board: string): Promise<BoardView>;
+  /**
+   * Applies `operations` to the project, all or none; rejects with the
+   * canvas's or the core's message.
+   */
+  apply(operations: AdmittedOperation[]): Promise<void>;
   /**
    * Calls `onChange` whenever the project's files change; resolves to a
    * function that stops listening.
@@ -23,5 +41,8 @@ export interface AbymeClient {
 export const tauriClient: AbymeClient = {
   listBoards: () => invoke<BoardEntry[]>("list_boards"),
   openBoard: (board) => invoke<BoardView>("open_board", { board }),
+  apply: async (operations) => {
+    await invoke("apply", { operations });
+  },
   onProjectChanged: (onChange) => listen("project-changed", () => onChange()),
 };

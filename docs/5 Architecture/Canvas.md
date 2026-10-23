@@ -31,11 +31,23 @@ Rejected:
 ## Structure
 
 - `crates/abyme-canvas` is the Tauri app. Its Rust side uses `abyme-core` directly, through the [[Hexagonal Architecture#Core API|core API]].
-  - `src/app.rs` holds the IPC commands, the event, and the window; `src/boards.rs` and `src/projection.rs` the data the UI receives; `src/watcher.rs` the file watcher; and `src/pages.rs` the pages the window may show.
+  - `src/app.rs` holds the IPC commands, the event, and the window; `src/boards.rs` and `src/projection.rs` the data the UI receives; `src/admission.rs` the writes the canvas may send; `src/watcher.rs` the file watcher; and `src/pages.rs` the pages the window may show.
   - `tauri.conf.json` and `capabilities/default.json` decide what the webview may reach. `build.rs` lists the canvas's own commands, so that Tauri checks them against the capabilities as well.
 - The web UI lies next to it, in `crates/abyme-canvas/ui/`: React, built and served by Vite and tested with Vitest. It talks to the Rust side only through an interface, `AbymeClient` (`ui/src/client.ts`), which runs over Tauri's IPC; tests give the UI a fake one.
 - The TypeScript types are generated from the Rust types with ts-rs into `ui/src/bindings.ts`. That way the format is defined only once, in `abyme-model`. A Rust test compares the committed file with the Rust types and fails when it is stale. The few IPC commands are typed by hand in `AbymeClient`.
 - Layout and text measurement stay in Rust. The AI places things without a canvas too, so layout must work without a screen.
+
+## Commands
+
+The webview reaches the Rust side through three IPC commands and the event `project-changed`:
+
+| Command | Takes | Does |
+|---|---|---|
+| `list_boards` | nothing | returns the project's boards, each with its ID and title |
+| `open_board` | a board ID | returns the board's projection (see [[#Projecting a Board]]) |
+| `apply` | operations in the format of [[Data Model#Operations]] | applies them to the project through the core, all or none |
+
+`apply` is the only command that writes. It passes a request on only when every operation in it is admitted, and it checks that before it touches the project. Today it admits one kind: `move_element` of an existing element on an existing board. The canvas sends it whenever the user finishes moving boxes: releasing a drag of one box or of several, which go in one request, or pressing an arrow key. Boxes cannot be deleted on the canvas. Every other operation, and a request with more operations than the core takes, is refused with the operation's position and kind and nothing of its content. The set of admitted operations grows one reviewed change to `src/admission.rs` at a time. That module matches every kind of operation by name, so a new operation in the core does not build until the canvas admits or refuses it. The UI's `AbymeClient` types `apply` with the admitted operations only.
 
 ## Live Updates
 
@@ -46,9 +58,9 @@ The Rust side watches the project's files itself: `abyme/`, `abyme/elements/`, a
 ## Security
 
 - **No raw HTML:** The canvas shows names, summaries, descriptions, and notes as text and renders no raw HTML from them. ESLint rejects the ways to write HTML into the page.
-- **Only Abyme's own commands:** The webview reaches the Rust side only through Abyme's own IPC commands and listening to events, not through plugins for files or the shell. The capability grants exactly these; a page from another origin reaches none of them.
+- **Only Abyme's own commands:** The webview reaches the Rust side only through the commands in [[#Commands]] and listening to events, not through plugins for files or the shell. The capability grants exactly these; a page from another origin reaches none of them. What the webview can write is limited to the operations `apply` admits.
 - **Only its own pages:** The window navigates only to the canvas's own origin, and to the dev server's while it is developed; it opens no other window.
-- **Only its own scripts:** The page's content security policy, in `ui/index.html`, lets it run only its own scripts. During development, Vite's dev server also sends the policy as a header, so that it covers the scripts Vite puts into the page.
+- **Only its own scripts:** The page's content security policy, in `ui/index.html`, lets it run only its own scripts. During development, Vite's dev server also sends the policy as a header, so that it covers the scripts Vite puts into the page. Once the page's modules have loaded, it freezes `Object.prototype`.
 - **No widened watch:** The watcher follows no symbolic link and watches no directory recursively, so a link in a cloned repository does not make it walk other directories.
 
 The core's part is in [[Hexagonal Architecture#Security Baseline]].
