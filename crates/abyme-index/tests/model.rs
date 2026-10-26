@@ -1,6 +1,6 @@
 //! The real model, downloaded from Hugging Face into a temporary cache and
 //! loaded. Ignored by default because it needs the network; run it with
-//! `cargo test -p abyme-index --test model -- --ignored`.
+//! `cargo test --workspace --test model -- --ignored`.
 
 use std::collections::BTreeSet;
 use std::error::Error;

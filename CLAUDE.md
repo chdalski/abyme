@@ -64,6 +64,7 @@ keywords.
 - License MIT: every dependency must be MIT-compatible.
 - `cargo deny --locked check` checks the Rust dependencies against `deny.toml`, from the repository root: RustSec advisories (it fetches the advisory database on each run, so it needs network), licenses, sources, and banned crates and features. A finding names its check, crate, and advisory; entries in `deny.toml` that let a dependency pass are added only when the user decides.
 - `.devcontainer/` provides the toolchains: Rust (linked with mold), protoc with the protobuf well-known types for LanceDB's build, WebKitGTK and the Tauri CLI (`cargo tauri`) for the canvas, cargo-deny for the dependency check, Node with pnpm, uv, and Go.
+- Bash tool calls run in zsh (`/usr/bin/zsh`), although the session's environment names fish, the devcontainer's login shell (`ENV SHELL` in `.devcontainer/Dockerfile`): write POSIX shell syntax, such as `S=dir`, never fish's `set S dir`.
 
 ## References
 

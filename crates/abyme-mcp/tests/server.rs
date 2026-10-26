@@ -3,7 +3,7 @@
 //!
 //! The server runs without `HOME`, `XDG_CACHE_HOME`, and proxy settings, so
 //! no test touches the user's cache or the network unless it sets them; only
-//! the ignored test downloads the model.
+//! the ignored tests download their models.
 
 use std::collections::BTreeMap;
 use std::error::Error;

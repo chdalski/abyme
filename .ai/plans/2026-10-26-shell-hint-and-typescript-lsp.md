@@ -1,5 +1,5 @@
 **Repository:** root
-**Status:** NotStarted
+**Status:** InProgress
 **Created:** 2026-10-26
 
 ## Goal
@@ -17,7 +17,7 @@ and the TypeScript language server fails to start, so agents cannot use
 
 ## Steps
 
-- [ ] Correct the agent hints in `CLAUDE.md` and the two test comments
+- [x] Correct the agent hints in `CLAUDE.md` and the two test comments
 - [ ] Install a TypeScript with `tsserver` for the language server
 
 ## Tasks
@@ -30,17 +30,17 @@ ignored tests wrongly; this task corrects all three.
 
 Review path: Reviewer-only
 
-- [ ] A Conventions line in the root `CLAUDE.md`, directly after the
+- [x] A Conventions line in the root `CLAUDE.md`, directly after the
       `.devcontainer/` line, tells agents that Bash tool calls run in
       zsh although `SHELL` and the session's environment name fish, and
       to write POSIX shell syntax, with fish's `set S dir` against
       `S=dir` as the example.
-- [ ] The doc comment of `crates/abyme-index/tests/model.rs` gives
+- [x] The doc comment of `crates/abyme-index/tests/model.rs` gives
       `cargo test --workspace --test model -- --ignored` as the command
       for its ignored test.
-- [ ] The doc comment of `crates/abyme-mcp/tests/server.rs` states that
+- [x] The doc comment of `crates/abyme-mcp/tests/server.rs` states that
       the ignored tests, both of them, download their models.
-- [ ] `cargo fmt --all --check` and `cargo clippy --workspace
+- [x] `cargo fmt --all --check` and `cargo clippy --workspace
       --all-targets` pass.
 
 ### Task 2: Install a TypeScript with tsserver for the language server
