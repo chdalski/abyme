@@ -51,8 +51,8 @@ const INSTRUCTIONS: &str = "Abyme keeps project knowledge on boards stored in th
     Call search with a query to find elements by the words they contain or by what they are \
     about, read_board with a board ID to read the board as an outline, read_element with an \
     element ID to read one element in detail with its relations and description, and apply \
-    to create boards and elements, change elements, place elements on boards, move them, and \
-    create and delete relations between elements.";
+    to create, change, and delete elements, create boards, place elements on boards, move them, \
+    and create and delete relations between elements.";
 
 /// The arguments of `apply`.
 #[derive(Deserialize, schemars::JsonSchema)]
@@ -140,6 +140,9 @@ impl AbymeServer {
             update_element takes element and any of name, type_ref, summary (null removes it), and body, \
             and changes only the fields it names; the ID stays. Text is stored exactly as sent: send only \
             the fields you change, since the escapes read_board and read_element show are not decoded; \
+            delete_element takes element and removes its file, its placement on every board, and its own \
+            relations, and is refused while other elements still relate to it (delete those relations \
+            first); it also clears the placements of an element whose file is missing; \
             create_relation takes from, kind, to, and optionally a label, and adds a relation from one \
             element to another; delete_relation takes from, kind, and to, and removes that relation, also \
             when the target is gone. A kind is one of concerns, depends_on, describes (from a document to \

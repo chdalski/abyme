@@ -113,6 +113,13 @@ pub enum Operation {
         #[cfg_attr(feature = "json-schema", schemars(with = "String"))]
         body: Option<String>,
     },
+    /// Deletes an element: its file, its placement on every board, and its
+    /// own relations. It is rejected while other elements still relate to it.
+    DeleteElement {
+        /// The element to delete; also an ID that a board places although
+        /// its file is missing.
+        element: Ref<ElementId>,
+    },
     /// Adds a relation from one element to another.
     CreateRelation {
         /// The element the relation goes out from.
@@ -362,6 +369,18 @@ mod tests {
     }
 
     #[test]
+    fn reads_a_deletion() {
+        let json = r#"[{"op": "delete_element", "element": {"existing": "orders-db"}}]"#;
+
+        assert_eq!(
+            read(json).unwrap(),
+            vec![Operation::DeleteElement {
+                element: Ref::Existing("orders-db".parse().unwrap()),
+            }]
+        );
+    }
+
+    #[test]
     fn reads_an_update_of_every_field() {
         let json = r#"[{"op": "update_element", "element": {"new": "pay"}, "name": "Payments",
             "type_ref": "c4/component", "summary": "S", "body": "B"}]"#;
@@ -466,6 +485,13 @@ mod tests {
     )]
     #[case::update_without_an_element(r#"[{"op": "update_element", "name": "x"}]"#)]
     #[case::update_as_array(r#"[["update_element", {"existing": "a"}, "x"]]"#)]
+    #[case::deletion_with_a_cascade(
+        r#"[{"op": "delete_element", "element": {"existing": "a"}, "cascade": true}]"#
+    )]
+    #[case::deletion_without_an_element(r#"[{"op": "delete_element"}]"#)]
+    #[case::deletion_of_an_invalid_id(
+        r#"[{"op": "delete_element", "element": {"existing": "../x"}}]"#
+    )]
     #[case::update_of_an_invalid_id(
         r#"[{"op": "update_element", "element": {"existing": "../x"}, "name": "x"}]"#
     )]
@@ -558,7 +584,7 @@ mod tests {
             .flatten()
             .filter(|variant| variant.pointer("/type") == Some(&serde_json::json!("object")))
             .collect();
-        assert_eq!(variants.len(), 7 + 2 + 2, "{schema}");
+        assert_eq!(variants.len(), 8 + 2 + 2, "{schema}");
         for variant in variants {
             assert_eq!(
                 variant.pointer("/additionalProperties"),

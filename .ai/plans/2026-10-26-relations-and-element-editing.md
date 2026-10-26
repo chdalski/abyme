@@ -43,7 +43,7 @@ through a new tool `read_element`.
 - [x] Relations in the board outline
 - [x] The tool `read_element`
 - [x] `update_element`
-- [ ] `delete_element`
+- [x] `delete_element`
 
 ## Tasks
 
@@ -216,33 +216,33 @@ beforehand that Board Graph asks for.
 
 Review path: Security-Hybrid
 
-- [ ] `delete_element` removes the element's file and its placement on
+- [x] `delete_element` removes the element's file and its placement on
       every board that places it. It also takes a placed element whose
       file is missing and removes its placements.
-- [ ] It rejects an element that other elements still relate to, as the
+- [x] It rejects an element that other elements still relate to, as the
       request stands at that operation: relations that an earlier
       operation of the request deleted, or whose source it deleted, no
       longer count. The error names the ID and relation kind of each
       remaining source, never a label.
-- [ ] It accepts an element created earlier in the same request; that
+- [x] It accepts an element created earlier in the same request; that
       element's file is then never written.
-- [ ] Later operations of the same request cannot refer to a deleted
+- [x] Later operations of the same request cannot refer to a deleted
       element, and an element created later in the request does not get
       its ID.
-- [ ] The files are written in this order: new element files, changed
+- [x] The files are written in this order: new element files, changed
       element files, boards, removals. So no board ever places an element
       whose file was removed, even if writing stops partway. Removing a
       file that is already gone counts as removed.
-- [ ] The canvas refuses the operation.
-- [ ] The properties of `apply` state that a placement disappears only
+- [x] The canvas refuses the operation.
+- [x] The properties of `apply` state that a placement disappears only
       through `delete_element`.
-- [ ] An MCP test deletes an element through `apply`, and `read_board`
+- [x] An MCP test deletes an element through `apply`, and `read_board`
       no longer shows it. A second test is refused while a relation
       points to the element.
-- [ ] Data Model, Storage in Git ("Writing"), Board Graph ("Deleting"),
+- [x] Data Model, Storage in Git ("Writing"), Board Graph ("Deleting"),
       the `apply` tool's description, and the README's Tools section
       describe deletion as delivered.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace
+- [x] `cargo test --workspace`, `cargo clippy --workspace
       --all-targets`, and `cargo fmt --all --check` pass.
 
 ## Decisions

@@ -432,6 +432,11 @@ fn apply_writes_what_the_pure_apply_decided() {
                 assert_eq!(fs::read_to_string(path).unwrap(), board.to_json());
                 after.boards.insert(board.id.clone(), board.clone());
             }
+            Write::RemoveElement(id) => {
+                let path = directory.path().join(format!("abyme/elements/{id}.md"));
+                assert!(!path.exists(), "{id} not removed");
+                after.elements.remove(id);
+            }
         }
     }
     assert_eq!(project.snapshot().unwrap(), after);
@@ -538,6 +543,99 @@ fn an_update_that_takes_an_element_file_past_the_limit_changes_no_file() {
         "{error:?}"
     );
     assert_eq!(tree(directory.path()).unwrap(), before);
+}
+
+#[test]
+fn deleting_an_element_removes_its_file_and_its_placement() {
+    let (directory, project) = new_project().unwrap();
+    project.apply(&board_with_element().unwrap()).unwrap();
+    let request =
+        operations(r#"[{"op": "delete_element", "element": {"existing": "payment-service"}}]"#)
+            .unwrap();
+
+    project.apply(&request).unwrap();
+
+    assert!(
+        !directory
+            .path()
+            .join("abyme/elements/payment-service.md")
+            .exists()
+    );
+    let snapshot = project.snapshot().unwrap();
+    assert!(snapshot.elements.is_empty());
+    let main: BoardId = "main".parse().unwrap();
+    assert!(snapshot.boards.get(&main).unwrap().placements.is_empty());
+}
+
+#[test]
+fn deleting_an_unplaced_element_only_removes_its_file() {
+    let (directory, project) = new_project().unwrap();
+    project.apply(&board_with_element().unwrap()).unwrap();
+    project
+        .apply(
+            &operations(
+                r#"[{"op": "create_element", "key": "e", "type_ref": "t", "name": "Loose"}]"#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+    let board_before = fs::read(directory.path().join("abyme/boards/main.board.json")).unwrap();
+
+    project
+        .apply(
+            &operations(r#"[{"op": "delete_element", "element": {"existing": "loose"}}]"#).unwrap(),
+        )
+        .unwrap();
+
+    assert!(!directory.path().join("abyme/elements/loose.md").exists());
+    assert_eq!(
+        fs::read(directory.path().join("abyme/boards/main.board.json")).unwrap(),
+        board_before
+    );
+}
+
+#[rstest]
+#[case::link(true)]
+#[case::directory(false)]
+fn deleting_a_placed_id_whose_path_holds_no_file_touches_nothing_there(#[case] link: bool) {
+    let (directory, project) = new_project().unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    let target = outside.path().join("kept.md");
+    fs::write(&target, element_text("x")).unwrap();
+    let path = directory.path().join("abyme/elements/x.md");
+    fs::create_dir_all(directory.path().join("abyme/elements")).unwrap();
+    if link {
+        symlink(&target, &path).unwrap();
+    } else {
+        fs::create_dir(&path).unwrap();
+    }
+    write(
+        &directory.path().join("abyme/boards/main.board.json"),
+        r#"{"format": 1, "id": "main", "title": "Main", "placements": [
+            {"element": "x", "x": 0, "y": 0, "width": 180, "height": 90}
+        ]}"#,
+    )
+    .unwrap();
+
+    project
+        .apply(&operations(r#"[{"op": "delete_element", "element": {"existing": "x"}}]"#).unwrap())
+        .unwrap();
+
+    let metadata = fs::symlink_metadata(&path).unwrap();
+    assert_eq!(metadata.file_type().is_symlink(), link);
+    assert_eq!(metadata.file_type().is_dir(), !link);
+    assert_eq!(fs::read_to_string(&target).unwrap(), element_text("x"));
+    let main: BoardId = "main".parse().unwrap();
+    assert!(
+        project
+            .snapshot()
+            .unwrap()
+            .boards
+            .get(&main)
+            .unwrap()
+            .placements
+            .is_empty()
+    );
 }
 
 #[test]

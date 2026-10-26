@@ -74,7 +74,8 @@ In [[Hexagonal Architecture#Runtime|stage A]], the canvas and the MCP server wri
 
 - **Under a lock:** Every [[Data Model#Operations|operation]] is applied to the current files while the writer holds an advisory lock on `.abyme/lock`. A change therefore never overwrites one it has not seen.
 - **Atomically:** Every file is written to a temporary file in `.abyme/tmp/` and then renamed, so a file watcher never sees a half-written file. Before it writes, a writer removes the files that a crashed writer left there; it holds the lock, so no other writer's file is among them.
-- **In order:** New element files come first, then changed ones, then each new or changed board, so a board never places an element whose file is missing. A write that fails between two renames can leave an element without a home, which the [[Data Model#Rules|data model]] allows, or a relation between two new elements whose target is not written yet, which reading accepts.
+- **In order:** New element files come first, then changed ones, then each new or changed board, and last the removals of deleted elements' files, so a board never places an element whose file is missing. A write that fails between two renames can leave an element without a home, which the [[Data Model#Rules|data model]] allows, or a relation between two new elements whose target is not written yet, which reading accepts.
+- **Removing:** A deleted element's file is removed with the path of its ID only, and only when it was a regular file before the request; the removal never follows a symbolic link and never removes a directory. A file that is already gone counts as removed.
 - **No model in memory:** The MCP server reads the files on every call. The canvas holds only the board it shows and reloads it on file-watcher events, its own writes included.
 - **Outside the lock:** An editor or `git checkout` does not take the lock. The file watchers pick up such changes as well.
 

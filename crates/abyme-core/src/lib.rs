@@ -20,7 +20,8 @@ mod project;
 mod slug;
 
 pub use apply::{
-    Applied, ApplyError, Created, Kind, MAX_OPERATIONS, OperationProblem, Snapshot, Write, apply,
+    Applied, ApplyError, Created, Kind, MAX_OPERATIONS, MAX_SHOWN_SOURCES, OperationProblem,
+    RelationSources, Snapshot, Write, apply,
 };
 pub use operation::{
     LocalKey, LocalKeyError, MAX_COORDINATE, MAX_KEY_LEN, Operation, Operations, Ref,

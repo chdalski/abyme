@@ -644,6 +644,69 @@ async fn a_rejected_update_is_a_tool_error_and_changes_no_file() -> TestResult {
 }
 
 #[tokio::test]
+async fn apply_deletes_an_element_and_read_board_no_longer_shows_it() -> TestResult {
+    let directory = project()?;
+    let session = start(directory.path()).await?;
+    call(&session, "apply", create_board_with_element()).await??;
+
+    let deleted = call(
+        &session,
+        "apply",
+        json!({"operations": [{"op": "delete_element", "element": {"existing": "payment-service"}}]}),
+    )
+    .await??;
+    assert_eq!(deleted.is_error, Some(false), "{deleted:?}");
+
+    let read = call(&session, "read_board", json!({"board": "container-level"})).await??;
+    assert_eq!(text(&read), "Board: container-level · Container Level\n\n");
+    assert!(
+        !directory
+            .path()
+            .join("abyme/elements/payment-service.md")
+            .exists()
+    );
+
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+#[tokio::test]
+async fn apply_refuses_to_delete_an_element_that_others_relate_to() -> TestResult {
+    let directory = project()?;
+    let session = start(directory.path()).await?;
+    call(&session, "apply", create_board_with_element()).await??;
+    call(
+        &session,
+        "apply",
+        json!({"operations": [
+            {"op": "create_element", "key": "web", "type_ref": "c4/container", "name": "Web Shop"},
+            {"op": "create_relation", "from": {"new": "web"}, "kind": "uses",
+             "to": {"existing": "payment-service"}, "label": "SECRET-LABEL"}
+        ]}),
+    )
+    .await??;
+    let before = files(directory.path())?;
+
+    let refused = call(
+        &session,
+        "apply",
+        json!({"operations": [{"op": "delete_element", "element": {"existing": "payment-service"}}]}),
+    )
+    .await??;
+
+    assert_eq!(refused.is_error, Some(true), "{refused:?}");
+    assert_eq!(
+        text(&refused),
+        "operation 1: element payment-service is still the target of relations from \
+         web-shop (uses); delete those first"
+    );
+    assert_eq!(files(directory.path())?, before);
+
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+#[tokio::test]
 async fn read_element_names_an_element_without_a_file() -> TestResult {
     let directory = project()?;
     let session = start(directory.path()).await?;

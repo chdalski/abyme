@@ -17,6 +17,9 @@ use crate::layout::Layout;
 use crate::operation::{LocalKey, MAX_COORDINATE, Operation, Ref};
 use crate::slug::free_slug;
 
+/// How many sources of relations a rejected deletion names at most.
+pub const MAX_SHOWN_SOURCES: usize = 10;
+
 /// The most operations one request may carry. A thousand covers a C4 model
 /// of a large repository in one request and keeps a single call's work and
 /// its write lock short.
@@ -34,21 +37,24 @@ pub struct Snapshot {
 /// What a request changes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Applied {
-    /// The files to write: new elements first, then changed elements, then
-    /// each new or changed board once, so that no board ever points to an
-    /// element whose file does not exist yet. Each element is written once.
+    /// The files to write and remove: new elements first, then changed
+    /// elements, then each new or changed board once, then the element files
+    /// to remove, so that no board ever points to an element whose file does
+    /// not exist yet. Each element is written or removed once.
     pub writes: Vec<Write>,
     /// The ID each key of the request received, in the order of creation.
     pub created: Vec<(LocalKey, Created)>,
 }
 
-/// One file to write, with its whole content.
+/// One file to write, with its whole content, or to remove.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Write {
     /// A new or changed element file.
     Element(Element),
     /// A new or changed board file.
     Board(Board),
+    /// The file of a deleted element, which exists before the request.
+    RemoveElement(ElementId),
 }
 
 /// What a key of the request created.
@@ -144,6 +150,16 @@ pub enum OperationProblem {
         /// The element the relation points to.
         to: ElementId,
     },
+    /// Other elements still relate to the element a deletion names.
+    #[error(
+        "element {element} is still the target of relations from {sources}; delete those first"
+    )]
+    StillRelated {
+        /// The element to delete.
+        element: ElementId,
+        /// The sources and kinds of the relations that point to it.
+        sources: RelationSources,
+    },
     /// An update names no field to change.
     #[error("the update of element {0} names no field to change")]
     NothingToUpdate(ElementId),
@@ -158,6 +174,12 @@ pub enum OperationProblem {
         to: ElementId,
     },
 }
+
+/// The source and kind of each relation that points to an element, by
+/// source, then kind. An error shows at most [`MAX_SHOWN_SOURCES`] of them
+/// and counts the rest; it never shows a label.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RelationSources(pub Vec<(ElementId, RelationKind)>);
 
 /// The two kinds of things a request creates and refers to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -176,6 +198,8 @@ struct Draft<'snapshot> {
     /// The elements as the request has them so far, by ID. An element the
     /// request has not touched is read from the snapshot.
     elements: BTreeMap<ElementId, Element>,
+    /// The elements the request has deleted. Their IDs stay taken.
+    removed: BTreeSet<ElementId>,
     taken_elements: BTreeSet<ElementId>,
     taken_boards: BTreeSet<BoardId>,
     homed: BTreeSet<ElementId>,
@@ -229,6 +253,7 @@ impl<'snapshot> Draft<'snapshot> {
             keys: BTreeMap::new(),
             created: Vec::new(),
             elements: BTreeMap::new(),
+            removed: BTreeSet::new(),
             taken_elements,
             taken_boards: snapshot.boards.keys().cloned().collect(),
             homed: placed,
@@ -273,6 +298,7 @@ impl<'snapshot> Draft<'snapshot> {
                 label,
             } => self.create_relation(from, *kind, to, label.as_deref()),
             Operation::DeleteRelation { from, kind, to } => self.delete_relation(from, *kind, to),
+            Operation::DeleteElement { element } => self.delete_element(element),
         }
     }
 
@@ -456,6 +482,85 @@ impl<'snapshot> Draft<'snapshot> {
         })
     }
 
+    /// Deletes an element: its file, its placement on every board, and its
+    /// own relations. It is rejected while other elements still relate to
+    /// it, as the request stands. An ID that a board places although its
+    /// file is missing can be deleted too; then only its placements go.
+    fn delete_element(&mut self, element: &Ref<ElementId>) -> Result<(), OperationProblem> {
+        let id = self.resolve_deletion(element)?;
+        let sources = self.incoming_relations(&id);
+        if !sources.is_empty() {
+            return Err(OperationProblem::StillRelated {
+                element: id,
+                sources: RelationSources(sources),
+            });
+        }
+        for board in self.boards_placing(&id) {
+            let (draft_board, layout) = self.draft_board(&board)?;
+            draft_board.placements.remove(&id);
+            *layout = Layout::of(draft_board);
+        }
+        self.homed.remove(&id);
+        self.elements.remove(&id);
+        self.removed.insert(id);
+        Ok(())
+    }
+
+    /// The element a deletion names: an element of the request, or an
+    /// `existing` ID that a board places although it has no element.
+    fn resolve_deletion(&self, reference: &Ref<ElementId>) -> Result<ElementId, OperationProblem> {
+        match reference {
+            Ref::Existing(id)
+                if self.element(id).is_none() && !self.boards_placing(id).is_empty() =>
+            {
+                Ok(id.clone())
+            }
+            Ref::Existing(_) | Ref::New(_) => self.resolve_element(reference),
+        }
+    }
+
+    /// The boards that place `id`, as the request has them: the boards it
+    /// has changed, and the snapshot's other boards.
+    fn boards_placing(&self, id: &ElementId) -> Vec<BoardId> {
+        let changed = self
+            .boards
+            .iter()
+            .filter(|(_, (board, _))| board.placements.contains_key(id))
+            .map(|(board_id, _)| board_id.clone());
+        let untouched = self
+            .snapshot
+            .boards
+            .iter()
+            .filter(|(board_id, board)| {
+                !self.boards.contains_key(*board_id) && board.placements.contains_key(id)
+            })
+            .map(|(board_id, _)| board_id.clone());
+        changed.chain(untouched).collect()
+    }
+
+    /// The source and kind of every relation that points to `id`, as the
+    /// request stands: the working set first, the snapshot for the others,
+    /// without deleted elements; by source, then kind.
+    fn incoming_relations(&self, id: &ElementId) -> Vec<(ElementId, RelationKind)> {
+        let untouched = self.snapshot.elements.values().filter(|element| {
+            !self.elements.contains_key(element.id()) && !self.removed.contains(element.id())
+        });
+        let sources: BTreeSet<(ElementId, RelationKind)> = self
+            .elements
+            .values()
+            .chain(untouched)
+            .filter(|source| source.id() != id)
+            .flat_map(|source| {
+                source
+                    .relations()
+                    .keys()
+                    .filter(|(_, to)| to == id)
+                    .map(|(kind, _)| (source.id().clone(), *kind))
+            })
+            .collect();
+        sources.into_iter().collect()
+    }
+
     /// Changes the fields of the element `id`, an element of the request,
     /// and keeps the element rebuilt through [`Element::new`] in the working
     /// set; its ID never changes. An element is copied from the snapshot
@@ -467,11 +572,13 @@ impl<'snapshot> Draft<'snapshot> {
         id: &ElementId,
         change: impl FnOnce(&mut ElementFields) -> Result<(), OperationProblem>,
     ) -> Result<(), OperationProblem> {
-        let current = self
-            .elements
-            .remove(id)
-            .or_else(|| self.snapshot.elements.get(id).cloned())
-            .ok_or_else(|| OperationProblem::UnknownElement(id.clone()))?;
+        let current = match self.elements.remove(id) {
+            Some(element) => element,
+            None => self
+                .element(id)
+                .cloned()
+                .ok_or_else(|| OperationProblem::UnknownElement(id.clone()))?,
+        };
         let mut fields = current.into_fields();
         change(&mut fields)?;
         let element = Element::new(id.clone(), fields)
@@ -499,6 +606,9 @@ impl<'snapshot> Draft<'snapshot> {
 
     /// The element with this ID as the request has it so far, if any.
     fn element(&self, id: &ElementId) -> Option<&Element> {
+        if self.removed.contains(id) {
+            return None;
+        }
         self.elements
             .get(id)
             .or_else(|| self.snapshot.elements.get(id))
@@ -561,8 +671,8 @@ impl<'snapshot> Draft<'snapshot> {
     }
 
     /// The writes: the created elements in the order of their creation,
-    /// then the existing elements the request changed, then each changed
-    /// board.
+    /// unless deleted again, then the existing elements the request changed,
+    /// then each changed board, then the files of deleted elements.
     fn finish(mut self) -> Applied {
         let created: Vec<Write> = self
             .created
@@ -580,10 +690,40 @@ impl<'snapshot> Draft<'snapshot> {
             .boards
             .into_values()
             .map(|(board, _)| Write::Board(board));
+        // Only a file that exists before the request is removed: never one
+        // of an element without a file, nor one the request created.
+        let snapshot = self.snapshot;
+        let removals = self
+            .removed
+            .into_iter()
+            .filter(|id| snapshot.elements.contains_key(id))
+            .map(Write::RemoveElement);
         Applied {
-            writes: created.into_iter().chain(changed).chain(boards).collect(),
+            writes: created
+                .into_iter()
+                .chain(changed)
+                .chain(boards)
+                .chain(removals)
+                .collect(),
             created: self.created,
         }
+    }
+}
+
+impl fmt::Display for RelationSources {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let shown: Vec<String> = self
+            .0
+            .iter()
+            .take(MAX_SHOWN_SOURCES)
+            .map(|(source, kind)| format!("{source} ({kind})"))
+            .collect();
+        formatter.write_str(&shown.join(", "))?;
+        let more = self.0.len().saturating_sub(MAX_SHOWN_SOURCES);
+        if more > 0 {
+            write!(formatter, ", and {more} more")?;
+        }
+        Ok(())
     }
 }
 

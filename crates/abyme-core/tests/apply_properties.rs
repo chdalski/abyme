@@ -187,7 +187,29 @@ fn operation() -> impl Strategy<Value = Operation> {
                     body,
                 }
             }),
+        element_ref().prop_map(|element| Operation::DeleteElement { element }),
     ]
+}
+
+/// The existing IDs a request's operations delete: elements with a file,
+/// or IDs a board places without one.
+fn deleted_existing_elements(operations: &[Operation]) -> BTreeSet<&ElementId> {
+    operations
+        .iter()
+        .filter_map(|operation| match operation {
+            Operation::DeleteElement {
+                element: Ref::Existing(id),
+            } => Some(id),
+            Operation::CreateElement { .. }
+            | Operation::CreateBoard { .. }
+            | Operation::PlaceElement { .. }
+            | Operation::MoveElement { .. }
+            | Operation::UpdateElement { .. }
+            | Operation::DeleteElement { .. }
+            | Operation::CreateRelation { .. }
+            | Operation::DeleteRelation { .. } => None,
+        })
+        .collect()
 }
 
 /// The existing elements that a request's operations name as the element
@@ -214,6 +236,7 @@ fn named_existing_elements(operations: &[Operation]) -> BTreeSet<&ElementId> {
             | Operation::PlaceElement { .. }
             | Operation::MoveElement { .. }
             | Operation::UpdateElement { .. }
+            | Operation::DeleteElement { .. }
             | Operation::CreateRelation { .. }
             | Operation::DeleteRelation { .. } => None,
         })
@@ -285,16 +308,41 @@ fn overlaps(a: &Rect, b: &Rect) -> bool {
         && i64::from(b.y) < bottom(a)
 }
 
+/// The keys whose elements a request's operations delete again.
+fn deleted_keys(operations: &[Operation]) -> BTreeSet<&LocalKey> {
+    operations
+        .iter()
+        .filter_map(|operation| match operation {
+            Operation::DeleteElement {
+                element: Ref::New(key),
+            } => Some(key),
+            Operation::CreateElement { .. }
+            | Operation::CreateBoard { .. }
+            | Operation::PlaceElement { .. }
+            | Operation::MoveElement { .. }
+            | Operation::UpdateElement { .. }
+            | Operation::DeleteElement { .. }
+            | Operation::CreateRelation { .. }
+            | Operation::DeleteRelation { .. } => None,
+        })
+        .collect()
+}
+
 /// Checks that the element files written start with exactly the elements
-/// the request created, in the order of their creation, followed only by
-/// existing elements, and that no element is written twice.
+/// the request created and did not delete again, in the order of their
+/// creation, followed only by existing elements, and that no element is
+/// written twice. A request that succeeds deleted exactly the element each
+/// deleted key created.
 fn check_elements_written_as_created(
     snapshot: &Snapshot,
+    operations: &[Operation],
     applied: &Applied,
 ) -> Result<(), TestCaseError> {
+    let deleted = deleted_keys(operations);
     let created: Vec<&ElementId> = applied
         .created
         .iter()
+        .filter(|(key, _)| !deleted.contains(key))
         .filter_map(|(_, created)| match created {
             Created::Element(id) => Some(id),
             Created::Board(_) => None,
@@ -305,7 +353,7 @@ fn check_elements_written_as_created(
         .iter()
         .filter_map(|write| match write {
             Write::Element(element) => Some(element.id()),
-            Write::Board(_) => None,
+            Write::Board(_) | Write::RemoveElement(_) => None,
         })
         .collect();
     let (new, changed) = written.split_at(created.len().min(written.len()));
@@ -321,6 +369,71 @@ fn check_elements_written_as_created(
     Ok(())
 }
 
+/// Checks that files are removed last, only for an element whose file
+/// exists before the request and that a deletion names, that no removed
+/// element is also written, and that no board keeps a deleted ID.
+fn check_removals(
+    snapshot: &Snapshot,
+    deleted: &BTreeSet<&ElementId>,
+    applied: &Applied,
+) -> Result<(), TestCaseError> {
+    let first_removal = applied
+        .writes
+        .iter()
+        .position(|write| matches!(write, Write::RemoveElement(_)))
+        .unwrap_or(applied.writes.len());
+    let (writes, removals) = applied.writes.split_at(first_removal);
+    let mut removed = BTreeSet::new();
+    for removal in removals {
+        let Write::RemoveElement(id) = removal else {
+            return Err(TestCaseError::fail("a file is written after a removal"));
+        };
+        prop_assert!(
+            snapshot.elements.contains_key(id),
+            "{id} has no file to remove"
+        );
+        prop_assert!(
+            deleted.contains(id),
+            "{id} removed though no deletion names it"
+        );
+        prop_assert!(removed.insert(id), "{id} removed twice");
+    }
+    let mut written_boards = BTreeSet::new();
+    for write in writes {
+        match write {
+            Write::Element(element) => {
+                prop_assert!(
+                    !removed.contains(element.id()),
+                    "{} written and removed",
+                    element.id()
+                );
+            }
+            Write::Board(board) => {
+                written_boards.insert(&board.id);
+                for id in deleted {
+                    prop_assert!(
+                        !board.placements.contains_key(*id),
+                        "board {} keeps {id}",
+                        board.id
+                    );
+                }
+            }
+            Write::RemoveElement(_) => {}
+        }
+    }
+    for (board_id, board) in &snapshot.boards {
+        if !written_boards.contains(board_id) {
+            for id in deleted {
+                prop_assert!(
+                    !board.placements.contains_key(*id),
+                    "board {board_id} keeps {id}"
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Checks every rule a successful result must keep. An existing element
 /// file changes only through an operation that names that element.
 fn check(
@@ -329,6 +442,7 @@ fn check(
     applied: &Applied,
 ) -> Result<(), TestCaseError> {
     let named = named_existing_elements(operations);
+    let deleted = deleted_existing_elements(operations);
     let existing_element_ids: BTreeSet<&ElementId> = snapshot
         .elements
         .keys()
@@ -357,11 +471,13 @@ fn check(
             }
         }
     }
-    check_elements_written_as_created(snapshot, applied)?;
+    check_elements_written_as_created(snapshot, operations, applied)?;
+    check_removals(snapshot, &deleted, applied)?;
     let mut seen_board = false;
     let mut written_boards = BTreeSet::new();
     for write in &applied.writes {
         match write {
+            Write::RemoveElement(_) => {}
             Write::Element(element) => {
                 prop_assert!(!seen_board, "an element follows a board");
                 prop_assert!(
@@ -390,7 +506,9 @@ fn check(
                 if let Some(before) = before {
                     prop_assert_eq!(&board.title, &before.title);
                     for (id, rect) in &before.placements {
-                        prop_assert_eq!(board.placements.get(id), Some(rect));
+                        // A placement disappears only through delete_element.
+                        let expected = (!deleted.contains(id)).then_some(rect);
+                        prop_assert_eq!(board.placements.get(id), expected);
                     }
                 }
                 let old: BTreeMap<&ElementId, &Rect> = before

@@ -85,6 +85,7 @@ const fn refused_kind(operation: &Operation) -> Option<&'static str> {
             }
         },
         Operation::UpdateElement { .. } => Some("update_element"),
+        Operation::DeleteElement { .. } => Some("delete_element"),
         Operation::CreateRelation { .. } => Some("create_relation"),
         Operation::DeleteRelation { .. } => Some("delete_relation"),
     }

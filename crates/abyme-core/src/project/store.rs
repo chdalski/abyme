@@ -22,6 +22,15 @@ use crate::operation::{LocalKey, Operation};
 /// repeat.
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
+/// One change to a file of the project, ready to carry out.
+#[derive(Debug)]
+enum FileChange<'id> {
+    /// Write this text to the file.
+    Write(Location<'id>, String),
+    /// Remove the file.
+    Remove(Location<'id>),
+}
+
 /// Reads every element and board file. A missing `abyme/elements/` or
 /// `abyme/boards/` counts as empty.
 pub fn read_snapshot(root: &Path) -> Result<Snapshot, ProjectError> {
@@ -107,15 +116,16 @@ fn open_lock(root: &Path) -> Result<File, ProjectError> {
         .map_err(io_error(Location::Lock))
 }
 
-/// The content of every file to write, rejected as a whole when one of
-/// them would be larger than the reader accepts.
-fn serialized(writes: &[Write]) -> Result<Vec<(Location<'_>, String)>, ProjectError> {
+/// The content of every file to write and every file to remove, rejected
+/// as a whole when a file to write would be larger than the reader accepts.
+fn serialized(writes: &[Write]) -> Result<Vec<FileChange<'_>>, ProjectError> {
     writes
         .iter()
         .map(|write| {
             let (location, text) = match write {
                 Write::Element(element) => (Location::Element(element.id()), element.to_markdown()),
                 Write::Board(board) => (Location::Board(&board.id), board.to_json()),
+                Write::RemoveElement(id) => return Ok(FileChange::Remove(Location::Element(id))),
             };
             if text.len() > MAX_FILE_BYTES {
                 Err(ProjectError::WriteTooLarge {
@@ -124,23 +134,36 @@ fn serialized(writes: &[Write]) -> Result<Vec<(Location<'_>, String)>, ProjectEr
                     limit: MAX_FILE_BYTES,
                 })
             } else {
-                Ok((location, text))
+                Ok(FileChange::Write(location, text))
             }
         })
         .collect()
 }
 
-/// Writes every file, in order, each through a temporary file and a
-/// rename. Leftovers of a crashed writer are removed first; the caller
-/// holds the lock, so no other writer's temporary file is among them.
-fn write_files(root: &Path, files: &[(Location, String)]) -> Result<(), ProjectError> {
+/// Carries out every change, in order: each file to write through a
+/// temporary file and a rename, each file to remove with `remove_file`.
+/// Leftovers of a crashed writer are removed first; the caller holds the
+/// lock, so no other writer's temporary file is among them.
+fn write_files(root: &Path, files: &[FileChange]) -> Result<(), ProjectError> {
     ensure_directory(root, Location::TempDir)?;
     remove_leftovers(root)?;
     ensure_directory(root, Location::ElementsDir)?;
     ensure_directory(root, Location::BoardsDir)?;
-    files
-        .iter()
-        .try_for_each(|(location, text)| write_file(root, *location, text))
+    files.iter().try_for_each(|change| match change {
+        FileChange::Write(location, text) => write_file(root, *location, text),
+        FileChange::Remove(location) => remove_file(root, *location),
+    })
+}
+
+/// Removes the file at `location`; on a symbolic link that is the link,
+/// not its target. A file that is already gone counts as removed: the
+/// request's boards are written by then, and the file is gone either way.
+fn remove_file(root: &Path, location: Location) -> Result<(), ProjectError> {
+    match fs::remove_file(root.join(location.relative())) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(io_error(location)(error)),
+    }
 }
 
 /// Removes the files and symbolic links in `.abyme/tmp/`; directories stay.
@@ -177,3 +200,6 @@ fn write_file(root: &Path, location: Location, text: &str) -> Result<(), Project
         .map_err(io_error(temp))?;
     fs::rename(&temp_path, root.join(location.relative())).map_err(io_error(location))
 }
+
+#[cfg(test)]
+mod tests;

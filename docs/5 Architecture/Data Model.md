@@ -201,6 +201,7 @@ A request is a list of operations, each a JSON object with the field `op`:
   {"op": "place_element", "element": {"existing": "orders-db"}, "board": {"new": "b"}},
   {"op": "move_element", "element": {"existing": "orders-db"}, "board": {"new": "b"}, "x": 400, "y": 200},
   {"op": "update_element", "element": {"existing": "orders-db"}, "summary": null, "body": "Orders and payments."},
+  {"op": "delete_element", "element": {"existing": "legacy-mailer"}},
   {"op": "create_relation", "from": {"new": "pay"}, "kind": "uses", "to": {"existing": "orders-db"},
    "label": "SQL"},
   {"op": "delete_relation", "from": {"existing": "web-shop"}, "kind": "depends_on", "to": {"existing": "legacy-api"}}
@@ -209,6 +210,7 @@ A request is a list of operations, each a JSON object with the field `op`:
 
 - **`create_element`** takes a key, `type_ref`, `name`, and optionally `summary` and `body`; **`create_board`** takes a key and `title`; **`place_element`** gives an element its home on a board; **`move_element`** sets the position of an element on a board where it lies, with `x` and `y` from -1,000,000 to 1,000,000, and keeps its size. Other fields are rejected.
 - **`update_element`** changes only the fields it names among `name`, `type_ref`, `summary`, and `body`; `"summary": null` removes the summary, and `null` is rejected for the others. The element keeps its ID and its relations, also when its name changes, and an update that names no field is rejected. Text is stored exactly as sent.
+- **`delete_element`** removes an element's file, its placement on every board, and its own relations. It is rejected while other elements still relate to it, as the request stands at that operation; the error names each source and the relation's kind. It also takes an ID that a board places although its file is missing, and then removes only the placements. A deleted element cannot be named again in the same request, and its ID stays taken there.
 - **`create_relation`** adds a relation from `from` to `to` of a `kind` (see [[Relations]]), with an optional `label`; it is rejected when the element has that relation already or would point to itself. **`delete_relation`** removes the relation with `from`, `kind`, and `to`; its `to` is only looked up among the relations of `from`, so a relation to an element whose file is gone can still be removed. Both rewrite only the element file of `from`.
 - **References:** `{"new": "<key>"}` names what an earlier operation of the same request creates, `{"existing": "<id>"}` what already exists. A **local key** has 1 to 64 ASCII letters, digits, hyphens, and underscores, is valid only within its request, and elements and boards share one set of keys.
 - **All or nothing:** Operations run in order. If one fails, for example because a key is unknown or an element already has a home, the request writes nothing, and the error names the operation's position. A request has at most 1000 operations.
