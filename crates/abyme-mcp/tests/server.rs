@@ -284,7 +284,7 @@ async fn applies_operations_and_reads_the_board_back() -> TestResult {
     let tools = tokio::time::timeout(TIMEOUT, session.client.list_all_tools()).await??;
     let mut names: Vec<&str> = tools.iter().map(|tool| tool.name.as_ref()).collect();
     names.sort_unstable();
-    assert_eq!(names, ["apply", "read_board", "search"]);
+    assert_eq!(names, ["apply", "read_board", "read_element", "search"]);
 
     let applied = call(&session, "apply", create_board_with_element()).await??;
     assert_eq!(applied.is_error, Some(false), "{applied:?}");
@@ -336,6 +336,14 @@ async fn answers_arguments_that_do_not_fit_with_tool_errors_and_keeps_serving() 
         ("read_board", json!({"board": "A"})),
         ("read_board", json!({"board": ""})),
         ("read_board", json!({})),
+        ("read_element", json!({"element": "../x"})),
+        ("read_element", json!({"element": "a/b"})),
+        ("read_element", json!({"element": "X"})),
+        ("read_element", json!({"element": ""})),
+        ("read_element", json!({"element": "a".repeat(65)})),
+        ("read_element", json!({"element": 1})),
+        ("read_element", json!({"element": "x", "path": "/etc"})),
+        ("read_element", json!({})),
     ];
 
     for (tool, arguments) in not_fitting {
@@ -506,6 +514,105 @@ async fn read_board_shows_relations_with_their_labels_escaped_onto_one_line() ->
          \n\
          payment-service → orders-db  uses  SQL\\nBoard: forged \\u{202e}x\n"
     );
+
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+#[tokio::test]
+async fn read_element_shows_an_element_with_its_relations_and_description() -> TestResult {
+    let directory = project()?;
+    let session = start(directory.path()).await?;
+    let applied = call(
+        &session,
+        "apply",
+        json!({"operations": [
+            {"op": "create_board", "key": "b", "title": "Container Level"},
+            {"op": "create_element", "key": "pay", "type_ref": "c4/container", "name": "Payment Service",
+             "summary": "Payments through Stripe", "body": "Handles payments.\nRefunds\u{202e} run later.\n"},
+            {"op": "create_element", "key": "db", "type_ref": "c4/datastore", "name": "Orders DB"},
+            {"op": "create_element", "key": "web", "type_ref": "c4/container", "name": "Web Shop"},
+            {"op": "place_element", "element": {"new": "pay"}, "board": {"new": "b"}},
+            {"op": "create_relation", "from": {"new": "pay"}, "kind": "uses", "to": {"new": "db"},
+             "label": "SQL"},
+            {"op": "create_relation", "from": {"new": "web"}, "kind": "uses", "to": {"new": "pay"},
+             "label": "REST"}
+        ]}),
+    )
+    .await??;
+    assert_eq!(applied.is_error, Some(false), "{applied:?}");
+
+    let read = call(
+        &session,
+        "read_element",
+        json!({"element": "payment-service"}),
+    )
+    .await??;
+
+    assert_eq!(read.is_error, Some(false), "{read:?}");
+    assert_eq!(
+        text(&read),
+        "Element: payment-service · Payment Service\n\
+         Type: c4/container\n\
+         Summary: Payments through Stripe\n\
+         Boards: container-level\n\
+         \n\
+         Outgoing relations:\n\
+         payment-service → orders-db  uses  SQL\n\
+         \n\
+         Incoming relations:\n\
+         web-shop → payment-service  uses  REST\n\
+         \n\
+         Description:\n\
+         Handles payments.\n\
+         Refunds\\u{202e} run later.\n"
+    );
+
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+#[tokio::test]
+async fn read_element_names_an_element_without_a_file() -> TestResult {
+    let directory = project()?;
+    let session = start(directory.path()).await?;
+    call(&session, "apply", create_board_with_element()).await??;
+    fs::remove_file(directory.path().join("abyme/elements/payment-service.md"))?;
+
+    for id in ["nowhere", "payment-service"] {
+        let read = call(&session, "read_element", json!({"element": id})).await??;
+
+        assert_eq!(read.is_error, Some(true), "{read:?}");
+        assert_eq!(text(&read), format!("no element has the ID {id}"));
+    }
+
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+#[tokio::test]
+async fn read_element_answers_with_an_error_rather_than_a_cut_detail() -> TestResult {
+    let directory = project()?;
+    let session = start(directory.path()).await?;
+    let body = "\u{202e}".repeat(300_000);
+    let applied = call(
+        &session,
+        "apply",
+        json!({"operations": [
+            {"op": "create_element", "key": "big", "type_ref": "t", "name": "Big", "body": body}
+        ]}),
+    )
+    .await??;
+    assert_eq!(applied.is_error, Some(false), "{applied:?}");
+
+    let read = call(&session, "read_element", json!({"element": "big"})).await??;
+
+    assert_eq!(read.is_error, Some(true), "{read:?}");
+    assert!(
+        text(&read).starts_with("the detail of element big has "),
+        "{read:?}"
+    );
+    assert!(!text(&read).contains('\u{202e}'), "{read:?}");
 
     assert_only_protocol_messages(&finish(session).await?);
     Ok(())
@@ -820,6 +927,7 @@ async fn no_tool_takes_a_path() -> TestResult {
         let expected: &[&str] = match tool.name.as_ref() {
             "apply" => &["operations"],
             "read_board" => &["board", "coordinates"],
+            "read_element" => &["element"],
             "search" => &["query"],
             other => return Err(format!("unexpected tool {other}").into()),
         };

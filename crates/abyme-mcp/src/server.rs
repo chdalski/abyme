@@ -1,5 +1,5 @@
-//! The MCP tools `apply`, `read_board`, and `search`, on the project that
-//! the server's working directory lies in.
+//! The MCP tools `apply`, `read_board`, `read_element`, and `search`, on the
+//! project that the server's working directory lies in.
 //!
 //! Arguments come from an AI, so each tool takes them as a raw JSON object
 //! and reads them itself: a request that does not fit becomes a tool error
@@ -9,9 +9,11 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use abyme_core::{Created, Geometry, LocalKey, Operations, Project, element_list, outline};
+use abyme_core::{
+    Created, Geometry, LocalKey, Operations, Project, element_detail, element_list, outline,
+};
 use abyme_index::{Index, MAX_QUERY_CHARS, spec};
-use abyme_model::{BoardId, shown};
+use abyme_model::{BoardId, ElementId, shown};
 use rmcp::handler::server::common::schema_for_type;
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
@@ -33,8 +35,9 @@ mod tests;
 /// error shows.
 const SHOWN_LIMIT: usize = 300;
 
-/// The largest reply `read_board` or `search` returns, in bytes. A larger
-/// one is an error rather than cut, so the AI never acts on part of it.
+/// The largest reply `read_board`, `read_element`, or `search` returns, in
+/// bytes. A larger one is an error rather than cut, so the AI never acts on
+/// part of it.
 const MAX_REPLY_BYTES: usize = 1024 * 1024;
 
 /// How many elements `search` returns at most.
@@ -46,9 +49,10 @@ const NO_MATCH: &str = "No element matches the query.";
 /// What the server tells the AI about itself when a session starts.
 const INSTRUCTIONS: &str = "Abyme keeps project knowledge on boards stored in this repository. \
     Call search with a query to find elements by the words they contain or by what they are \
-    about, read_board with a board ID to read the board as an outline, and apply to create \
-    boards and elements, place elements on boards, move them, and create and delete relations \
-    between elements.";
+    about, read_board with a board ID to read the board as an outline, read_element with an \
+    element ID to read one element in detail with its relations and description, and apply \
+    to create boards and elements, place elements on boards, move them, and create and delete \
+    relations between elements.";
 
 /// The arguments of `apply`.
 #[derive(Deserialize, schemars::JsonSchema)]
@@ -68,6 +72,14 @@ struct ReadBoardArguments {
     /// board.
     #[serde(default)]
     coordinates: bool,
+}
+
+/// The arguments of `read_element`.
+#[derive(Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct ReadElementArguments {
+    /// The ID of the element to read.
+    element: ElementId,
 }
 
 /// The arguments of `search`.
@@ -183,6 +195,36 @@ impl AbymeServer {
             let text = outline(&snapshot, &arguments.board, geometry)
                 .map_err(|error| error.to_string())?;
             bounded(&format!("the outline of board {}", arguments.board), text)
+        })
+        .await
+    }
+
+    #[tool(
+        description = "Returns one element of the Abyme project in detail: its ID and name, type, summary, \
+            the boards that place it, its outgoing relations (a target without a file is marked ⚠ missing), \
+            the relations of other elements to it, and last its description. The single-line values are \
+            escaped onto one line as in read_board. The description keeps its line breaks and tabs; other \
+            control and invisible characters in it appear as \\u{...} escapes.",
+        input_schema = schema_for_type::<ReadElementArguments>()
+    )]
+    async fn read_element(
+        &self,
+        Parameters(arguments): Parameters<JsonObject>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let arguments: ReadElementArguments = match parsed(arguments) {
+            Ok(arguments) => arguments,
+            Err(result) => return Ok(result),
+        };
+        let start = self.start.clone();
+        on_core(move || {
+            let project = Project::discover(&start).map_err(|error| error.to_string())?;
+            let snapshot = project.snapshot().map_err(|error| error.to_string())?;
+            let text =
+                element_detail(&snapshot, &arguments.element).map_err(|error| error.to_string())?;
+            bounded(
+                &format!("the detail of element {}", arguments.element),
+                text,
+            )
         })
         .await
     }

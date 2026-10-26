@@ -1,9 +1,11 @@
-//! A board as a compact text outline, the way the AI reads it.
+//! The detail levels as the AI reads them: a board as a compact text
+//! outline, and one element in detail.
 //!
-//! Titles, types, names, summaries, and relation labels come from files that
-//! a clone or a pull request can bring in, so the outline writes each of
-//! them on one line and escapes every character that could break a line or
-//! hide or reorder text.
+//! Titles, types, names, summaries, relation labels, and descriptions come
+//! from files that a clone or a pull request can bring in. Every value but
+//! the description is written on one line, and every character that could
+//! break a line or hide or reorder text is escaped; the description keeps
+//! its lines and tabs.
 
 use std::ops::RangeInclusive;
 
@@ -59,6 +61,11 @@ pub enum Geometry {
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("no board has the ID {0}")]
 pub struct UnknownBoard(pub BoardId);
+
+/// No element file has the ID the detail was asked for.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("no element has the ID {0}")]
+pub struct UnknownElement(pub ElementId);
 
 /// Renders `board` as an outline.
 ///
@@ -134,6 +141,91 @@ pub fn element_list<'a>(
     lines(&rows)
 }
 
+/// Renders the element `id` in detail, in this order:
+///
+/// - `Element:` with its ID and name, `Type:`, `Summary:` if it has one,
+///   and `Boards:` with every board that places it, by ID, or `none`;
+/// - after a blank line, `Outgoing relations:` with one line per relation
+///   as in the outline, a target without a file marked `⚠ missing`, or
+///   `none`;
+/// - after a blank line, `Incoming relations:` with the relations of other
+///   elements to it, by source, or `none`;
+/// - after a blank line, `Description:` and the description.
+///
+/// Every value but the description is escaped onto one line. The
+/// description comes last and keeps its line feeds, tabs, and backslashes;
+/// a carriage return before a line feed is left out, and every other
+/// character the outline escapes is escaped.
+///
+/// # Errors
+///
+/// Returns [`UnknownElement`] when the snapshot has no element file with
+/// this ID, also when a board places the ID.
+pub fn element_detail(snapshot: &Snapshot, id: &ElementId) -> Result<String, UnknownElement> {
+    let element = snapshot
+        .elements
+        .get(id)
+        .ok_or_else(|| UnknownElement(id.clone()))?;
+    let summary = element
+        .summary()
+        .map(|summary| format!("Summary: {}\n", one_line(summary)))
+        .unwrap_or_default();
+    let boards: Vec<&str> = snapshot
+        .boards
+        .values()
+        .filter(|board| board.placements.contains_key(id))
+        .map(|board| board.id.as_str())
+        .collect();
+    let outgoing: Vec<Vec<String>> = element
+        .relations()
+        .iter()
+        .map(|((kind, to), label)| {
+            let target = if snapshot.elements.contains_key(to) {
+                to.to_string()
+            } else {
+                format!("{to} {MISSING_MARKER}")
+            };
+            relation_row(id, &target, *kind, label.as_deref())
+        })
+        .collect();
+    let incoming: Vec<Vec<String>> = snapshot
+        .elements
+        .values()
+        .flat_map(|source| {
+            source
+                .relations()
+                .iter()
+                .filter(|((_, to), _)| to == id)
+                .map(|((kind, _), label)| {
+                    relation_row(source.id(), id.as_str(), *kind, label.as_deref())
+                })
+        })
+        .collect();
+    let boards = if boards.is_empty() {
+        "none".to_owned()
+    } else {
+        boards.join(", ")
+    };
+    Ok(format!(
+        "Element: {id} · {}\nType: {}\n{summary}Boards: {boards}\n\n\
+         Outgoing relations:\n{}\nIncoming relations:\n{}\nDescription:\n{}",
+        one_line(element.name()),
+        one_line(element.type_ref().as_str()),
+        relation_lines(&outgoing),
+        relation_lines(&incoming),
+        multi_line(element.body()),
+    ))
+}
+
+/// The relation rows as aligned lines, or the line `none`.
+fn relation_lines(rows: &[Vec<String>]) -> String {
+    if rows.is_empty() {
+        "none\n".to_owned()
+    } else {
+        lines(rows)
+    }
+}
+
 /// The rows as aligned lines, each ending in a line feed.
 fn lines(rows: &[Vec<String>]) -> String {
     let widths = column_widths(rows);
@@ -167,17 +259,20 @@ fn relation_rows(snapshot: &Snapshot, board: &Board) -> Vec<Vec<String>> {
                 .relations()
                 .iter()
                 .filter(|((_, to), _)| board.placements.contains_key(to))
-                .map(|((kind, to), label)| relation_row(source.id(), *kind, to, label.as_deref()))
+                .map(|((kind, to), label)| {
+                    relation_row(source.id(), to.as_str(), *kind, label.as_deref())
+                })
         })
         .collect()
 }
 
-/// The columns of one relation's line. The label is the last column, so it
-/// is never padded; an empty label is left out like a missing one.
+/// The columns of one relation's line. `to` is the target's ID, followed by
+/// a marker the caller adds. The label is the last column, so it is never
+/// padded; an empty label is left out like a missing one.
 fn relation_row(
     from: &ElementId,
+    to: &str,
     kind: RelationKind,
-    to: &ElementId,
     label: Option<&str>,
 ) -> Vec<String> {
     let mut columns = vec![format!("{from} → {to}"), kind.as_str().to_owned()];
@@ -248,6 +343,26 @@ fn one_line(text: &str) -> String {
         }
     }
     line
+}
+
+/// Writes a description: line feeds, tabs, and backslashes stay as they
+/// are, a carriage return before a line feed is left out, and every other
+/// character [`one_line`] escapes is escaped the same way, so the text can
+/// neither hide nor reorder anything. A backslash stays as it is, so that
+/// a description the AI reads and writes back does not grow.
+fn multi_line(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut characters = text.chars().peekable();
+    while let Some(character) = characters.next() {
+        match character {
+            '\n' | '\t' => out.push(character),
+            '\r' if characters.peek() == Some(&'\n') => {}
+            '\r' => out.push_str("\\r"),
+            _ if needs_escape(character) => out.extend(character.escape_unicode()),
+            _ => out.push(character),
+        }
+    }
+    out
 }
 
 /// Whether a character is a control, format, or separator character.

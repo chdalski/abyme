@@ -5,7 +5,7 @@
 //! without touching the file system, so every decision can be tested on its
 //! own. [`Project`] finds the project a directory lies in, reads its files,
 //! and writes a request's changes safely. [`outline`] renders a board as the
-//! compact text the AI reads.
+//! compact text the AI reads, and [`element_detail`] one element in detail.
 
 // A project is used only when it belongs to the user running Abyme, and the
 // owner check exists for Unix only.
@@ -25,7 +25,7 @@ pub use apply::{
 pub use operation::{
     LocalKey, LocalKeyError, MAX_COORDINATE, MAX_KEY_LEN, Operation, Operations, Ref,
 };
-pub use outline::{Geometry, UnknownBoard, element_list, outline};
+pub use outline::{Geometry, UnknownBoard, UnknownElement, element_detail, element_list, outline};
 pub use project::{
     EmbeddingModel, EntryKind, Init, MAX_FILE_BYTES, MAX_PROJECT_FILE_BYTES, PROJECT_FORMAT,
     Project, ProjectError,

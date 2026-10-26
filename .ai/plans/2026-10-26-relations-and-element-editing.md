@@ -41,7 +41,7 @@ through a new tool `read_element`.
 - [x] Keep a working set of elements in `apply`
 - [x] Relations between elements
 - [x] Relations in the board outline
-- [ ] The tool `read_element`
+- [x] The tool `read_element`
 - [ ] `update_element`
 - [ ] `delete_element`
 
@@ -169,21 +169,21 @@ it.
 
 Review path: Security-Hybrid
 
-- [ ] `read_element` with an element ID returns the element's ID, name,
+- [x] `read_element` with an element ID returns the element's ID, name,
       type, and summary, every board that places it, its outgoing
       relations, its incoming relations, and its description.
-- [ ] An outgoing relation whose target file is missing shows the target
+- [x] An outgoing relation whose target file is missing shows the target
       with `⚠ missing`.
-- [ ] An ID without an element file is a tool error that names the ID.
-- [ ] An MCP test reads an element with outgoing and incoming relations
+- [x] An ID without an element file is a tool error that names the ID.
+- [x] An MCP test reads an element with outgoing and incoming relations
       through `read_element`.
-- [ ] The server's module documentation and instructions, the README's
+- [x] The server's module documentation and instructions, the README's
       Tools section, and the tools table and detail levels in
       `docs/4 AI Interface/MCP Server.md` describe the tool as
       delivered. The Glossary has an entry for the detail levels,
       element detail included, and the `abyme-mcp` row of the root
       `CLAUDE.md` names the tool.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace
+- [x] `cargo test --workspace`, `cargo clippy --workspace
       --all-targets`, and `cargo fmt --all --check` pass.
 
 ### Task 6: `update_element`

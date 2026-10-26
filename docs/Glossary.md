@@ -34,6 +34,9 @@ The docs, the UI, and the code use these terms alike. The type names are in [[Da
 | [[Presentation#Sticky Notes\|Attach]] | hang an element on another one so it moves along; layout, not content |
 | [[Data Model\|Placement]] | where and how an element lies on a board: rectangle, presentation, home or reference |
 | [[Data Model#Rules\|Summary]] | short text on an element or board, usable by every output |
+| [[MCP Server#Detail Levels\|Detail level]] | how much the AI reads at once: overview, board outline, or element detail |
+| [[MCP Server#Detail Levels\|Board outline]] | a board as compact text: its elements and the relations between them, one per line |
+| [[MCP Server#Detail Levels\|Element detail]] | one element as text: its fields, boards, relations in both directions, and description |
 
 ## Reconciliation
 
