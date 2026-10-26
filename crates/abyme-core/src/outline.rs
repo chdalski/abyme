@@ -7,9 +7,7 @@
 //! break a line or hide or reorder text is escaped; the description keeps
 //! its lines and tabs.
 
-use std::ops::RangeInclusive;
-
-use abyme_model::{Board, BoardId, Element, ElementId, Rect, RelationKind};
+use abyme_model::{Board, BoardId, Element, ElementId, Rect, RelationKind, hides_or_breaks_text};
 
 use crate::apply::Snapshot;
 
@@ -19,33 +17,6 @@ const MAX_COLUMN_WIDTH: usize = 40;
 
 /// What the outline shows for a placement whose element file is missing.
 const MISSING_MARKER: &str = "⚠ missing";
-
-/// The characters of the Unicode general categories Cf (format), Zl (line
-/// separator), and Zp (paragraph separator), as of Unicode 15.0. They are
-/// invisible or move text around, so a reader cannot see them in a review.
-const FORMAT_AND_SEPARATORS: [RangeInclusive<char>; 21] = [
-    '\u{ad}'..='\u{ad}',
-    '\u{600}'..='\u{605}',
-    '\u{61c}'..='\u{61c}',
-    '\u{6dd}'..='\u{6dd}',
-    '\u{70f}'..='\u{70f}',
-    '\u{890}'..='\u{891}',
-    '\u{8e2}'..='\u{8e2}',
-    '\u{180e}'..='\u{180e}',
-    '\u{200b}'..='\u{200f}',
-    '\u{2028}'..='\u{202e}',
-    '\u{2060}'..='\u{2064}',
-    '\u{2066}'..='\u{206f}',
-    '\u{feff}'..='\u{feff}',
-    '\u{fff9}'..='\u{fffb}',
-    '\u{110bd}'..='\u{110bd}',
-    '\u{110cd}'..='\u{110cd}',
-    '\u{13430}'..='\u{1343f}',
-    '\u{1bca0}'..='\u{1bca3}',
-    '\u{1d173}'..='\u{1d17a}',
-    '\u{e0001}'..='\u{e0001}',
-    '\u{e0020}'..='\u{e007f}',
-];
 
 /// Whether an outline shows where each element lies on its board.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -328,8 +299,8 @@ fn aligned(row: &[String], widths: &[usize]) -> String {
 /// Writes `text` on one line. A backslash becomes `\\`; line feed, carriage
 /// return, and tab become `\n`, `\r`, and `\t`; every other control
 /// character (Unicode Cc) and every character in
-/// [`FORMAT_AND_SEPARATORS`] becomes `\u{…}`. Everything else stays as it
-/// is.
+/// [`FORMAT_AND_SEPARATORS`](abyme_model::FORMAT_AND_SEPARATORS) becomes
+/// `\u{…}`. Everything else stays as it is.
 fn one_line(text: &str) -> String {
     let mut line = String::with_capacity(text.len());
     for character in text.chars() {
@@ -338,7 +309,7 @@ fn one_line(text: &str) -> String {
             '\n' => line.push_str("\\n"),
             '\r' => line.push_str("\\r"),
             '\t' => line.push_str("\\t"),
-            _ if needs_escape(character) => line.extend(character.escape_unicode()),
+            _ if hides_or_breaks_text(character) => line.extend(character.escape_unicode()),
             _ => line.push(character),
         }
     }
@@ -358,19 +329,11 @@ fn multi_line(text: &str) -> String {
             '\n' | '\t' => out.push(character),
             '\r' if characters.peek() == Some(&'\n') => {}
             '\r' => out.push_str("\\r"),
-            _ if needs_escape(character) => out.extend(character.escape_unicode()),
+            _ if hides_or_breaks_text(character) => out.extend(character.escape_unicode()),
             _ => out.push(character),
         }
     }
     out
-}
-
-/// Whether a character is a control, format, or separator character.
-fn needs_escape(character: char) -> bool {
-    character.is_control()
-        || FORMAT_AND_SEPARATORS
-            .iter()
-            .any(|range| range.contains(&character))
 }
 
 #[cfg(test)]

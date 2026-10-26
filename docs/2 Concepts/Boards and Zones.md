@@ -14,7 +14,7 @@ aliases:
 
 - **Board:** an infinite surface with elements, arrows, and frames.
 - **Frame:** a named area on a board.
-- **Zone:** a board or a frame that carries settings: a mode and a statement kind. Zones can also have an [[Elements#Anchors|anchor]], such as a Current frame on `crates/`.
+- **Zone:** a board or a frame that carries settings: a mode and a statement kind. Zones can also have an [[Elements#Anchors|anchor]], such as a Current frame anchored on `crates`.
 
 ## Modes
 

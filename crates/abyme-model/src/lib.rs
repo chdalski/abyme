@@ -5,6 +5,7 @@
 //! Where the files live and how they are written safely is the business of
 //! `abyme-core`.
 
+mod anchor;
 mod board;
 mod element;
 mod id;
@@ -15,7 +16,9 @@ mod schema;
 #[cfg(feature = "ts")]
 mod ts;
 mod untrusted;
+mod verification;
 
+pub use anchor::{Anchor, AnchorRule, MAX_ANCHOR_BYTES, MAX_SEGMENT_BYTES};
 pub use board::{BOARD_FORMAT, Board, BoardError, Rect};
 pub use element::{
     Element, ElementError, ElementFields, ElementProblem, MAX_FRONTMATTER_BYTES, Relations, TypeRef,
@@ -23,4 +26,5 @@ pub use element::{
 pub use id::{BoardId, BoardKind, ElementId, ElementKind, Id, IdError, IdKind, IdRule, MAX_ID_LEN};
 pub use object_only::ObjectOnly;
 pub use relation::RelationKind;
-pub use untrusted::shown;
+pub use untrusted::{FORMAT_AND_SEPARATORS, hides_or_breaks_text, shown};
+pub use verification::{CommitId, Verification, Verifier};

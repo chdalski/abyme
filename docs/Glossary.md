@@ -19,7 +19,7 @@ The docs, the UI, and the code use these terms alike. The type names are in [[Da
 | [[Elements\|Element]] | something with a stable identity on a board |
 | [[Elements#Native or Representation\|Native element]] | exists only on the board |
 | [[Elements#Native or Representation\|Representation]] | stands for an external resource |
-| [[Elements#Anchors\|Anchor]] | URI that connects a representation or a zone with an external resource |
+| [[Elements#Anchors\|Anchor]] | path relative to the project root, covering everything below it, that connects a representation or a zone with what it stands for; later also a fetcher's address |
 | [[Board Graph]] | all boards and elements with references, inner boards, and relations; lives in the core |
 | [[Board Graph\|Home]] | board or frame an element lies on |
 | [[Board Graph\|Reference]] | display of an element outside its home |
@@ -45,7 +45,7 @@ The docs, the UI, and the code use these terms alike. The type names are in [[Da
 | [[Reconciliation#Direction of Changes\|Base snapshot]] | state at the last reconciliation, basis for detecting the direction |
 | [[Change Requests\|Change request]] | change on the board that is to be implemented in the external resource |
 | [[Checks\|Review flag]] | “this needs to be reviewed” |
-| [[Checks#Verification Stamp\|Verification stamp]] | “last verified against commit X” |
+| [[Checks#Verification Stamp\|Verification stamp]] | “last verified against commit X, by the AI or a person” |
 | [[Current and Target\|Correspondence link]] | connection between a target element and a current element |
 | [[Current and Target#Diff\|Diff]] | difference between target and current |
 

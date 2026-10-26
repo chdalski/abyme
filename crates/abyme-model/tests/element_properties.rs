@@ -1,6 +1,9 @@
 //! Properties of the element file that hold for any element and any input.
 
-use abyme_model::{Element, ElementFields, ElementId, RelationKind, Relations, TypeRef};
+use abyme_model::{
+    Anchor, CommitId, Element, ElementFields, ElementId, RelationKind, Relations, TypeRef,
+    Verification, Verifier,
+};
 use proptest::prelude::*;
 
 /// Characters an element file can hold in its values; the same rule as the
@@ -62,6 +65,37 @@ fn relations() -> impl Strategy<Value = Relations> {
     )
 }
 
+/// Anchor text built from segments of the characters YAML treats
+/// specially, plain ones, spaces, and non-ASCII; whatever the anchor rules
+/// reject is filtered out by the caller.
+fn anchor_text() -> impl Strategy<Value = String> {
+    let piece = prop::sample::select(vec![
+        "a", "z", "0", "-", "_", ".", " ", "\"", "#", ": ", "'", "&", "*", "!", "%", "@", "`", "{",
+        "}", "[", "]", ",", "|", ">", "?", "é", "→", "x.md",
+    ]);
+    let segment = prop::collection::vec(piece, 1..6).prop_map(|pieces| pieces.concat());
+    prop::collection::vec(segment, 1..4).prop_map(|segments| segments.join("/"))
+}
+
+fn anchor() -> impl Strategy<Value = Anchor> {
+    anchor_text().prop_filter_map("an anchor the rules reject", |text| {
+        Anchor::try_from(text).ok()
+    })
+}
+
+fn stamp() -> impl Strategy<Value = Verification> {
+    (
+        prop_oneof!["[0-9a-f]{40}", "[0-9a-f]{64}"],
+        prop::sample::select(vec![Verifier::Ai, Verifier::Person]),
+    )
+        .prop_filter_map("not a commit ID", |(commit, by)| {
+            Some(Verification {
+                commit: CommitId::try_from(commit).ok()?,
+                by,
+            })
+        })
+}
+
 fn element() -> impl Strategy<Value = Element> {
     (
         element_id(),
@@ -70,19 +104,25 @@ fn element() -> impl Strategy<Value = Element> {
         proptest::option::of(allowed_text()),
         any::<String>(),
         relations(),
+        proptest::option::of(anchor()),
+        proptest::option::of(stamp()),
     )
-        .prop_map(|(id, type_ref, name, summary, body, relations)| {
-            Element::new(
-                id,
-                ElementFields {
-                    type_ref,
-                    name,
-                    summary,
-                    body,
-                    relations,
-                },
-            )
-        })
+        .prop_map(
+            |(id, type_ref, name, summary, body, relations, anchor, verified)| {
+                Element::new(
+                    id,
+                    ElementFields {
+                        type_ref,
+                        name,
+                        summary,
+                        body,
+                        relations,
+                        anchor,
+                        verified,
+                    },
+                )
+            },
+        )
         .prop_filter_map(
             "frontmatter over the limit or a relation to itself",
             Result::ok,
@@ -164,5 +204,38 @@ proptest! {
         let expected: ElementId = "main".parse().unwrap();
 
         let _ = Element::from_markdown(&expected, &format!("---\n{frontmatter}---\n"));
+    }
+
+    #[test]
+    fn reads_an_anchor_and_stamp_only_when_they_keep_the_rules(
+        anchor in prop_oneof![anchor_text(), any::<String>()],
+        verified in prop_oneof!["[0-9a-f]{40}", "[0-9a-f]{64}", "[0-9a-fA-F]{38,66}", any::<String>()],
+        verified_by in prop_oneof![Just("ai".to_owned()), Just("person".to_owned()), any::<String>()],
+    ) {
+        let expected: ElementId = "main".parse().unwrap();
+        let quoted = |text: &str| format!("{text:?}");
+        let text = format!(
+            "---\nid: main\ntype: t\nname: n\nanchor: {}\nverified: {}\nverified_by: {}\n---\n",
+            quoted(&anchor),
+            quoted(&verified),
+            quoted(&verified_by),
+        );
+        let keeps_the_rules = Anchor::try_from(anchor.clone()).is_ok()
+            && CommitId::try_from(verified.clone()).is_ok()
+            && Verifier::from_name(&verified_by).is_some();
+
+        let read = Element::from_markdown(&expected, &text);
+
+        // Rust's `{:?}` writes what YAML's double quotes read back, except
+        // the `\u{..}` escapes, which YAML rejects.
+        if keeps_the_rules && !text.contains("\\u{") {
+            prop_assert!(read.is_ok());
+        }
+        if let Ok(element) = read {
+            prop_assert_eq!(element.anchor().map(Anchor::as_str), Some(anchor.as_str()));
+            let stamp = element.verified();
+            prop_assert_eq!(stamp.map(|stamp| stamp.commit.as_str()), Some(verified.as_str()));
+            prop_assert_eq!(stamp.map(|stamp| stamp.by.as_str()), Some(verified_by.as_str()));
+        }
     }
 }

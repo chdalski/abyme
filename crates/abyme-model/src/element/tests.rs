@@ -1,7 +1,9 @@
 //! Tests of building, reading, and writing element files.
 
-use super::*;
 use rstest::rstest;
+
+use super::*;
+use crate::verification::{CommitId, Verifier};
 
 fn element_id(value: &str) -> ElementId {
     value.parse().unwrap()
@@ -21,6 +23,8 @@ fn main_element(name: &str, summary: Option<&str>) -> Result<Element, ElementErr
             summary: summary.map(str::to_owned),
             body: String::new(),
             relations: Relations::new(),
+            anchor: None,
+            verified: None,
         },
     )
 }
@@ -36,6 +40,8 @@ fn payment_service() -> Element {
             body: "Handles payments through Stripe. Refunds run asynchronously\nthrough the refund-worker.\n"
                 .to_owned(),
             relations: Relations::new(),
+            anchor: None,
+            verified: None,
         },
     )
     .unwrap()
@@ -211,7 +217,7 @@ fn rejects_frontmatter_without_the_required_fields(
 }
 
 #[rstest]
-#[case::unknown_key("anchor: \"a\"\n", ElementProblem::UnknownKey { key: "\"anchor\"".to_owned() })]
+#[case::unknown_key("statement: \"a\"\n", ElementProblem::UnknownKey { key: "\"statement\"".to_owned() })]
 #[case::duplicate_key_quoted_and_plain(
     "\"id\": \"other\"\n",
     ElementProblem::DuplicateKey { key: "\"id\"".to_owned() }
@@ -643,4 +649,165 @@ fn rejects_a_label_that_takes_the_frontmatter_past_the_limit() {
         error.problem(),
         ElementProblem::FrontmatterTooLarge { .. }
     ));
+}
+
+const COMMIT: &str = "0123456789abcdef0123456789abcdef01234567";
+
+/// The element `main` with the given anchor and stamp.
+fn main_with_anchor_and_stamp(
+    anchor: Option<&str>,
+    stamp: Option<Verifier>,
+) -> Result<Element, ElementError> {
+    Element::new(
+        element_id("main"),
+        ElementFields {
+            anchor: anchor.map(|anchor| Anchor::try_from(anchor.to_owned()).unwrap()),
+            verified: stamp.map(|by| Verification {
+                commit: CommitId::try_from(COMMIT.to_owned()).unwrap(),
+                by,
+            }),
+            ..main_with_relations(&[(RelationKind::Uses, "x", None)])
+                .unwrap()
+                .into_fields()
+        },
+    )
+}
+
+#[test]
+fn writes_anchor_and_stamp_after_the_summary_and_before_the_relations() {
+    let element =
+        main_with_anchor_and_stamp(Some("crates/payment-service"), Some(Verifier::Person)).unwrap();
+
+    let expected = format!(
+        "id: \"main\"\n\
+         type: \"t\"\n\
+         name: \"Main\"\n\
+         anchor: \"crates/payment-service\"\n\
+         verified: \"{COMMIT}\"\n\
+         verified_by: \"person\"\n\
+         relations:\n  \
+         - {{kind: \"uses\", to: \"x\"}}\n"
+    );
+    assert_eq!(frontmatter_of(&element.to_markdown()), expected);
+    assert_eq!(read_main(&element.to_markdown()).unwrap(), element);
+}
+
+#[rstest]
+#[case::anchor_alone(Some("docs/api.md"), None)]
+#[case::stamp_alone(None, Some(Verifier::Ai))]
+#[case::both(Some("docs/api.md"), Some(Verifier::Ai))]
+fn reads_back_an_anchor_and_a_stamp_with_or_without_each_other(
+    #[case] anchor: Option<&str>,
+    #[case] stamp: Option<Verifier>,
+) {
+    let element = main_with_anchor_and_stamp(anchor, stamp).unwrap();
+
+    let read = read_main(&element.to_markdown()).unwrap();
+
+    assert_eq!(read.anchor().map(Anchor::as_str), anchor);
+    assert_eq!(read.verified().map(|stamp| stamp.by), stamp);
+    assert_eq!(read, element);
+}
+
+#[test]
+fn reads_anchor_and_stamp_written_by_hand() {
+    let text = main_file(&format!(
+        "anchor: crates/x\nverified: {COMMIT}\nverified_by: ai\n"
+    ));
+
+    let read = read_main(&text).unwrap();
+
+    assert_eq!(read.anchor().map(Anchor::as_str), Some("crates/x"));
+    assert_eq!(
+        read.verified()
+            .map(|stamp| (stamp.commit.as_str(), stamp.by)),
+        Some((COMMIT, Verifier::Ai))
+    );
+}
+
+#[rstest]
+#[case::tilde("~")]
+#[case::null("null")]
+fn reads_a_yaml_null_word_as_an_anchor_and_writes_it_back_quoted(#[case] word: &str) {
+    let read = read_main(&main_file(&format!("anchor: {word}\n"))).unwrap();
+
+    assert_eq!(read.anchor().map(Anchor::as_str), Some(word));
+    assert!(
+        read.to_markdown()
+            .contains(&format!("anchor: \"{word}\"\n"))
+    );
+    assert_eq!(read_main(&read.to_markdown()).unwrap(), read);
+}
+
+#[rstest]
+#[case::empty_value("anchor:\n")]
+#[case::empty_string("anchor: \"\"\n")]
+fn rejects_an_empty_anchor(#[case] extra_lines: &str) {
+    assert!(matches!(
+        problem_of(&main_file(extra_lines)),
+        ElementProblem::InvalidAnchor {
+            rule: AnchorRule::Empty,
+            ..
+        }
+    ));
+}
+
+#[rstest]
+#[case::list_as_anchor(
+    "anchor: [a]\n",
+    ElementProblem::NonScalarValue { key: "\"anchor\"".to_owned() }
+)]
+#[case::mapping_as_anchor(
+    "anchor: {a: b}\n",
+    ElementProblem::NonScalarValue { key: "\"anchor\"".to_owned() }
+)]
+#[case::yaml_anchor_on_the_anchor("anchor: &x a\n", ElementProblem::Anchor)]
+#[case::anchor_twice(
+    "anchor: a\nanchor: b\n",
+    ElementProblem::DuplicateKey { key: "\"anchor\"".to_owned() }
+)]
+#[case::anchor_quoted_and_plain(
+    "anchor: a\n\"anchor\": b\n",
+    ElementProblem::DuplicateKey { key: "\"anchor\"".to_owned() }
+)]
+#[case::commit_alone(
+    "verified: \"0123456789abcdef0123456789abcdef01234567\"\n",
+    ElementProblem::IncompleteStamp { missing: "verified_by" }
+)]
+#[case::verifier_alone(
+    "verified_by: ai\n",
+    ElementProblem::IncompleteStamp { missing: "verified" }
+)]
+#[case::uppercase_verifier(
+    "verified: \"0123456789abcdef0123456789abcdef01234567\"\nverified_by: AI\n",
+    ElementProblem::UnknownVerifier { verifier: "\"AI\"".to_owned() }
+)]
+#[case::abbreviated_commit(
+    "verified: \"0123456\"\nverified_by: ai\n",
+    ElementProblem::InvalidCommit { commit: "\"0123456\"".to_owned() }
+)]
+fn rejects_anchors_and_stamps_that_break_the_rules(
+    #[case] extra_lines: &str,
+    #[case] problem: ElementProblem,
+) {
+    assert_eq!(problem_of(&main_file(extra_lines)), problem);
+}
+
+#[test]
+fn rejects_a_reserved_anchor_from_a_file() {
+    assert!(matches!(
+        problem_of(&main_file("anchor: \".git/config\"\n")),
+        ElementProblem::InvalidAnchor {
+            rule: AnchorRule::Reserved,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn names_a_yaml_anchor_unlike_the_anchor_field() {
+    assert_eq!(
+        ElementProblem::Anchor.to_string(),
+        "the frontmatter uses a YAML anchor"
+    );
 }

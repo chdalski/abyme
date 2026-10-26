@@ -62,9 +62,9 @@ So one question matters for every element: **Does it stand for something outside
 
 ## Anchors
 
-An anchor is a URI that connects a representation with what it stands for. Usually it points to a file or a folder in the repo, for example `file://crates/payment-service/` or `file://docs/api.md`. For sources outside the repo, a [[Extensions#Fetchers|fetcher]] will later define the scheme, such as `jira://PROJ-123`.
+An anchor connects a representation with what it stands for. In the repo it is a path relative to the project root, such as `crates/payment-service` or `docs/api.md`, and it covers that path and everything below it. For sources outside the repo, a [[Extensions#Fetchers|fetcher]] will later define its own form, such as `jira://PROJ-123`.
 
-[[Boards and Zones|Zones]] can have anchors too. A Current frame on `file://crates/` then also notices newly added crates. How anchors make changes stand out is described in [[Reconciliation#Detecting Changes]].
+[[Boards and Zones|Zones]] can have anchors too. A Current frame anchored on `crates` then also notices newly added crates. How anchors make changes stand out is described in [[Reconciliation#Detecting Changes]].
 
 ## From Draft to Representation
 

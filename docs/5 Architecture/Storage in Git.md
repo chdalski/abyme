@@ -89,6 +89,9 @@ id: "payment-service"
 type: "c4/container"
 name: "Payment Service"
 summary: "Payment processing through Stripe"
+anchor: "crates/payment-service"
+verified: "d0027c42ce0671bb10017ba63bca67fe18055d46"
+verified_by: "ai"
 relations:
   - {kind: "depends_on", to: "stripe"}
   - {kind: "uses", to: "orders-db", label: "SQL"}
@@ -97,13 +100,14 @@ Handles payments through Stripe. Refunds run asynchronously
 through the refund-worker.
 ```
 
-- **Fields:** `id`, which equals the file name, `type`, which is never empty, `name`, the optional `summary`, and the optional `relations`. Other keys are rejected.
+- **Fields:** `id`, which equals the file name, `type`, which is never empty, `name`, the optional `summary`, the optional `anchor`, the optional stamp `verified` with `verified_by`, and the optional `relations`. Other keys are rejected.
+- **Anchor and stamp:** `anchor` is a path relative to the project root, with the rules in [[Data Model#Rules]]. `verified` is a full commit ID and `verified_by` is `ai` or `person`; the two come together or not at all. Elements without them have none of these keys.
 - **Relations:** the element's outgoing [[Relations|relations]], one line each with `kind`, `to`, and an optional `label`, sorted by the kind's name, then by the target. Adding or removing a relation changes one line. An element without relations has no `relations` key. A relation may point to an element whose file is missing; reading accepts it.
 - **Writing:** Abyme writes every value double-quoted. It escapes backslash, double quote, tab, line feed, carriage return, U+0085, U+2028, U+2029, and U+FEFF and keeps every other character as it is. Values written by hand may use any YAML scalar style, and relations any YAML style.
-- **Limits:** `type`, `name`, `summary`, and the labels hold only characters YAML counts as printable: no control characters other than tab, line feed, carriage return, and U+0085, and neither U+FFFE nor U+FFFF. The frontmatter is at most 64 KiB, counted as Abyme writes it.
-- **Strict YAML:** The frontmatter is one mapping of plain values, except `relations`, a list of mappings of plain values. Aliases, anchors, tags, directives, and document markers are rejected, so the file means the same to every reader.
+- **Limits:** `type`, `name`, `summary`, the anchor, and the labels hold only characters YAML counts as printable: no control characters other than tab, line feed, carriage return, and U+0085, and neither U+FFFE nor U+FFFF. The frontmatter is at most 64 KiB, counted as Abyme writes it.
+- **Strict YAML:** The frontmatter is one mapping of plain values, except `relations`, a list of mappings of plain values. Aliases, YAML anchors, tags, directives, and document markers are rejected, so the file means the same to every reader.
 - **The body** below the closing `---` line is kept byte for byte.
-- **Later fields:** `attributes`, `anchor`, `statement`, `verified`, `inner_board`, and `expected_anchor` from the [[Data Model#Types|data model]] come with the slices that need them.
+- **Later fields:** `attributes`, `statement`, `inner_board`, and `expected_anchor` from the [[Data Model#Types|data model]] come with the slices that need them.
 
 ## Board File
 

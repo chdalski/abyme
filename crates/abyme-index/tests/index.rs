@@ -150,6 +150,8 @@ fn element(id: &str, name: &str, body: &str) -> TestResult<Element> {
             summary: None,
             body: body.to_owned(),
             relations: Relations::new(),
+            anchor: None,
+            verified: None,
         },
     )?)
 }

@@ -68,6 +68,8 @@ fn element(id: ElementId, mut relations: Relations) -> Option<Element> {
             summary: None,
             body: String::new(),
             relations,
+            anchor: None,
+            verified: None,
         },
     )
     .ok()

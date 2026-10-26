@@ -49,6 +49,22 @@ pub fn emit(element: &Element) -> String {
         .as_deref()
         .map(|summary| format!("summary: {}\n", quoted(summary)))
         .unwrap_or_default();
+    let anchor = element
+        .anchor
+        .as_ref()
+        .map(|anchor| format!("anchor: {}\n", quoted(anchor.as_str())))
+        .unwrap_or_default();
+    let verified = element
+        .verified
+        .as_ref()
+        .map(|stamp| {
+            format!(
+                "verified: {}\nverified_by: {}\n",
+                quoted(stamp.commit.as_str()),
+                quoted(stamp.by.as_str())
+            )
+        })
+        .unwrap_or_default();
     let relations = element
         .relations
         .iter()
@@ -71,7 +87,7 @@ pub fn emit(element: &Element) -> String {
         format!("relations:\n{relations}")
     };
     format!(
-        "id: {}\ntype: {}\nname: {}\n{summary}{relations}",
+        "id: {}\ntype: {}\nname: {}\n{summary}{anchor}{verified}{relations}",
         quoted(element.id.as_str()),
         quoted(element.type_ref.as_str()),
         quoted(&element.name),

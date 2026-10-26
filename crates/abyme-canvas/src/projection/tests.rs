@@ -33,6 +33,8 @@ fn element(id: &str, name: &str, summary: Option<&str>, body: &str) -> Element {
             summary: summary.map(str::to_owned),
             body: body.to_owned(),
             relations: Relations::new(),
+            anchor: None,
+            verified: None,
         },
     )
     .unwrap()

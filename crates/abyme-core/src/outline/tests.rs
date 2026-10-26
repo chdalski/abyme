@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 
-use abyme_model::{ElementFields, Rect, Relations, TypeRef};
+use abyme_model::{ElementFields, FORMAT_AND_SEPARATORS, Rect, Relations, TypeRef};
 use proptest::prelude::*;
 use rstest::rstest;
 
@@ -28,6 +28,8 @@ fn element(id: &str, type_ref: &str, name: &str, summary: Option<&str>) -> Eleme
             summary: summary.map(str::to_owned),
             body: String::new(),
             relations: Relations::new(),
+            anchor: None,
+            verified: None,
         },
     )
     .unwrap()
@@ -327,6 +329,8 @@ fn arbitrary_element(index: usize) -> impl Strategy<Value = Option<Element>> {
                     summary,
                     body: String::new(),
                     relations,
+                    anchor: None,
+                    verified: None,
                 },
             )
             .ok()
@@ -363,7 +367,7 @@ proptest! {
         prop_assert_eq!(outline.matches('\n').count(), expected);
         let inner = outline.replace('\n', "");
         prop_assert!(
-            !inner.chars().any(needs_escape),
+            !inner.chars().any(hides_or_breaks_text),
             "{:?}",
             outline
         );
@@ -860,9 +864,9 @@ fn escapes_a_hostile_description_but_keeps_its_lines_tabs_and_backslashes() {
         "{detail:?}"
     );
     assert!(
-        !detail
-            .chars()
-            .any(|character| character != '\n' && character != '\t' && needs_escape(character)),
+        !detail.chars().any(|character| character != '\n'
+            && character != '\t'
+            && hides_or_breaks_text(character)),
         "{detail:?}"
     );
 }

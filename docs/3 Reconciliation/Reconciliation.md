@@ -38,10 +38,10 @@ Changes in the repo are detected without source-specific code, through anchors a
 
 | Anchor | points to | Element |
 |---|---|---|
-| `file://crates/payment-service/` | a folder | container “Payment Service” |
-| `file://docs/api.md` | a file | document “API description” |
-| `file://migrations/` | a folder | datastore “Orders DB” |
-| `file://crates/` | a folder, as the anchor of a zone | Current frame “Crates” |
+| `crates/payment-service` | a folder | container “Payment Service” |
+| `docs/api.md` | a file | document “API description” |
+| `migrations` | a folder | datastore “Orders DB” |
+| `crates` | a folder, as the anchor of a zone | Current frame “Crates” |
 
 **Steps:**
 
@@ -50,7 +50,7 @@ Changes in the repo are detected without source-specific code, through anchors a
 3. Abyme matches the paths against the anchors. If a changed file lies under an anchor, the element gets a review flag. Through the relation chain, dependent elements are flagged too.
 4. The AI rereads the affected places, updates the element, and sets a new verification stamp.
 
-**Example:** Someone changes `crates/payment-service/src/refund.rs`. The file lies under the anchor `file://crates/payment-service/`, so “Payment Service” is flagged.
+**Example:** Someone changes `crates/payment-service/src/refund.rs`. The file lies under the anchor `crates/payment-service`, so “Payment Service” is flagged.
 
 **Anchors of a zone** show what is missing or gone:
 

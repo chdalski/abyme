@@ -27,6 +27,9 @@ pub struct Fields {
     pub type_ref: String,
     pub name: String,
     pub summary: Option<String>,
+    pub anchor: Option<String>,
+    pub verified: Option<String>,
+    pub verified_by: Option<String>,
     pub relations: Relations,
 }
 
@@ -93,6 +96,9 @@ fn collect_fields(entries: &Entries) -> Result<Fields, ElementProblem> {
     let mut type_ref = None;
     let mut name = None;
     let mut summary = None;
+    let mut anchor = None;
+    let mut verified = None;
+    let mut verified_by = None;
     let mut relations = Relations::new();
     for (key_node, value_node) in entries {
         check_node(key_node)?;
@@ -119,6 +125,9 @@ fn collect_fields(entries: &Entries) -> Result<Fields, ElementProblem> {
             "type" => &mut type_ref,
             "name" => &mut name,
             "summary" => &mut summary,
+            "anchor" => &mut anchor,
+            "verified" => &mut verified,
+            "verified_by" => &mut verified_by,
             unknown => {
                 return Err(ElementProblem::UnknownKey {
                     key: shown(unknown, DETAIL_LIMIT),
@@ -132,6 +141,9 @@ fn collect_fields(entries: &Entries) -> Result<Fields, ElementProblem> {
         type_ref: type_ref.ok_or(ElementProblem::MissingKey { key: "type" })?,
         name: name.ok_or(ElementProblem::MissingKey { key: "name" })?,
         summary,
+        anchor,
+        verified,
+        verified_by,
         relations,
     })
 }

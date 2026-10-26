@@ -1,5 +1,5 @@
 **Repository:** root
-**Status:** NotStarted
+**Status:** InProgress
 **Created:** 2026-10-26
 
 ## Goal
@@ -26,7 +26,7 @@ the only way to set a stamp.
 
 ## Steps
 
-- [ ] Anchors and stamps in the element file
+- [x] Anchors and stamps in the element file
 - [ ] Anchors in requests and in the element detail
 
 ## Tasks
@@ -38,37 +38,39 @@ read and written with the same strictness as its other fields.
 
 Review path: Security-Hybrid
 
-- [ ] An element file may hold `anchor`, a path relative to the project
+- [x] An element file may hold `anchor`, a path relative to the project
       root such as `"crates/payment-service"`, and the stamp as two keys,
       `verified`, a full commit ID, and `verified_by`, `"ai"` or
       `"person"`. Abyme writes them after `summary` and before
       `relations`, double-quoted; an element without them has none of the
       keys, so every existing element file reads and writes as before,
       byte for byte.
-- [ ] An anchor is rejected when it is empty, starts with `/`, has an empty,
-      `.`, or `..` segment, ends with `/`, holds a backslash, a control
-      character, a bidi control, or another character a name may not hold,
-      or is longer than 4096 bytes or has a segment longer than 255 bytes.
+- [x] An anchor is rejected when it is empty, starts with `/`, has an empty,
+      `.`, or `..` segment, ends with `/`, holds a backslash or a colon,
+      holds a character that the outlines escape (a control character, or
+      an invisible or reordering format or separator character), or
+      another character a name may not hold, or is longer than 4096 bytes
+      or has a segment longer than 255 bytes.
       It is also rejected when its first segment is `abyme` or `.abyme`, or
       when any segment is `.git`, compared without regard to ASCII case;
       an `abyme` segment deeper in the path is accepted.
-- [ ] A commit ID is rejected unless it is exactly 40 or 64 lowercase hex
+- [x] A commit ID is rejected unless it is exactly 40 or 64 lowercase hex
       digits. `verified` and `verified_by` come together or not at all;
       any other value of `verified_by` is rejected. A stamp is valid with
       or without an anchor.
-- [ ] Errors about an anchor or a stamp show the value only escaped and
+- [x] Errors about an anchor or a stamp show the value only escaped and
       shortened, as for the other fields.
-- [ ] The property tests of element files generate anchors and stamps:
+- [x] The property tests of element files generate anchors and stamps:
       every element written reads back equal, and arbitrary text never
       makes reading panic.
-- [ ] No document in `docs/` writes a path in the project as a `file://`
+- [x] No document in `docs/` writes a path in the project as a `file://`
       anchor or defines an anchor of such a path as a URI; a reader of
       Storage in Git and Data Model can tell how anchors and stamps are
       stored and which values they take, and Elements, Reconciliation,
       Extensions, and the Glossary show anchors as project-relative paths
       that cover the path and everything below it. A scheme such as
       `jira://` for a later fetcher stays as it is.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace
+- [x] `cargo test --workspace`, `cargo clippy --workspace
       --all-targets`, and `cargo fmt --all --check` pass.
 
 ### Task 2: Anchors in requests and in the element detail
@@ -112,6 +114,11 @@ Review path: Security-Hybrid
   cannot silently miss changes.
 - **Anchors are rejected, not normalized,** and compared byte for byte
   later; normalizing would make some file names impossible to anchor.
+- **No colon in an anchor:** on some systems `C:x` is not relative to the
+  project root, and a leading `:` means something to Git.
+- **The characters an anchor may not hold are the ones the outlines
+  escape:** a reader cannot see them in a review, so an anchor with one
+  would follow a different path than it seems to name.
 - **Reserved names:** only the project root's `abyme` and `.abyme` hold
   Abyme's files, so they are reserved as the first segment only; a stamp
   written into an element file must never flag the element that holds it.

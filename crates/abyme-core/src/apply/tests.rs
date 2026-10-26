@@ -38,6 +38,8 @@ fn element(id: &str) -> Element {
             summary: None,
             body: String::new(),
             relations: Relations::new(),
+            anchor: None,
+            verified: None,
         },
     )
     .unwrap()
@@ -945,6 +947,8 @@ fn snapshot_with_full_loose() -> Snapshot {
                 (RelationKind::Uses, element_id("orders-db")),
                 Some("SQL".to_owned()),
             )]),
+            anchor: None,
+            verified: None,
         },
     )
     .unwrap();
@@ -1420,4 +1424,38 @@ fn rejects_deleting_an_unknown_element() {
         ),
         OperationProblem::UnknownElement(element_id("nope"))
     );
+}
+
+#[test]
+fn creates_elements_without_an_anchor_or_a_stamp() {
+    let json = r#"[{"op": "create_element", "key": "e", "type_ref": "t", "name": "Fresh"}]"#;
+
+    let applied = apply(&snapshot(), &operations(json)).unwrap();
+
+    let created = written_elements(&applied);
+    let fresh = created.first().unwrap();
+    assert_eq!(fresh.anchor(), None);
+    assert_eq!(fresh.verified(), None);
+}
+
+#[test]
+fn keeps_the_anchor_and_the_stamp_when_a_relation_changes() {
+    let mut snapshot = snapshot();
+    let stamped = Element::from_markdown(
+        &element_id("loose"),
+        "---\nid: loose\ntype: t\nname: Loose\nanchor: crates/loose\n\
+         verified: \"0123456789abcdef0123456789abcdef01234567\"\nverified_by: person\n---\n",
+    )
+    .unwrap();
+    snapshot
+        .elements
+        .insert(element_id("loose"), stamped.clone());
+    let json = r#"[{"op": "create_relation", "from": {"existing": "loose"}, "kind": "uses", "to": {"existing": "orders-db"}}]"#;
+
+    let applied = apply(&snapshot, &operations(json)).unwrap();
+
+    let changed = written_elements(&applied);
+    let loose = changed.first().unwrap();
+    assert_eq!(loose.anchor(), stamped.anchor());
+    assert_eq!(loose.verified(), stamped.verified());
 }

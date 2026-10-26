@@ -323,6 +323,8 @@ impl<'snapshot> Draft<'snapshot> {
                 summary: summary.map(str::to_owned),
                 body: body.to_owned(),
                 relations: Relations::new(),
+                anchor: None,
+                verified: None,
             },
         )
         .map_err(|error| OperationProblem::InvalidElement(error.problem().clone()))?;

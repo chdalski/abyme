@@ -76,11 +76,11 @@ Fetchers come later. They fetch data from sources outside the repo, such as tick
 
 | Source | Route | Anchor | Typical mode |
 |---|---|---|---|
-| code, e.g. crates | AI, optionally a parser for `Cargo.toml` | `file://crates/` | synced |
-| Markdown documents | AI | `file://docs/` | synced |
-| images in the repo | AI, e.g. for an image description | `file://assets/logo.png` | mirrored |
-| DB schema | AI through the migrations in the repo | `file://migrations/` | mirrored |
-| website components | AI through the source code | `file://src/pages/` | synced |
+| code, e.g. crates | AI, optionally a parser for `Cargo.toml` | `crates` | synced |
+| Markdown documents | AI | `docs` | synced |
+| images in the repo | AI, e.g. for an image description | `assets/logo.png` | mirrored |
+| DB schema | AI through the migrations in the repo | `migrations` | mirrored |
+| website components | AI through the source code | `src/pages` | synced |
 | tickets | fetcher (later) | `jira://PROJ-123` | synced |
 
 > [!todo] Open

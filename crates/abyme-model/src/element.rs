@@ -1,18 +1,22 @@
 //! The element file: Markdown with a YAML frontmatter that holds the
-//! element's ID, type, name, summary, and outgoing relations.
+//! element's ID, type, name, summary, anchor, verification stamp, and
+//! outgoing relations.
 //!
 //! The frontmatter is read with `rlsp-yaml-parser` and written by an emitter
-//! of our own that double-quotes every value. `type`, `name`, `summary`, and
-//! the relations' labels hold only characters the parser can read back, and
-//! the frontmatter is at most [`MAX_FRONTMATTER_BYTES`], because the parser
-//! rejects other characters even as escapes and parses escapes slowly. An
-//! [`Element`] can only be built through these checks, so every element read
-//! can be written again, and nothing written is rejected on reading.
+//! of our own that double-quotes every value. `type`, `name`, `summary`, the
+//! anchor, and the relations' labels hold only characters the parser can
+//! read back, and the frontmatter is at most [`MAX_FRONTMATTER_BYTES`],
+//! because the parser rejects other characters even as escapes and parses
+//! escapes slowly. An [`Element`] can only be built through these checks, so
+//! every element read can be written again, and nothing written is rejected
+//! on reading.
 
 use std::collections::BTreeMap;
 
+use crate::anchor::{Anchor, AnchorRule};
 use crate::id::ElementId;
 use crate::relation::RelationKind;
+use crate::verification::{Verification, stamp};
 
 mod frontmatter;
 mod yaml;
@@ -27,8 +31,9 @@ pub const MAX_FRONTMATTER_BYTES: usize = 64 * 1024;
 /// relations sort by the kind's name, then the target.
 pub type Relations = BTreeMap<(RelationKind, ElementId), Option<String>>;
 
-/// An element: what it is, what it is called, its description, and its
-/// relations to other elements.
+/// An element: what it is, what it is called, its description, what it
+/// stands for, when it was last verified, and its relations to other
+/// elements.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Element {
     id: ElementId,
@@ -36,6 +41,8 @@ pub struct Element {
     name: String,
     summary: Option<String>,
     body: String,
+    anchor: Option<Anchor>,
+    verified: Option<Verification>,
     relations: Relations,
 }
 
@@ -52,6 +59,10 @@ pub struct ElementFields {
     pub summary: Option<String>,
     /// The description as Markdown.
     pub body: String,
+    /// The path in the project the element stands for, if any.
+    pub anchor: Option<Anchor>,
+    /// The verification stamp, if the element was verified.
+    pub verified: Option<Verification>,
     /// The outgoing relations.
     pub relations: Relations,
 }
@@ -113,8 +124,8 @@ pub enum ElementProblem {
     /// The frontmatter uses an alias.
     #[error("the frontmatter uses an alias")]
     Alias,
-    /// The frontmatter uses an anchor.
-    #[error("the frontmatter uses an anchor")]
+    /// The frontmatter uses a YAML anchor (`&name`).
+    #[error("the frontmatter uses a YAML anchor")]
     Anchor,
     /// The frontmatter uses a tag.
     #[error("the frontmatter uses a tag")]
@@ -128,7 +139,7 @@ pub enum ElementProblem {
         /// The key, escaped.
         key: String,
     },
-    /// A key is not one of `id`, `type`, `name`, and `summary`.
+    /// A key is not one of the keys an element file holds.
     #[error("the key {key} is unknown")]
     UnknownKey {
         /// The key, escaped.
@@ -225,6 +236,32 @@ pub enum ElementProblem {
         /// The kind.
         kind: RelationKind,
     },
+    /// The anchor breaks a rule.
+    #[error("the anchor {anchor} {rule}")]
+    InvalidAnchor {
+        /// The anchor, escaped and shortened.
+        anchor: String,
+        /// The rule it breaks.
+        rule: AnchorRule,
+    },
+    /// The stamp's commit is not a full commit ID.
+    #[error("the commit {commit} is not a full commit ID of 40 or 64 lowercase hex digits")]
+    InvalidCommit {
+        /// The commit, escaped and shortened.
+        commit: String,
+    },
+    /// The stamp names an unknown verifier.
+    #[error("{verifier} is not a verifier; use `ai` or `person`")]
+    UnknownVerifier {
+        /// The verifier, escaped and shortened.
+        verifier: String,
+    },
+    /// Only one of `verified` and `verified_by` is present.
+    #[error("the stamp lacks `{missing}`; `verified` and `verified_by` come together")]
+    IncompleteStamp {
+        /// The missing key.
+        missing: &'static str,
+    },
 }
 
 impl Element {
@@ -241,6 +278,8 @@ impl Element {
             name,
             summary,
             body,
+            anchor,
+            verified,
             relations,
         } = fields;
         let element = Self {
@@ -249,6 +288,8 @@ impl Element {
             name,
             summary,
             body,
+            anchor,
+            verified,
             relations,
         };
         match element.broken_rule() {
@@ -287,6 +328,12 @@ impl Element {
             return Err(fail(ElementProblem::IdMismatch { found: id }));
         }
         let type_ref = TypeRef::try_from(fields.type_ref).map_err(fail)?;
+        let anchor = fields
+            .anchor
+            .map(Anchor::try_from)
+            .transpose()
+            .map_err(fail)?;
+        let verified = stamp(fields.verified, fields.verified_by).map_err(fail)?;
         Self::new(
             id,
             ElementFields {
@@ -294,6 +341,8 @@ impl Element {
                 name: fields.name,
                 summary: fields.summary,
                 body: body.to_owned(),
+                anchor,
+                verified,
                 relations: fields.relations,
             },
         )
@@ -336,6 +385,18 @@ impl Element {
         &self.body
     }
 
+    /// The path in the project the element stands for, if any.
+    #[must_use]
+    pub const fn anchor(&self) -> Option<&Anchor> {
+        self.anchor.as_ref()
+    }
+
+    /// The element's verification stamp, if it was verified.
+    #[must_use]
+    pub const fn verified(&self) -> Option<&Verification> {
+        self.verified.as_ref()
+    }
+
     /// The element's outgoing relations.
     #[must_use]
     pub const fn relations(&self) -> &Relations {
@@ -351,6 +412,8 @@ impl Element {
             name: self.name,
             summary: self.summary,
             body: self.body,
+            anchor: self.anchor,
+            verified: self.verified,
             relations: self.relations,
         }
     }
@@ -431,7 +494,7 @@ fn disallowed_character(field: &'static str, text: &str) -> Option<ElementProble
 /// back: everything except the C0 controls other than tab, line feed, and
 /// carriage return, DEL, the C1 controls other than U+0085, U+FFFE, and
 /// U+FFFF.
-const fn is_allowed(character: char) -> bool {
+pub const fn is_allowed(character: char) -> bool {
     !matches!(
         character,
         '\u{0}'..='\u{8}'
