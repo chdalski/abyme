@@ -1,0 +1,60 @@
+# cargo-deny's checks of the Rust dependencies, run from the repository root
+# with `cargo deny --locked check`. Entries that let a dependency pass (allowed
+# licenses, license exceptions, advisory ignores, sources) are added only when
+# the user decides; otherwise they may only be removed.
+
+[graph]
+# Abyme builds on Unix only, and the devcontainer runs on these two.
+targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
+# Optional features such as `json-schema` and `ts` pull in crates as well.
+all-features = true
+
+[advisories]
+# A vulnerability always fails the check; so do an unsound or unmaintained
+# crate wherever it sits in the graph, and a yanked version.
+unmaintained = "all"
+unsound = "all"
+yanked = "deny"
+
+[licenses]
+# Licenses that permit use in an MIT project without conditions beyond
+# keeping notices.
+allow = [
+    "0BSD",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    "ISC",
+    "MIT",
+    "MIT-0",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+confidence-threshold = 0.8
+# MPL-2.0 per crate, so that a new crate under it fails the check instead of
+# passing unseen. The first four come with Tauri's build, `option-ext` with
+# lancedb and Tauri.
+exceptions = [
+    { allow = ["MPL-2.0"], crate = "cssparser" },
+    { allow = ["MPL-2.0"], crate = "cssparser-macros" },
+    { allow = ["MPL-2.0"], crate = "dtoa-short" },
+    { allow = ["MPL-2.0"], crate = "selectors" },
+    { allow = ["MPL-2.0"], crate = "option-ext" },
+]
+
+[bans]
+# lancedb and Tauri pull in many crates in several versions.
+multiple-versions = "allow"
+wildcards = "deny"
+# The workspace's crates depend on each other by path; none is published.
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

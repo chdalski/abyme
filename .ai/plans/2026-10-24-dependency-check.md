@@ -22,7 +22,7 @@ one afterwards.
 ## Steps
 
 - [x] Install cargo-deny in the devcontainer
-- [ ] Check advisories, licenses, and sources
+- [x] Check advisories, licenses, and sources
 - [ ] Enforce the forbidden features
 
 ## Tasks
@@ -58,23 +58,23 @@ workspace, and its first run shows what the dependencies violate today.
 
 Review path: Security-Hybrid
 
-- [ ] The check covers the whole workspace with all features, normal,
+- [x] The check covers the whole workspace with all features, normal,
       build, and dev dependencies, for x86_64 and aarch64 Linux.
-- [ ] A vulnerability, an unsound or unmaintained crate anywhere in the
+- [x] A vulnerability, an unsound or unmaintained crate anywhere in the
       graph, and a yanked version each fail the check; `deny.toml`
       ignores no advisory.
-- [ ] The license allow-list is exactly: MIT, MIT-0, Apache-2.0,
+- [x] The license allow-list is exactly: MIT, MIT-0, Apache-2.0,
       Apache-2.0 WITH LLVM-exception, BSD-2-Clause, BSD-3-Clause,
       0BSD, ISC, Zlib, Unicode-3.0, Unlicense, CC0-1.0, and BSL-1.0.
       MPL-2.0 is allowed only for `cssparser`, `cssparser-macros`,
       `dtoa-short`, `selectors`, and `option-ext`.
-- [ ] Only crates.io is an allowed source: a git dependency added for
+- [x] Only crates.io is an allowed source: a git dependency added for
       the test fails the check; the handoff shows it, and the test
       change is not committed.
-- [ ] `cargo deny --locked check` leaves `Cargo.lock` byte-identical.
-- [ ] From the root `CLAUDE.md`, a reader learns how to run the check
+- [x] `cargo deny --locked check` leaves `Cargo.lock` byte-identical.
+- [x] From the root `CLAUDE.md`, a reader learns how to run the check
       and what it checks.
-- [ ] The handoff lists every finding of the first run with its check,
+- [x] The handoff lists every finding of the first run with its check,
       crate, and advisory ID where the check has one, and the commit of
       the advisory database it used. No finding is ignored or fixed in
       this plan.

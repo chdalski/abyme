@@ -17,6 +17,7 @@ cargo test --workspace <filter>          # only the tests whose name contains <f
 cargo clippy --workspace --all-targets   # zero warnings: the workspace lints deny them
 cargo fmt --all                          # --check to verify only
 cargo clean
+cargo deny --locked check                # advisories, licenses, sources, and bans of the Rust dependencies; see Conventions
 pnpm --dir crates/abyme-canvas/ui install --frozen-lockfile   # the canvas UI's packages; none runs a build script
 pnpm --dir crates/abyme-canvas/ui check   # TypeScript, ESLint, and Prettier; `format` rewrites
 pnpm --dir crates/abyme-canvas/ui test    # Vitest
@@ -61,6 +62,7 @@ keywords.
 - `docs/Glossary.md` defines the terms that docs, UI, and code share; add new terms there.
 - Decided stack: a Rust Cargo workspace with crates under `crates/`; the canvas is a Tauri app with React Flow, its UI in TypeScript.
 - License MIT: every dependency must be MIT-compatible.
+- `cargo deny --locked check` checks the Rust dependencies against `deny.toml`, from the repository root: RustSec advisories (it fetches the advisory database on each run, so it needs network), licenses, sources, and banned crates and features. A finding names its check, crate, and advisory; entries in `deny.toml` that let a dependency pass are added only when the user decides.
 - `.devcontainer/` provides the toolchains: Rust (linked with mold), protoc with the protobuf well-known types for LanceDB's build, WebKitGTK and the Tauri CLI (`cargo tauri`) for the canvas, cargo-deny for the dependency check, Node with pnpm, uv, and Go.
 
 ## References
