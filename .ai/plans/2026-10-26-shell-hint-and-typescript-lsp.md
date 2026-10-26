@@ -18,7 +18,7 @@ and the TypeScript language server fails to start, so agents cannot use
 ## Steps
 
 - [x] Correct the agent hints in `CLAUDE.md` and the two test comments
-- [ ] Install a TypeScript with `tsserver` for the language server
+- [x] Install a TypeScript with `tsserver` for the language server
 
 ## Tasks
 
@@ -53,17 +53,17 @@ created, so the running container gets the same install by hand.
 
 Review path: Security-Hybrid
 
-- [ ] `.devcontainer/post-create.sh` installs `typescript@6` globally.
+- [x] `.devcontainer/post-create.sh` installs `typescript@6` globally.
       Its comment says two things: the language server uses the global
       TypeScript because `/workspace` has no `node_modules/typescript`,
       and TypeScript 7 ships no `tsserver`, which the server needs.
-- [ ] The "Plugins and Language Servers" section of
+- [x] The "Plugins and Language Servers" section of
       `.devcontainer/README.md` names TypeScript 6 among the packages
       `post-create.sh` installs.
-- [ ] `bash -n .devcontainer/post-create.sh` passes.
-- [ ] In the running container, `npm ls -g typescript` reports a 6.x
+- [x] `bash -n .devcontainer/post-create.sh` passes.
+- [x] In the running container, `npm ls -g typescript` reports a 6.x
       version.
-- [ ] `typescript-language-server --stdio` started with `/workspace` as
+- [x] `typescript-language-server --stdio` started with `/workspace` as
       its root answers `initialize` without an error and returns
       document symbols for `crates/abyme-canvas/ui/src/App.tsx`; the
       handoff shows both responses.

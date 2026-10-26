@@ -20,7 +20,9 @@ fi
 # Language servers for the official TypeScript and Python code intelligence
 # plugins (installed by post-start.sh); rust-analyzer and gopls come with the
 # Rust and Go features. Installed here because npm only exists once the Node
-# feature has run.
+# feature has run. typescript-language-server uses the global TypeScript, since
+# /workspace has no node_modules/typescript (the canvas UI has its own), and
+# needs its tsserver, which TypeScript 7 no longer ships.
 if command -v npm >/dev/null; then
-  npm install -g --no-fund --no-audit typescript typescript-language-server pyright
+  npm install -g --no-fund --no-audit typescript@6 typescript-language-server pyright
 fi

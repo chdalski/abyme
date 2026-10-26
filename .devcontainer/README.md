@@ -224,9 +224,9 @@ from `claude-plugins-official` are installed automatically — install plugins
 from other marketplaces by hand. A failed install warns and the start
 continues.
 
-`post-create.sh` installs `typescript-language-server` and `pyright` for the
-TypeScript and Python plugins; `rust-analyzer` and `gopls` come with the Rust
-and Go features.
+`post-create.sh` installs TypeScript 6, `typescript-language-server`, and
+`pyright` for the TypeScript and Python plugins; `rust-analyzer` and `gopls`
+come with the Rust and Go features.
 
 ## Claude Code Updates
 
