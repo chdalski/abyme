@@ -1,5 +1,5 @@
 **Repository:** root
-**Status:** NotStarted
+**Status:** InProgress
 **Created:** 2026-10-24
 
 ## Goal
@@ -21,7 +21,7 @@ one afterwards.
 
 ## Steps
 
-- [ ] Install cargo-deny in the devcontainer
+- [x] Install cargo-deny in the devcontainer
 - [ ] Check advisories, licenses, and sources
 - [ ] Enforce the forbidden features
 
@@ -37,18 +37,18 @@ release binary pinned per architecture by SHA-256.
 
 Review path: Security-Hybrid
 
-- [ ] The Dockerfile installs cargo-deny 0.20.2, verified against a
+- [x] The Dockerfile installs cargo-deny 0.20.2, verified against a
       SHA-256 per architecture written in the Dockerfile, and fails
       before extracting an archive whose hash does not match, and on an
       architecture other than amd64 and arm64.
-- [ ] `cargo deny --version` in the running container reports 0.20.2.
-- [ ] Each pinned hash equals the release's own `.sha256` file and the
+- [x] `cargo deny --version` in the running container reports 0.20.2.
+- [x] Each pinned hash equals the release's own `.sha256` file and the
       digest GitHub reports for the asset; the handoff names all three
       per architecture.
-- [ ] A run of the install commands with a wrong hash and one with an
+- [x] A run of the install commands with a wrong hash and one with an
       unknown architecture both exit non-zero, and the handoff shows
       both.
-- [ ] The root `CLAUDE.md` names cargo-deny among the devcontainer's
+- [x] The root `CLAUDE.md` names cargo-deny among the devcontainer's
       tools.
 
 ### Task 2: Check advisories, licenses, and sources

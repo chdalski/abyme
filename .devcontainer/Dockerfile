@@ -64,6 +64,28 @@ RUN set -eu; \
     install -o root -g root -m 0755 "$tmp/cargo-tauri" /usr/local/bin/cargo-tauri; \
     rm -rf "$tmp"
 
+# cargo-deny 0.20.2, which checks the Rust dependencies against deny.toml,
+# prebuilt by Embark Studios. The release carries no signature; to move to
+# another version, use its hashes only once your own sha256sum of each
+# archive, the release's .sha256 file, and the digest GitHub shows for the
+# asset all agree.
+RUN set -eu; \
+    case "$(dpkg --print-architecture)" in \
+      amd64) target=x86_64-unknown-linux-musl; \
+        digest=9f12ed4c49936e09b48bf862b595cde2fe64fcbd9d74dfacac6131ca824c8d5f ;; \
+      arm64) target=aarch64-unknown-linux-musl; \
+        digest=995c82be0defc7a025cae49a2aa2644ce8245c9a3318fc4103907c6a285e8c7d ;; \
+      *) echo "no cargo-deny build for $(dpkg --print-architecture)" >&2; exit 1 ;; \
+    esac; \
+    tmp=$(mktemp -d); \
+    curl -fsSL --proto '=https' --tlsv1.2 -o "$tmp/cargo-deny.tar.gz" \
+      "https://github.com/EmbarkStudios/cargo-deny/releases/download/0.20.2/cargo-deny-0.20.2-$target.tar.gz"; \
+    printf '%s  %s\n' "$digest" "$tmp/cargo-deny.tar.gz" > "$tmp/sha256sum"; \
+    sha256sum -c "$tmp/sha256sum"; \
+    tar -xzf "$tmp/cargo-deny.tar.gz" -C "$tmp" "cargo-deny-0.20.2-$target/cargo-deny"; \
+    install -o root -g root -m 0755 "$tmp/cargo-deny-0.20.2-$target/cargo-deny" /usr/local/bin/cargo-deny; \
+    rm -rf "$tmp"
+
 # Set `DEVCONTAINER` environment variable to help with orientation
 ENV DEVCONTAINER=true
 
