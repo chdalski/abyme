@@ -42,7 +42,7 @@ through a new tool `read_element`.
 - [x] Relations between elements
 - [x] Relations in the board outline
 - [x] The tool `read_element`
-- [ ] `update_element`
+- [x] `update_element`
 - [ ] `delete_element`
 
 ## Tasks
@@ -193,19 +193,19 @@ bring a flagged element up to date.
 
 Review path: Security-Hybrid
 
-- [ ] `update_element` changes only the fields it names among `name`,
+- [x] `update_element` changes only the fields it names among `name`,
       `type_ref`, `summary`, and `body`; `"summary": null` removes the
       summary. The element keeps its ID, also when its name changes.
-- [ ] Changed values pass the same checks as on creation.
+- [x] Changed values pass the same checks as on creation.
       `update_element` rejects an unknown element and an update that
       names no field. It accepts an element created earlier in the same
       request.
-- [ ] The canvas refuses the operation.
-- [ ] An MCP test changes an element through `apply` and reads the new
+- [x] The canvas refuses the operation.
+- [x] An MCP test changes an element through `apply` and reads the new
       content through `read_element`.
-- [ ] Data Model, the `apply` tool's description, and the README's Tools
+- [x] Data Model, the `apply` tool's description, and the README's Tools
       section describe the operation as delivered.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace
+- [x] `cargo test --workspace`, `cargo clippy --workspace
       --all-targets`, and `cargo fmt --all --check` pass.
 
 ### Task 7: `delete_element`

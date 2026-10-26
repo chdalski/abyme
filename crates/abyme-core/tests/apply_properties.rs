@@ -171,11 +171,28 @@ fn operation() -> impl Strategy<Value = Operation> {
             }),
         (element_ref(), relation_kind(), element_ref())
             .prop_map(|(from, kind, to)| Operation::DeleteRelation { from, kind, to }),
+        (
+            element_ref(),
+            proptest::option::of(name()),
+            proptest::option::of(prop_oneof![Just("t".to_owned()), any::<String>()]),
+            proptest::option::of(proptest::option::of(any::<String>())),
+            proptest::option::of(any::<String>()),
+        )
+            .prop_map(|(element, name, type_ref, summary, body)| {
+                Operation::UpdateElement {
+                    element,
+                    name,
+                    type_ref,
+                    summary,
+                    body,
+                }
+            }),
     ]
 }
 
 /// The existing elements that a request's operations name as the element
-/// they change.
+/// they change: the source of a relation operation, or the element an
+/// update names.
 fn named_existing_elements(operations: &[Operation]) -> BTreeSet<&ElementId> {
     operations
         .iter()
@@ -187,11 +204,16 @@ fn named_existing_elements(operations: &[Operation]) -> BTreeSet<&ElementId> {
             | Operation::DeleteRelation {
                 from: Ref::Existing(id),
                 ..
+            }
+            | Operation::UpdateElement {
+                element: Ref::Existing(id),
+                ..
             } => Some(id),
             Operation::CreateElement { .. }
             | Operation::CreateBoard { .. }
             | Operation::PlaceElement { .. }
             | Operation::MoveElement { .. }
+            | Operation::UpdateElement { .. }
             | Operation::CreateRelation { .. }
             | Operation::DeleteRelation { .. } => None,
         })

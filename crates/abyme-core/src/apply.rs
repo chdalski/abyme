@@ -144,6 +144,9 @@ pub enum OperationProblem {
         /// The element the relation points to.
         to: ElementId,
     },
+    /// An update names no field to change.
+    #[error("the update of element {0} names no field to change")]
+    NothingToUpdate(ElementId),
     /// The element has no relation of this kind to this target.
     #[error("element {from} has no relation {kind} to {to}")]
     NoSuchRelation {
@@ -250,6 +253,19 @@ impl<'snapshot> Draft<'snapshot> {
                 x,
                 y,
             } => self.move_element(element, board, *x, *y),
+            Operation::UpdateElement {
+                element,
+                name,
+                type_ref,
+                summary,
+                body,
+            } => self.update_element(
+                element,
+                name.as_deref(),
+                type_ref.as_deref(),
+                summary.as_ref().map(Option::as_deref),
+                body.as_deref(),
+            ),
             Operation::CreateRelation {
                 from,
                 kind,
@@ -350,6 +366,45 @@ impl<'snapshot> Draft<'snapshot> {
         Ok(())
     }
 
+    /// Changes the fields an update names and keeps the others, the ID and
+    /// the relations included. An update that names no field is rejected.
+    #[expect(
+        clippy::option_option,
+        reason = "a missing summary keeps it, `Some(None)` removes it, and a text replaces it"
+    )]
+    fn update_element(
+        &mut self,
+        element: &Ref<ElementId>,
+        name: Option<&str>,
+        type_ref: Option<&str>,
+        summary: Option<Option<&str>>,
+        body: Option<&str>,
+    ) -> Result<(), OperationProblem> {
+        let id = self.resolve_element(element)?;
+        if name.is_none() && type_ref.is_none() && summary.is_none() && body.is_none() {
+            return Err(OperationProblem::NothingToUpdate(id));
+        }
+        let type_ref = type_ref
+            .map(|type_ref| TypeRef::try_from(type_ref.to_owned()))
+            .transpose()
+            .map_err(OperationProblem::InvalidElement)?;
+        self.change_element(&id, |fields| {
+            if let Some(name) = name {
+                name.clone_into(&mut fields.name);
+            }
+            if let Some(type_ref) = type_ref {
+                fields.type_ref = type_ref;
+            }
+            if let Some(summary) = summary {
+                fields.summary = summary.map(str::to_owned);
+            }
+            if let Some(body) = body {
+                body.clone_into(&mut fields.body);
+            }
+            Ok(())
+        })
+    }
+
     fn create_relation(
         &mut self,
         from: &Ref<ElementId>,
@@ -359,8 +414,8 @@ impl<'snapshot> Draft<'snapshot> {
     ) -> Result<(), OperationProblem> {
         let from = self.resolve_element(from)?;
         let to = self.resolve_element(to)?;
-        self.change_element(&from, |relations| {
-            match relations.entry((kind, to.clone())) {
+        self.change_element(&from, |fields| {
+            match fields.relations.entry((kind, to.clone())) {
                 Entry::Occupied(_) => Err(OperationProblem::RelationExists {
                     from: from.clone(),
                     kind,
@@ -388,8 +443,8 @@ impl<'snapshot> Draft<'snapshot> {
             Ref::Existing(id) => id.clone(),
             Ref::New(_) => self.resolve_element(to)?,
         };
-        self.change_element(&from, |relations| {
-            if relations.remove(&(kind, to.clone())).is_some() {
+        self.change_element(&from, |fields| {
+            if fields.relations.remove(&(kind, to.clone())).is_some() {
                 Ok(())
             } else {
                 Err(OperationProblem::NoSuchRelation {
@@ -401,15 +456,16 @@ impl<'snapshot> Draft<'snapshot> {
         })
     }
 
-    /// Changes the relations of the element `id`, an element of the
-    /// request, and keeps the element rebuilt through [`Element::new`] in
-    /// the working set. An element is copied from the snapshot only the
-    /// first time a request changes it. On an error the element may be
-    /// gone from the working set; the whole request fails then anyway.
+    /// Changes the fields of the element `id`, an element of the request,
+    /// and keeps the element rebuilt through [`Element::new`] in the working
+    /// set; its ID never changes. An element is copied from the snapshot
+    /// only the first time a request changes it. On an error the element
+    /// may be gone from the working set; the whole request fails then
+    /// anyway.
     fn change_element(
         &mut self,
         id: &ElementId,
-        change: impl FnOnce(&mut Relations) -> Result<(), OperationProblem>,
+        change: impl FnOnce(&mut ElementFields) -> Result<(), OperationProblem>,
     ) -> Result<(), OperationProblem> {
         let current = self
             .elements
@@ -417,7 +473,7 @@ impl<'snapshot> Draft<'snapshot> {
             .or_else(|| self.snapshot.elements.get(id).cloned())
             .ok_or_else(|| OperationProblem::UnknownElement(id.clone()))?;
         let mut fields = current.into_fields();
-        change(&mut fields.relations)?;
+        change(&mut fields)?;
         let element = Element::new(id.clone(), fields)
             .map_err(|error| OperationProblem::InvalidElement(error.problem().clone()))?;
         self.elements.insert(id.clone(), element);

@@ -520,6 +520,27 @@ fn a_relation_that_takes_an_existing_element_file_past_the_limit_changes_no_file
 }
 
 #[test]
+fn an_update_that_takes_an_element_file_past_the_limit_changes_no_file() {
+    let (directory, project) = new_project().unwrap();
+    project.apply(&board_with_element().unwrap()).unwrap();
+    let before = tree(directory.path()).unwrap();
+    let request = operations(&format!(
+        r#"[{{"op": "update_element", "element": {{"existing": "payment-service"}}, "body": "{}"}}]"#,
+        " ".repeat(MAX_FILE_BYTES)
+    ))
+    .unwrap();
+
+    let error = project.apply(&request).unwrap_err();
+
+    assert!(
+        matches!(&error, ProjectError::WriteTooLarge { path, .. }
+            if *path == Path::new("abyme/elements/payment-service.md")),
+        "{error:?}"
+    );
+    assert_eq!(tree(directory.path()).unwrap(), before);
+}
+
+#[test]
 fn reads_element_and_board_files_up_to_the_limit() {
     let (directory, project) = new_project().unwrap();
     let element = directory.path().join("abyme/elements/x.md");

@@ -84,6 +84,7 @@ const fn refused_kind(operation: &Operation) -> Option<&'static str> {
                 Some("move_element with a new element or board")
             }
         },
+        Operation::UpdateElement { .. } => Some("update_element"),
         Operation::CreateRelation { .. } => Some("create_relation"),
         Operation::DeleteRelation { .. } => Some("delete_relation"),
     }

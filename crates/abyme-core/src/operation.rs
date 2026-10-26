@@ -75,6 +75,44 @@ pub enum Operation {
         )]
         y: i32,
     },
+    /// Changes the fields it names of an element; the others stay as they
+    /// are. The element keeps its ID, also when its name changes.
+    UpdateElement {
+        /// The element to change.
+        element: Ref<ElementId>,
+        /// The new name.
+        #[serde(
+            default,
+            deserialize_with = "present",
+            skip_serializing_if = "Option::is_none"
+        )]
+        #[cfg_attr(feature = "json-schema", schemars(with = "String"))]
+        name: Option<String>,
+        /// The new semantic type, such as `c4/container`.
+        #[serde(
+            default,
+            deserialize_with = "present",
+            skip_serializing_if = "Option::is_none"
+        )]
+        #[cfg_attr(feature = "json-schema", schemars(with = "String"))]
+        type_ref: Option<String>,
+        /// The new one-line summary; `null` removes it.
+        #[serde(
+            default,
+            deserialize_with = "present",
+            skip_serializing_if = "Option::is_none"
+        )]
+        #[cfg_attr(feature = "json-schema", schemars(with = "Option<String>"))]
+        summary: Option<Option<String>>,
+        /// The new description as Markdown.
+        #[serde(
+            default,
+            deserialize_with = "present",
+            skip_serializing_if = "Option::is_none"
+        )]
+        #[cfg_attr(feature = "json-schema", schemars(with = "String"))]
+        body: Option<String>,
+    },
     /// Adds a relation from one element to another.
     CreateRelation {
         /// The element the relation goes out from.
@@ -137,6 +175,17 @@ pub struct LocalKey(String);
 )]
 pub struct LocalKeyError {
     shown: String,
+}
+
+/// Reads a field that is present: `None` stands only for a field the
+/// request leaves out. So `null` is rejected where the field's own type
+/// rejects it, and a summary of `null` reads as `Some(None)`.
+fn present<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    T::deserialize(deserializer).map(Some)
 }
 
 impl Operations {
@@ -289,6 +338,46 @@ mod tests {
         );
     }
 
+    #[test]
+    fn reads_an_update_that_keeps_removes_or_replaces_the_summary() {
+        let cases = [
+            (r#""name": "N""#, None),
+            (r#""summary": null"#, Some(None)),
+            (r#""summary": "S""#, Some(Some("S"))),
+        ];
+
+        for (fields, expected) in cases {
+            let json = format!(
+                r#"[{{"op": "update_element", "element": {{"existing": "a"}}, {fields}}}]"#
+            );
+            let operations = read(&json).unwrap();
+
+            match operations.as_slice() {
+                [Operation::UpdateElement { summary, .. }] => {
+                    assert_eq!(summary.as_ref().map(Option::as_deref), expected, "{fields}");
+                }
+                other => panic!("expected one update, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn reads_an_update_of_every_field() {
+        let json = r#"[{"op": "update_element", "element": {"new": "pay"}, "name": "Payments",
+            "type_ref": "c4/component", "summary": "S", "body": "B"}]"#;
+
+        assert_eq!(
+            read(json).unwrap(),
+            vec![Operation::UpdateElement {
+                element: Ref::New(LocalKey::try_from("pay".to_owned()).unwrap()),
+                name: Some("Payments".to_owned()),
+                type_ref: Some("c4/component".to_owned()),
+                summary: Some(Some("S".to_owned())),
+                body: Some("B".to_owned()),
+            }]
+        );
+    }
+
     #[rstest]
     #[case::summary_null(
         r#"[{"op": "create_element", "key": "k", "type_ref": "t", "name": "n", "summary": null}]"#
@@ -344,6 +433,41 @@ mod tests {
     )]
     #[case::relation_label_as_number(
         r#"[{"op": "create_relation", "from": {"new": "a"}, "kind": "uses", "to": {"new": "b"}, "label": 1}]"#
+    )]
+    #[case::update_name_null(
+        r#"[{"op": "update_element", "element": {"existing": "a"}, "name": null}]"#
+    )]
+    #[case::update_type_null(
+        r#"[{"op": "update_element", "element": {"existing": "a"}, "type_ref": null}]"#
+    )]
+    #[case::update_body_null(
+        r#"[{"op": "update_element", "element": {"existing": "a"}, "body": null}]"#
+    )]
+    #[case::update_summary_as_number(
+        r#"[{"op": "update_element", "element": {"existing": "a"}, "summary": 1}]"#
+    )]
+    #[case::update_summary_as_object(
+        r#"[{"op": "update_element", "element": {"existing": "a"}, "summary": {}}]"#
+    )]
+    #[case::update_summary_as_array(
+        r#"[{"op": "update_element", "element": {"existing": "a"}, "summary": ["s"]}]"#
+    )]
+    #[case::update_summary_twice(
+        r#"[{"op": "update_element", "element": {"existing": "a"}, "summary": null, "summary": "x"}]"#
+    )]
+    #[case::update_name_twice(
+        r#"[{"op": "update_element", "element": {"existing": "a"}, "name": "x", "name": "y"}]"#
+    )]
+    #[case::update_of_relations(
+        r#"[{"op": "update_element", "element": {"existing": "a"}, "relations": []}]"#
+    )]
+    #[case::update_of_the_id(
+        r#"[{"op": "update_element", "element": {"existing": "a"}, "id": "b"}]"#
+    )]
+    #[case::update_without_an_element(r#"[{"op": "update_element", "name": "x"}]"#)]
+    #[case::update_as_array(r#"[["update_element", {"existing": "a"}, "x"]]"#)]
+    #[case::update_of_an_invalid_id(
+        r#"[{"op": "update_element", "element": {"existing": "../x"}, "name": "x"}]"#
     )]
     #[case::unknown_field(r#"[{"op": "create_board", "key": "k", "title": "t", "zone": {}}]"#)]
     #[case::duplicate_field(r#"[{"op": "create_board", "key": "k", "key": "j", "title": "t"}]"#)]
@@ -434,7 +558,7 @@ mod tests {
             .flatten()
             .filter(|variant| variant.pointer("/type") == Some(&serde_json::json!("object")))
             .collect();
-        assert_eq!(variants.len(), 6 + 2 + 2, "{schema}");
+        assert_eq!(variants.len(), 7 + 2 + 2, "{schema}");
         for variant in variants {
             assert_eq!(
                 variant.pointer("/additionalProperties"),
@@ -442,6 +566,42 @@ mod tests {
                 "{variant}"
             );
         }
+    }
+
+    #[cfg(feature = "json-schema")]
+    #[test]
+    fn schema_lets_only_the_summary_of_an_update_be_null() {
+        let schema = serde_json::to_value(schemars::schema_for!(Operations)).unwrap();
+
+        let update = schema
+            .pointer("/$defs")
+            .and_then(serde_json::Value::as_object)
+            .unwrap()
+            .values()
+            .filter_map(|definition| definition.pointer("/oneOf")?.as_array())
+            .flatten()
+            .find(|variant| {
+                variant.pointer("/properties/op/const")
+                    == Some(&serde_json::json!("update_element"))
+            })
+            .unwrap();
+        assert_eq!(
+            update.pointer("/required"),
+            Some(&serde_json::json!(["op", "element"])),
+            "{update}"
+        );
+        for field in ["name", "type_ref", "body"] {
+            assert_eq!(
+                update.pointer(&format!("/properties/{field}/type")),
+                Some(&serde_json::json!("string")),
+                "{update}"
+            );
+        }
+        assert_eq!(
+            update.pointer("/properties/summary/type"),
+            Some(&serde_json::json!(["string", "null"])),
+            "{update}"
+        );
     }
 
     #[cfg(feature = "json-schema")]

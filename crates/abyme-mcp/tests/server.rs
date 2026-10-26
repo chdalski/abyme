@@ -573,6 +573,77 @@ async fn read_element_shows_an_element_with_its_relations_and_description() -> T
 }
 
 #[tokio::test]
+async fn apply_updates_an_element_and_read_element_shows_it() -> TestResult {
+    let directory = project()?;
+    let session = start(directory.path()).await?;
+    call(&session, "apply", create_board_with_element()).await??;
+
+    let updated = call(
+        &session,
+        "apply",
+        json!({"operations": [
+            {"op": "update_element", "element": {"existing": "payment-service"}, "name": "Payments",
+             "summary": null, "body": "Handles payments.\n"}
+        ]}),
+    )
+    .await??;
+    assert_eq!(updated.is_error, Some(false), "{updated:?}");
+
+    let read = call(
+        &session,
+        "read_element",
+        json!({"element": "payment-service"}),
+    )
+    .await??;
+    assert_eq!(
+        text(&read),
+        "Element: payment-service · Payments\n\
+         Type: c4/container\n\
+         Boards: container-level\n\
+         \n\
+         Outgoing relations:\n\
+         none\n\
+         \n\
+         Incoming relations:\n\
+         none\n\
+         \n\
+         Description:\n\
+         Handles payments.\n"
+    );
+
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_rejected_update_is_a_tool_error_and_changes_no_file() -> TestResult {
+    let directory = project()?;
+    let session = start(directory.path()).await?;
+    call(&session, "apply", create_board_with_element()).await??;
+    let before = files(directory.path())?;
+
+    let rejected = call(
+        &session,
+        "apply",
+        json!({"operations": [
+            {"op": "update_element", "element": {"existing": "payment-service"}, "name": "Renamed"},
+            {"op": "update_element", "element": {"existing": "nowhere"}, "name": "x"}
+        ]}),
+    )
+    .await??;
+
+    assert_eq!(rejected.is_error, Some(true), "{rejected:?}");
+    assert_eq!(
+        text(&rejected),
+        "operation 2: no element has the ID nowhere"
+    );
+    assert_eq!(files(directory.path())?, before);
+
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+#[tokio::test]
 async fn read_element_names_an_element_without_a_file() -> TestResult {
     let directory = project()?;
     let session = start(directory.path()).await?;
