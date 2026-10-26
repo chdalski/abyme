@@ -14,8 +14,9 @@ abyme-core = { path = "crates/abyme-core" }
 abyme-index = { path = "crates/abyme-index" }
 abyme-model = { path = "crates/abyme-model" }
 # Never `hf-hub*`, `online`, `qwen3`, or `nomic-v2-moe`: they pull in hf-hub, whose download
-# follows the latest revision unchecked and reads HF_TOKEN and HF_HOME. ONNX Runtime comes
-# prebuilt from ort's download, checked against the SHA-256 in ort-sys.
+# follows the latest revision unchecked and reads HF_TOKEN and HF_HOME; deny.toml bans them
+# and the crate hf-hub. ONNX Runtime comes prebuilt from ort's download, checked against the
+# SHA-256 in ort-sys.
 fastembed = { version = "=7.2.0", default-features = false, features = ["ort-download-binaries-rustls-tls"] }
 futures = "0.3.34"
 # `remote` only because lancedb 0.40.0 does not compile without it (`Error::Http` used
@@ -24,7 +25,8 @@ futures = "0.3.34"
 lancedb = { version = "=0.40.0", default-features = false, features = ["remote"] }
 notify = { version = "=8.2.0", default-features = false }
 # Exactly the version fastembed pins; Abyme needs it only for the process-wide ONNX Runtime
-# environment. Never `load-dynamic`: it would load the library from ORT_DYLIB_PATH at runtime.
+# environment. Never `load-dynamic`, which deny.toml bans: it would load the library from
+# ORT_DYLIB_PATH at runtime.
 ort = { version = "=2.0.0-rc.15", default-features = false }
 proptest = "1.12.0"
 rlsp-yaml-parser = "0.11.2"
@@ -37,17 +39,20 @@ serde_json = "1.0.154"
 sha2 = "0.11.1"
 # Only `wry`: the canvas needs no runtime changes to its access list (`dynamic-acl`) and
 # none of the other defaults on Linux. Never `devtools`, `protocol-asset`,
-# `webview-data-url`, `isolation`, `tray-icon`, `unstable`, or `macos-private-api`.
+# `webview-data-url`, `isolation`, `tray-icon`, `unstable`, or `macos-private-api`, which
+# deny.toml bans.
 tauri = { version = "=2.12.5", default-features = false, features = ["wry"] }
 tauri-build = "=2.7.4"
 tempfile = "3.27.0"
 thiserror = "2.0.21"
 tokio = "1.54.1"
-# Never the `unbounded` feature: it lifts the parser's recursion limit.
+# Never the `unbounded` feature, which deny.toml bans: it lifts the parser's recursion limit.
 toml = { version = "0.9.8", default-features = false, features = ["std", "parse", "serde"] }
-# Never the `format` feature; declarations are compared in memory, never exported by a test.
+# Never the `format` feature, which deny.toml bans; declarations are compared in memory,
+# never exported by a test.
 ts-rs = "=12.0.1"
-# No `gzip`: model files arrive byte for byte as their pinned size and hash describe them.
+# No `gzip`, which deny.toml bans: model files arrive byte for byte as their pinned size and
+# hash describe them.
 ureq = { version = "3.5.0", default-features = false, features = ["rustls", "platform-verifier"] }
 
 [workspace.lints.clippy]

@@ -1,7 +1,9 @@
 # cargo-deny's checks of the Rust dependencies, run from the repository root
 # with `cargo deny --locked check`. Entries that let a dependency pass (allowed
 # licenses, license exceptions, advisory ignores, sources) are added only when
-# the user decides; otherwise they may only be removed.
+# the user decides; otherwise they may only be removed. Bans (denied crates and
+# features) are removed or narrowed only when the user decides; otherwise they
+# may only be added.
 
 [graph]
 # Abyme builds on Unix only, and the devcontainer runs on these two.
@@ -52,6 +54,51 @@ multiple-versions = "allow"
 wildcards = "deny"
 # The workspace's crates depend on each other by path; none is published.
 allow-wildcard-paths = true
+deny = [
+    { crate = "hf-hub", reason = "see the comment on fastembed in the root Cargo.toml" },
+]
+
+# The features that comments in the root Cargo.toml forbid, banned for every
+# version of each crate that has the feature; each reason names the comment
+# that says why.
+[[bans.features]]
+crate = "fastembed"
+deny = ["hf-hub", "hf-hub-native-tls", "hf-hub-rustls-tls", "online", "qwen3", "nomic-v2-moe"]
+reason = "see the comment on fastembed in the root Cargo.toml"
+
+[[bans.features]]
+crate = "ort"
+deny = ["load-dynamic"]
+reason = "see the comment on ort in the root Cargo.toml"
+
+[[bans.features]]
+crate = "tauri"
+deny = [
+    "devtools",
+    "protocol-asset",
+    "webview-data-url",
+    "isolation",
+    "tray-icon",
+    "unstable",
+    "macos-private-api",
+]
+reason = "see the comment on tauri in the root Cargo.toml"
+
+# toml 0.8, which the GTK crates' build scripts use, has no `unbounded`.
+[[bans.features]]
+crate = "toml:>=0.9"
+deny = ["unbounded"]
+reason = "see the comment on toml in the root Cargo.toml"
+
+[[bans.features]]
+crate = "ts-rs"
+deny = ["format"]
+reason = "see the comment on ts-rs in the root Cargo.toml"
+
+[[bans.features]]
+crate = "ureq"
+deny = ["gzip"]
+reason = "see the comment on ureq in the root Cargo.toml"
 
 [sources]
 unknown-registry = "deny"

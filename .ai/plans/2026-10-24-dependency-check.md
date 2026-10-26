@@ -23,7 +23,7 @@ one afterwards.
 
 - [x] Install cargo-deny in the devcontainer
 - [x] Check advisories, licenses, and sources
-- [ ] Enforce the forbidden features
+- [x] Enforce the forbidden features
 
 ## Tasks
 
@@ -87,18 +87,18 @@ check.
 
 Review path: Security-Hybrid
 
-- [ ] These features are denied, and nothing else is: `fastembed`'s
+- [x] These features are denied, and nothing else is: `fastembed`'s
       `hf-hub` and every feature whose name starts with `hf-hub`,
       `online`, `qwen3`, and `nomic-v2-moe`; `ort`'s `load-dynamic`;
       `tauri`'s `devtools`, `protocol-asset`, `webview-data-url`,
       `isolation`, `tray-icon`, `unstable`, and `macos-private-api`;
       `toml`'s `unbounded`; `ureq`'s `gzip`; `ts-rs`'s `format`. The
       crate `hf-hub` is denied.
-- [ ] Enabling a forbidden feature makes the check fail, shown in the
+- [x] Enabling a forbidden feature makes the check fail, shown in the
       handoff for one feature of each of the six crates and for a
       dependency on `hf-hub`; none of these test changes is committed.
-- [ ] The check of the committed manifests reports no finding in bans.
-- [ ] A reader of a forbidding comment in `Cargo.toml` learns that
+- [x] The check of the committed manifests reports no finding in bans.
+- [x] A reader of a forbidding comment in `Cargo.toml` learns that
       `deny.toml` enforces it, and a reader of a ban in `deny.toml`
       learns where the reason for it stands.
 
