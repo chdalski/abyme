@@ -110,7 +110,7 @@ pub struct Element {
 }
 
 pub struct Relation {
-    pub kind: RelationKind,                  // contains, depends_on, uses, corresponds_to, replaces, concerns, see_also
+    pub kind: RelationKind,                  // concerns, depends_on, describes, see_also, uses; later contains, corresponds_to, replaces
     pub to: ElementId,
     pub label: Option<String>,               // e.g. "REST, synchronous"
 }
@@ -178,6 +178,7 @@ pub struct Rect { pub x: i32, pub y: i32, pub width: NonZeroU32, pub height: Non
 - **Representation or native:** An element is a representation if it has an `anchor` (see [[Elements]]).
 - **Home:** Every element has exactly one `Placement` with `is_reference = false`. All others are references (see [[Board Graph]]). An element without a home, for example freshly created by the AI, is allowed and reported as a hint.
 - **Arrows are not stored.** They follow from the relations. Deleting an arrow means deleting the relation.
+- **One relation per kind and target:** an element has at most one relation of a kind to a target, and none to itself. A relation to an element whose file is missing is read like any other (see [[Checks#Structural (Deterministic)|structural checks]]).
 - **The board decides what is shown and how.** The [[Presentation]] belongs to the placement; the default comes from the [[Extensions#Type Packs|type pack]].
 - **Attaching is layout, “concerns” is content.** An attached sticky note has both: the relation in the element and `attached_to` in the placement (see [[Presentation#Sticky Notes]]).
 - **Inheritance:** The effective mode and the effective statement kind come from the element, otherwise from the frame, otherwise from the board, otherwise from the type pack (see [[Boards and Zones#Inheritance]]).
@@ -189,7 +190,7 @@ pub struct Rect { pub x: i32, pub y: i32, pub width: NonZeroU32, pub height: Non
 
 An operation is a delta held as data, such as creating, placing, moving, or pinning an element, or attaching a note. Applying operations is a pure function: it takes the current files and returns the file writes, and the core then carries them out (see [[Storage in Git#Writing]]). This makes it testable without a file system and lets operations travel between processes later.
 
-A request is a list of operations, each a JSON object with the field `op`. The Working Skeleton has these:
+A request is a list of operations, each a JSON object with the field `op`:
 
 ```json
 [
@@ -198,11 +199,15 @@ A request is a list of operations, each a JSON object with the field `op`. The W
    "summary": "Payment processing through Stripe", "body": "Handles payments."},
   {"op": "place_element", "element": {"new": "pay"}, "board": {"new": "b"}},
   {"op": "place_element", "element": {"existing": "orders-db"}, "board": {"new": "b"}},
-  {"op": "move_element", "element": {"existing": "orders-db"}, "board": {"new": "b"}, "x": 400, "y": 200}
+  {"op": "move_element", "element": {"existing": "orders-db"}, "board": {"new": "b"}, "x": 400, "y": 200},
+  {"op": "create_relation", "from": {"new": "pay"}, "kind": "uses", "to": {"existing": "orders-db"},
+   "label": "SQL"},
+  {"op": "delete_relation", "from": {"existing": "web-shop"}, "kind": "depends_on", "to": {"existing": "legacy-api"}}
 ]
 ```
 
 - **`create_element`** takes a key, `type_ref`, `name`, and optionally `summary` and `body`; **`create_board`** takes a key and `title`; **`place_element`** gives an element its home on a board; **`move_element`** sets the position of an element on a board where it lies, with `x` and `y` from -1,000,000 to 1,000,000, and keeps its size. Other fields are rejected.
+- **`create_relation`** adds a relation from `from` to `to` of a `kind` (see [[Relations]]), with an optional `label`; it is rejected when the element has that relation already or would point to itself. **`delete_relation`** removes the relation with `from`, `kind`, and `to`; its `to` is only looked up among the relations of `from`, so a relation to an element whose file is gone can still be removed. Both rewrite only the element file of `from`.
 - **References:** `{"new": "<key>"}` names what an earlier operation of the same request creates, `{"existing": "<id>"}` what already exists. A **local key** has 1 to 64 ASCII letters, digits, hyphens, and underscores, is valid only within its request, and elements and boards share one set of keys.
 - **All or nothing:** Operations run in order. If one fails, for example because a key is unknown or an element already has a home, the request writes nothing, and the error names the operation's position. A request has at most 1000 operations.
 - **The result** names the ID each key received; the canvas and the AI refer to the new elements and boards by these IDs from then on.

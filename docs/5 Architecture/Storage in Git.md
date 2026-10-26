@@ -74,7 +74,7 @@ In [[Hexagonal Architecture#Runtime|stage A]], the canvas and the MCP server wri
 
 - **Under a lock:** Every [[Data Model#Operations|operation]] is applied to the current files while the writer holds an advisory lock on `.abyme/lock`. A change therefore never overwrites one it has not seen.
 - **Atomically:** Every file is written to a temporary file in `.abyme/tmp/` and then renamed, so a file watcher never sees a half-written file. Before it writes, a writer removes the files that a crashed writer left there; it holds the lock, so no other writer's file is among them.
-- **In order:** New element files come first, then each new or changed board, so a board never places an element whose file is missing. A write that fails between two renames can leave an element without a home, which the [[Data Model#Rules|data model]] allows.
+- **In order:** New element files come first, then changed ones, then each new or changed board, so a board never places an element whose file is missing. A write that fails between two renames can leave an element without a home, which the [[Data Model#Rules|data model]] allows, or a relation between two new elements whose target is not written yet, which reading accepts.
 - **No model in memory:** The MCP server reads the files on every call. The canvas holds only the board it shows and reloads it on file-watcher events, its own writes included.
 - **Outside the lock:** An editor or `git checkout` does not take the lock. The file watchers pick up such changes as well.
 
@@ -88,17 +88,21 @@ id: "payment-service"
 type: "c4/container"
 name: "Payment Service"
 summary: "Payment processing through Stripe"
+relations:
+  - {kind: "depends_on", to: "stripe"}
+  - {kind: "uses", to: "orders-db", label: "SQL"}
 ---
 Handles payments through Stripe. Refunds run asynchronously
 through the refund-worker.
 ```
 
-- **Fields:** `id`, which equals the file name, `type`, which is never empty, `name`, and the optional `summary`. Other keys are rejected.
-- **Writing:** Abyme writes every value double-quoted. It escapes backslash, double quote, tab, line feed, carriage return, U+0085, U+2028, U+2029, and U+FEFF and keeps every other character as it is. Values written by hand may use any YAML scalar style.
-- **Limits:** `type`, `name`, and `summary` hold only characters YAML counts as printable: no control characters other than tab, line feed, carriage return, and U+0085, and neither U+FFFE nor U+FFFF. The frontmatter is at most 64 KiB, counted as Abyme writes it.
-- **Strict YAML:** The frontmatter is one flat mapping. Aliases, anchors, tags, directives, and document markers are rejected, so the file means the same to every reader.
+- **Fields:** `id`, which equals the file name, `type`, which is never empty, `name`, the optional `summary`, and the optional `relations`. Other keys are rejected.
+- **Relations:** the element's outgoing [[Relations|relations]], one line each with `kind`, `to`, and an optional `label`, sorted by the kind's name, then by the target. Adding or removing a relation changes one line. An element without relations has no `relations` key. A relation may point to an element whose file is missing; reading accepts it.
+- **Writing:** Abyme writes every value double-quoted. It escapes backslash, double quote, tab, line feed, carriage return, U+0085, U+2028, U+2029, and U+FEFF and keeps every other character as it is. Values written by hand may use any YAML scalar style, and relations any YAML style.
+- **Limits:** `type`, `name`, `summary`, and the labels hold only characters YAML counts as printable: no control characters other than tab, line feed, carriage return, and U+0085, and neither U+FFFE nor U+FFFF. The frontmatter is at most 64 KiB, counted as Abyme writes it.
+- **Strict YAML:** The frontmatter is one mapping of plain values, except `relations`, a list of mappings of plain values. Aliases, anchors, tags, directives, and document markers are rejected, so the file means the same to every reader.
 - **The body** below the closing `---` line is kept byte for byte.
-- **Later fields:** `attributes`, `anchor`, `statement`, `verified`, `inner_board`, `expected_anchor`, and `relations` from the [[Data Model#Types|data model]] come with the slices that need them.
+- **Later fields:** `attributes`, `anchor`, `statement`, `verified`, `inner_board`, and `expected_anchor` from the [[Data Model#Types|data model]] come with the slices that need them.
 
 ## Board File
 

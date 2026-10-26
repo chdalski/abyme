@@ -8,7 +8,10 @@ use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-use abyme_model::{Board, BoardId, Element, ElementFields, ElementId, ElementProblem, TypeRef};
+use abyme_model::{
+    Board, BoardId, Element, ElementFields, ElementId, ElementProblem, RelationKind, Relations,
+    TypeRef,
+};
 
 use crate::layout::Layout;
 use crate::operation::{LocalKey, MAX_COORDINATE, Operation, Ref};
@@ -31,9 +34,9 @@ pub struct Snapshot {
 /// What a request changes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Applied {
-    /// The files to write: new elements first, then each new or changed
-    /// board once, so that no board ever points to an element whose file
-    /// does not exist yet.
+    /// The files to write: new elements first, then changed elements, then
+    /// each new or changed board once, so that no board ever points to an
+    /// element whose file does not exist yet. Each element is written once.
     pub writes: Vec<Write>,
     /// The ID each key of the request received, in the order of creation.
     pub created: Vec<(LocalKey, Created)>,
@@ -42,7 +45,7 @@ pub struct Applied {
 /// One file to write, with its whole content.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Write {
-    /// A new element file.
+    /// A new or changed element file.
     Element(Element),
     /// A new or changed board file.
     Board(Board),
@@ -105,7 +108,8 @@ pub enum OperationProblem {
     /// The element already lies on a board.
     #[error("element {0} already has a home on a board")]
     AlreadyHomed(ElementId),
-    /// The type, name, or summary breaks a rule of the element file.
+    /// The type, name, summary, or a relation breaks a rule of the element
+    /// file.
     #[error("{0}")]
     InvalidElement(ElementProblem),
     /// No free position on the board fits the coordinate range.
@@ -130,6 +134,26 @@ pub enum OperationProblem {
     /// No free ID could be derived; the suffixes make this unreachable.
     #[error("no free ID is left for the name")]
     NoFreeId,
+    /// The element already has a relation of this kind to this target.
+    #[error("element {from} already has the relation {kind} to {to}")]
+    RelationExists {
+        /// The element the relation goes out from.
+        from: ElementId,
+        /// The relation's kind.
+        kind: RelationKind,
+        /// The element the relation points to.
+        to: ElementId,
+    },
+    /// The element has no relation of this kind to this target.
+    #[error("element {from} has no relation {kind} to {to}")]
+    NoSuchRelation {
+        /// The element the relation would go out from.
+        from: ElementId,
+        /// The relation's kind.
+        kind: RelationKind,
+        /// The element the relation would point to.
+        to: ElementId,
+    },
 }
 
 /// The two kinds of things a request creates and refers to.
@@ -226,6 +250,13 @@ impl<'snapshot> Draft<'snapshot> {
                 x,
                 y,
             } => self.move_element(element, board, *x, *y),
+            Operation::CreateRelation {
+                from,
+                kind,
+                to,
+                label,
+            } => self.create_relation(from, *kind, to, label.as_deref()),
+            Operation::DeleteRelation { from, kind, to } => self.delete_relation(from, *kind, to),
         }
     }
 
@@ -249,6 +280,7 @@ impl<'snapshot> Draft<'snapshot> {
                 name: name.to_owned(),
                 summary: summary.map(str::to_owned),
                 body: body.to_owned(),
+                relations: Relations::new(),
             },
         )
         .map_err(|error| OperationProblem::InvalidElement(error.problem().clone()))?;
@@ -315,6 +347,80 @@ impl<'snapshot> Draft<'snapshot> {
         placement.x = x;
         placement.y = y;
         layout.occupy(placement);
+        Ok(())
+    }
+
+    fn create_relation(
+        &mut self,
+        from: &Ref<ElementId>,
+        kind: RelationKind,
+        to: &Ref<ElementId>,
+        label: Option<&str>,
+    ) -> Result<(), OperationProblem> {
+        let from = self.resolve_element(from)?;
+        let to = self.resolve_element(to)?;
+        self.change_element(&from, |relations| {
+            match relations.entry((kind, to.clone())) {
+                Entry::Occupied(_) => Err(OperationProblem::RelationExists {
+                    from: from.clone(),
+                    kind,
+                    to: to.clone(),
+                }),
+                Entry::Vacant(entry) => {
+                    entry.insert(label.map(str::to_owned));
+                    Ok(())
+                }
+            }
+        })
+    }
+
+    /// Removes a relation. An `existing` target is only looked up among the
+    /// source's relations, so a relation whose target's file is gone can
+    /// still be removed.
+    fn delete_relation(
+        &mut self,
+        from: &Ref<ElementId>,
+        kind: RelationKind,
+        to: &Ref<ElementId>,
+    ) -> Result<(), OperationProblem> {
+        let from = self.resolve_element(from)?;
+        let to = match to {
+            Ref::Existing(id) => id.clone(),
+            Ref::New(_) => self.resolve_element(to)?,
+        };
+        self.change_element(&from, |relations| {
+            if relations.remove(&(kind, to.clone())).is_some() {
+                Ok(())
+            } else {
+                Err(OperationProblem::NoSuchRelation {
+                    from: from.clone(),
+                    kind,
+                    to: to.clone(),
+                })
+            }
+        })
+    }
+
+    /// Changes the relations of the element `id`, an element of the
+    /// request, and keeps the element rebuilt through [`Element::new`] in
+    /// the working set. An element is copied from the snapshot only the
+    /// first time a request changes it. On an error the element may be
+    /// gone from the working set; the whole request fails then anyway.
+    fn change_element(
+        &mut self,
+        id: &ElementId,
+        change: impl FnOnce(&mut Relations) -> Result<(), OperationProblem>,
+    ) -> Result<(), OperationProblem> {
+        let current = self
+            .elements
+            .remove(id)
+            .or_else(|| self.snapshot.elements.get(id).cloned())
+            .ok_or_else(|| OperationProblem::UnknownElement(id.clone()))?;
+        let mut fields = current.into_fields();
+        change(&mut fields.relations)?;
+        let element = Element::new(id.clone(), fields)
+            .map_err(|error| OperationProblem::InvalidElement(error.problem().clone()))?;
+        self.elements.insert(id.clone(), element);
         Ok(())
     }
 
@@ -399,9 +505,10 @@ impl<'snapshot> Draft<'snapshot> {
     }
 
     /// The writes: the created elements in the order of their creation,
-    /// then each changed board.
+    /// then the existing elements the request changed, then each changed
+    /// board.
     fn finish(mut self) -> Applied {
-        let elements: Vec<Write> = self
+        let created: Vec<Write> = self
             .created
             .iter()
             .filter_map(|(_, created)| match created {
@@ -410,12 +517,15 @@ impl<'snapshot> Draft<'snapshot> {
             })
             .map(Write::Element)
             .collect();
+        // Without the created ones, the working set holds exactly the
+        // existing elements an operation changed.
+        let changed = self.elements.into_values().map(Write::Element);
         let boards = self
             .boards
             .into_values()
             .map(|(board, _)| Write::Board(board));
         Applied {
-            writes: elements.into_iter().chain(boards).collect(),
+            writes: created.into_iter().chain(changed).chain(boards).collect(),
             created: self.created,
         }
     }

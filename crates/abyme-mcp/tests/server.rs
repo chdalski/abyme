@@ -426,6 +426,83 @@ async fn a_rejected_apply_is_a_tool_error_and_changes_no_file() -> TestResult {
 }
 
 #[tokio::test]
+async fn apply_creates_and_deletes_relations_in_the_element_files() -> TestResult {
+    let directory = project()?;
+    let session = start(directory.path()).await?;
+    call(&session, "apply", create_board_with_element()).await??;
+    let element_file = directory.path().join("abyme/elements/payment-service.md");
+
+    let created = call(
+        &session,
+        "apply",
+        json!({"operations": [
+            {"op": "create_element", "key": "db", "type_ref": "c4/datastore", "name": "Orders DB"},
+            {"op": "create_relation", "from": {"existing": "payment-service"}, "kind": "uses",
+             "to": {"new": "db"}, "label": "SQL"},
+            {"op": "create_relation", "from": {"existing": "payment-service"}, "kind": "depends_on",
+             "to": {"new": "db"}}
+        ]}),
+    )
+    .await??;
+    assert_eq!(created.is_error, Some(false), "{created:?}");
+    assert_eq!(
+        fs::read_to_string(&element_file)?,
+        "---\n\
+         id: \"payment-service\"\n\
+         type: \"c4/container\"\n\
+         name: \"Payment Service\"\n\
+         summary: \"Payments through Stripe\"\n\
+         relations:\n  \
+         - {kind: \"depends_on\", to: \"orders-db\"}\n  \
+         - {kind: \"uses\", to: \"orders-db\", label: \"SQL\"}\n\
+         ---\n"
+    );
+
+    let deleted = call(
+        &session,
+        "apply",
+        json!({"operations": [
+            {"op": "delete_relation", "from": {"existing": "payment-service"}, "kind": "depends_on",
+             "to": {"existing": "orders-db"}}
+        ]}),
+    )
+    .await??;
+    assert_eq!(deleted.is_error, Some(false), "{deleted:?}");
+    let text_after = fs::read_to_string(&element_file)?;
+    assert!(!text_after.contains("depends_on"), "{text_after}");
+    assert!(text_after.contains("{kind: \"uses\", to: \"orders-db\", label: \"SQL\"}"));
+
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+#[tokio::test]
+async fn apply_refuses_an_unknown_relation_kind_and_changes_no_file() -> TestResult {
+    let directory = project()?;
+    let session = start(directory.path()).await?;
+    call(&session, "apply", create_board_with_element()).await??;
+    let before = files(directory.path())?;
+
+    let rejected = call(
+        &session,
+        "apply",
+        json!({"operations": [
+            {"op": "create_relation", "from": {"existing": "payment-service"}, "kind": "contains",
+             "to": {"existing": "payment-service"}, "label": "SECRET-LABEL"}
+        ]}),
+    )
+    .await??;
+
+    assert_eq!(rejected.is_error, Some(true), "{rejected:?}");
+    assert!(text(&rejected).contains("contains"), "{rejected:?}");
+    assert!(!text(&rejected).contains("SECRET"), "{rejected:?}");
+    assert_eq!(files(directory.path())?, before);
+
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+#[tokio::test]
 async fn apply_moves_an_element_and_refuses_a_position_out_of_range() -> TestResult {
     let directory = project()?;
     let session = start(directory.path()).await?;

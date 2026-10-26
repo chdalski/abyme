@@ -1,15 +1,18 @@
 //! The element file: Markdown with a YAML frontmatter that holds the
-//! element's ID, type, name, and summary.
+//! element's ID, type, name, summary, and outgoing relations.
 //!
 //! The frontmatter is read with `rlsp-yaml-parser` and written by an emitter
-//! of our own that double-quotes every value. `type`, `name`, and `summary`
-//! hold only characters the parser can read back, and the frontmatter is at
-//! most [`MAX_FRONTMATTER_BYTES`], because the parser rejects other
-//! characters even as escapes and parses escapes slowly. An [`Element`] can
-//! only be built through these checks, so every element read can be written
-//! again, and nothing written is rejected on reading.
+//! of our own that double-quotes every value. `type`, `name`, `summary`, and
+//! the relations' labels hold only characters the parser can read back, and
+//! the frontmatter is at most [`MAX_FRONTMATTER_BYTES`], because the parser
+//! rejects other characters even as escapes and parses escapes slowly. An
+//! [`Element`] can only be built through these checks, so every element read
+//! can be written again, and nothing written is rejected on reading.
+
+use std::collections::BTreeMap;
 
 use crate::id::ElementId;
+use crate::relation::RelationKind;
 
 mod frontmatter;
 mod yaml;
@@ -18,7 +21,14 @@ mod yaml;
 /// emitter writes it.
 pub const MAX_FRONTMATTER_BYTES: usize = 64 * 1024;
 
-/// An element: what it is, what it is called, and its description.
+/// An element's outgoing relations, with the label of each, if it has one.
+///
+/// An element has at most one relation of a kind to a target, and the
+/// relations sort by the kind's name, then the target.
+pub type Relations = BTreeMap<(RelationKind, ElementId), Option<String>>;
+
+/// An element: what it is, what it is called, its description, and its
+/// relations to other elements.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Element {
     id: ElementId,
@@ -26,6 +36,7 @@ pub struct Element {
     name: String,
     summary: Option<String>,
     body: String,
+    relations: Relations,
 }
 
 /// What an element holds besides its ID. Only `type_ref` is checked here,
@@ -41,6 +52,8 @@ pub struct ElementFields {
     pub summary: Option<String>,
     /// The description as Markdown.
     pub body: String,
+    /// The outgoing relations.
+    pub relations: Relations,
 }
 
 /// The semantic type of an element, such as `c4/container`: never empty,
@@ -151,10 +164,66 @@ pub enum ElementProblem {
     /// A value holds a character that the parser cannot read back.
     #[error("the {field} contains U+{code:04X}, which an element file cannot hold")]
     InvalidCharacter {
-        /// The field: `type`, `name`, or `summary`.
+        /// The field: `type`, `name`, `summary`, or `label`.
         field: &'static str,
         /// The character's code point.
         code: u32,
+    },
+    /// The value of `relations` is not a list.
+    #[error("the value of `relations` is not a list")]
+    RelationsNotAList,
+    /// An entry of `relations` is not a mapping.
+    #[error("a relation is not a mapping of `kind`, `to`, and `label`")]
+    RelationNotAMapping,
+    /// A relation's value is a list or a mapping.
+    #[error("the value of {key} in a relation is not a plain value")]
+    NonScalarRelationValue {
+        /// The key, escaped.
+        key: String,
+    },
+    /// A relation's key is not one of `kind`, `to`, and `label`.
+    #[error("the key {key} of a relation is unknown")]
+    UnknownRelationKey {
+        /// The key, escaped.
+        key: String,
+    },
+    /// A relation's key appears twice.
+    #[error("the key {key} appears twice in a relation")]
+    DuplicateRelationKey {
+        /// The key, escaped.
+        key: String,
+    },
+    /// A relation lacks a required key.
+    #[error("a relation lacks the required key `{key}`")]
+    MissingRelationKey {
+        /// The missing key.
+        key: &'static str,
+    },
+    /// A relation's kind is none of the known kinds.
+    #[error("{kind} is not a relation kind")]
+    UnknownRelationKind {
+        /// The kind, escaped.
+        kind: String,
+    },
+    /// A relation's target is not a valid element ID.
+    #[error("{detail}")]
+    InvalidRelationTarget {
+        /// Why the target is invalid, with the value escaped.
+        detail: String,
+    },
+    /// The element has two relations of the same kind to the same target.
+    #[error("the relation {kind} to {to} appears twice")]
+    DuplicateRelation {
+        /// The kind.
+        kind: RelationKind,
+        /// The target.
+        to: ElementId,
+    },
+    /// A relation points to the element itself.
+    #[error("the relation {kind} points to the element itself")]
+    SelfRelation {
+        /// The kind.
+        kind: RelationKind,
     },
 }
 
@@ -172,6 +241,7 @@ impl Element {
             name,
             summary,
             body,
+            relations,
         } = fields;
         let element = Self {
             id,
@@ -179,6 +249,7 @@ impl Element {
             name,
             summary,
             body,
+            relations,
         };
         match element.broken_rule() {
             Some(problem) => Err(ElementError {
@@ -223,6 +294,7 @@ impl Element {
                 name: fields.name,
                 summary: fields.summary,
                 body: body.to_owned(),
+                relations: fields.relations,
             },
         )
     }
@@ -264,6 +336,12 @@ impl Element {
         &self.body
     }
 
+    /// The element's outgoing relations.
+    #[must_use]
+    pub const fn relations(&self) -> &Relations {
+        &self.relations
+    }
+
     /// The element's fields without its ID, to build a changed element
     /// from them through [`Element::new`].
     #[must_use]
@@ -273,6 +351,7 @@ impl Element {
             name: self.name,
             summary: self.summary,
             body: self.body,
+            relations: self.relations,
         }
     }
 
@@ -283,6 +362,18 @@ impl Element {
                 self.summary
                     .as_deref()
                     .and_then(|summary| disallowed_character("summary", summary))
+            })
+            .or_else(|| {
+                self.relations
+                    .values()
+                    .flatten()
+                    .find_map(|label| disallowed_character("label", label))
+            })
+            .or_else(|| {
+                self.relations
+                    .keys()
+                    .find(|(_, to)| *to == self.id)
+                    .map(|(kind, _)| ElementProblem::SelfRelation { kind: *kind })
             })
             .or_else(|| {
                 let size = frontmatter::emit(self).len();

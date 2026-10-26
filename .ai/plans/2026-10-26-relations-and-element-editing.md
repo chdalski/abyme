@@ -39,7 +39,7 @@ through a new tool `read_element`.
 
 - [x] Build elements from a fields struct
 - [x] Keep a working set of elements in `apply`
-- [ ] Relations between elements
+- [x] Relations between elements
 - [ ] Relations in the board outline
 - [ ] The tool `read_element`
 - [ ] `update_element`
@@ -96,48 +96,48 @@ an optional label, and the AI creates and deletes them with
 
 Review path: Security-Hybrid
 
-- [ ] An element file lists its relations under `relations:`, one per
+- [x] An element file lists its relations under `relations:`, one per
       line in the form `- {kind: "uses", to: "orders-db", label:
       "REST"}`, sorted by the kind's name alphabetically, then by target.
       An element without relations has no `relations` key, so every
       existing element file reads and writes as before, byte for byte.
-- [ ] The relation kinds are exactly `depends_on`, `uses`, `concerns`,
+- [x] The relation kinds are exactly `depends_on`, `uses`, `concerns`,
       `see_also`, and `describes`, from a document to the element it
       describes; any other kind is rejected in a file and in an
       operation.
-- [ ] Reading accepts relations in any YAML style. It rejects a
+- [x] Reading accepts relations in any YAML style. It rejects a
       `relations` value that is not a sequence, an entry that is not a
       mapping of `kind`, `to`, and an optional `label`, the same kind and
       target twice, a relation to the element itself, and a label with a
       character that `name` may not hold. Every other frontmatter rule
       holds as before. A relation whose target has no element file
       reads.
-- [ ] `create_relation` with `from`, `kind`, `to`, and an optional
+- [x] `create_relation` with `from`, `kind`, `to`, and an optional
       `label` adds a relation from one element to another. It rejects an
       unknown source or target, a relation with the same kind and target
       that exists already, and a relation to the element itself.
-- [ ] `delete_relation` with `from`, `kind`, and `to` removes that
+- [x] `delete_relation` with `from`, `kind`, and `to` removes that
       relation, also when the target's file is missing, and rejects one
       the source does not have.
-- [ ] Both operations accept elements created earlier in the same
+- [x] Both operations accept elements created earlier in the same
       request.
-- [ ] The canvas refuses both operations.
-- [ ] The property tests of element files generate elements with
+- [x] The canvas refuses both operations.
+- [x] The property tests of element files generate elements with
       relations: every element written reads back equal, and arbitrary
       text never makes reading panic.
-- [ ] The properties of `apply` in
+- [x] The properties of `apply` in
       `crates/abyme-core/tests/apply_properties.rs` state the new
       contract: an existing element file changes only through an
       operation that names that element.
-- [ ] An MCP test sends `create_relation` and `delete_relation` through
+- [x] An MCP test sends `create_relation` and `delete_relation` through
       `apply` and finds the result in the element files.
-- [ ] A reader of Data Model and Storage in Git can tell how relations
+- [x] A reader of Data Model and Storage in Git can tell how relations
       are stored and which operations change them; Relations and the
       Glossary name the five kinds; Decisions records how relations are
       stored and why the set of kinds is closed.
-- [ ] The `apply` tool's description and the README's Tools section
+- [x] The `apply` tool's description and the README's Tools section
       describe both operations.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace
+- [x] `cargo test --workspace`, `cargo clippy --workspace
       --all-targets`, and `cargo fmt --all --check` pass.
 
 ### Task 4: Relations in the board outline

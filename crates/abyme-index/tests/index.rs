@@ -15,7 +15,7 @@ use abyme_index::{
     EmbedError, Embedder, Index, IndexError, MAX_QUERY_CHARS, MAX_RESULTS, ModelFile, ModelFiles,
     ModelSpec, ProjectKey, UserCache, indexed_text,
 };
-use abyme_model::{Element, ElementFields, ElementId, TypeRef};
+use abyme_model::{Element, ElementFields, ElementId, Relations, TypeRef};
 use fastembed::{Pooling, QuantizationMode};
 use futures::TryStreamExt as _;
 use lancedb::arrow::arrow_array::types::Float32Type;
@@ -149,6 +149,7 @@ fn element(id: &str, name: &str, body: &str) -> TestResult<Element> {
             name: name.to_owned(),
             summary: None,
             body: body.to_owned(),
+            relations: Relations::new(),
         },
     )?)
 }

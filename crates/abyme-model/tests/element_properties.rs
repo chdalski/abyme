@@ -1,6 +1,6 @@
 //! Properties of the element file that hold for any element and any input.
 
-use abyme_model::{Element, ElementFields, ElementId, TypeRef};
+use abyme_model::{Element, ElementFields, ElementId, RelationKind, Relations, TypeRef};
 use proptest::prelude::*;
 
 /// Characters an element file can hold in its values; the same rule as the
@@ -44,6 +44,24 @@ fn type_ref() -> impl Strategy<Value = TypeRef> {
     allowed_text().prop_filter_map("empty type", |text| TypeRef::try_from(text).ok())
 }
 
+fn relation_kind() -> impl Strategy<Value = RelationKind> {
+    prop::sample::select(vec![
+        RelationKind::Concerns,
+        RelationKind::DependsOn,
+        RelationKind::Describes,
+        RelationKind::SeeAlso,
+        RelationKind::Uses,
+    ])
+}
+
+fn relations() -> impl Strategy<Value = Relations> {
+    prop::collection::btree_map(
+        (relation_kind(), element_id()),
+        proptest::option::of(allowed_text()),
+        0..4,
+    )
+}
+
 fn element() -> impl Strategy<Value = Element> {
     (
         element_id(),
@@ -51,8 +69,9 @@ fn element() -> impl Strategy<Value = Element> {
         allowed_text(),
         proptest::option::of(allowed_text()),
         any::<String>(),
+        relations(),
     )
-        .prop_map(|(id, type_ref, name, summary, body)| {
+        .prop_map(|(id, type_ref, name, summary, body, relations)| {
             Element::new(
                 id,
                 ElementFields {
@@ -60,10 +79,60 @@ fn element() -> impl Strategy<Value = Element> {
                     name,
                     summary,
                     body,
+                    relations,
                 },
             )
         })
-        .prop_filter_map("frontmatter over the limit", Result::ok)
+        .prop_filter_map(
+            "frontmatter over the limit or a relation to itself",
+            Result::ok,
+        )
+}
+
+/// Frontmatter built from the pieces that relations are written with,
+/// mixed with the YAML that the reader must reject, so arbitrary text
+/// reaches the reading of relations.
+fn relation_like_frontmatter() -> impl Strategy<Value = String> {
+    let piece = prop::sample::select(vec![
+        "relations:",
+        "relations: ",
+        "\n",
+        "\n  - ",
+        "- ",
+        "{",
+        "}",
+        "[",
+        "]",
+        ", ",
+        ": ",
+        "kind",
+        "to",
+        "label",
+        "\"uses\"",
+        "uses",
+        "\"main\"",
+        "other",
+        "\"a\\\"b\"",
+        "&a ",
+        "*a",
+        "!!str ",
+        "!!seq ",
+        "!!map ",
+        "#",
+        "'x'",
+        "|",
+        ">",
+        "? ",
+        "\"\"",
+        "  ",
+        "\t",
+        "\u{2028}",
+        "\u{feff}",
+        "...",
+        "---",
+    ]);
+    prop::collection::vec(piece, 0..40)
+        .prop_map(|pieces| format!("id: main\ntype: t\nname: n\n{}\n", pieces.concat()))
 }
 
 proptest! {
@@ -86,5 +155,14 @@ proptest! {
         let expected: ElementId = "main".parse().unwrap();
 
         let _ = Element::from_markdown(&expected, &format!("---\n{frontmatter}\n---\n"));
+    }
+
+    #[test]
+    fn rejects_or_reads_any_relation_like_frontmatter_without_panicking(
+        frontmatter in relation_like_frontmatter(),
+    ) {
+        let expected: ElementId = "main".parse().unwrap();
+
+        let _ = Element::from_markdown(&expected, &format!("---\n{frontmatter}---\n"));
     }
 }

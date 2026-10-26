@@ -9,6 +9,7 @@ mod board;
 mod element;
 mod id;
 mod object_only;
+mod relation;
 #[cfg(feature = "json-schema")]
 mod schema;
 #[cfg(feature = "ts")]
@@ -17,8 +18,9 @@ mod untrusted;
 
 pub use board::{BOARD_FORMAT, Board, BoardError, Rect};
 pub use element::{
-    Element, ElementError, ElementFields, ElementProblem, MAX_FRONTMATTER_BYTES, TypeRef,
+    Element, ElementError, ElementFields, ElementProblem, MAX_FRONTMATTER_BYTES, Relations, TypeRef,
 };
 pub use id::{BoardId, BoardKind, ElementId, ElementKind, Id, IdError, IdKind, IdRule, MAX_ID_LEN};
 pub use object_only::ObjectOnly;
+pub use relation::RelationKind;
 pub use untrusted::shown;

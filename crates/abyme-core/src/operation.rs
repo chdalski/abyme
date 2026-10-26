@@ -7,7 +7,7 @@
 
 use std::fmt;
 
-use abyme_model::{BoardId, ElementId, ObjectOnly, shown};
+use abyme_model::{BoardId, ElementId, ObjectOnly, RelationKind, shown};
 use serde::{Deserialize, Serialize};
 
 /// The longest local key, in characters.
@@ -74,6 +74,27 @@ pub enum Operation {
             schemars(range(min = -MAX_COORDINATE, max = MAX_COORDINATE))
         )]
         y: i32,
+    },
+    /// Adds a relation from one element to another.
+    CreateRelation {
+        /// The element the relation goes out from.
+        from: Ref<ElementId>,
+        /// What the relation says.
+        kind: RelationKind,
+        /// The element the relation points to.
+        to: Ref<ElementId>,
+        /// A short label, such as `REST`.
+        #[serde(default)]
+        label: Option<String>,
+    },
+    /// Removes a relation from the element it goes out from.
+    DeleteRelation {
+        /// The element the relation goes out from.
+        from: Ref<ElementId>,
+        /// The relation's kind.
+        kind: RelationKind,
+        /// The element the relation points to, also one whose file is gone.
+        to: Ref<ElementId>,
     },
 }
 
@@ -232,6 +253,42 @@ mod tests {
         );
     }
 
+    #[test]
+    fn reads_relation_operations() {
+        let json = r#"[
+            {"op": "create_relation", "from": {"new": "pay"}, "kind": "depends_on", "to": {"existing": "orders-db"}, "label": "SQL"},
+            {"op": "create_relation", "from": {"new": "pay"}, "kind": "uses", "to": {"existing": "orders-db"}},
+            {"op": "delete_relation", "from": {"existing": "web"}, "kind": "see_also", "to": {"existing": "gone"}}
+        ]"#;
+
+        let operations = read(json).unwrap();
+
+        let pay = || Ref::New(LocalKey::try_from("pay".to_owned()).unwrap());
+        let existing = |id: &str| Ref::Existing(id.parse().unwrap());
+        assert_eq!(
+            operations,
+            vec![
+                Operation::CreateRelation {
+                    from: pay(),
+                    kind: RelationKind::DependsOn,
+                    to: existing("orders-db"),
+                    label: Some("SQL".to_owned()),
+                },
+                Operation::CreateRelation {
+                    from: pay(),
+                    kind: RelationKind::Uses,
+                    to: existing("orders-db"),
+                    label: None,
+                },
+                Operation::DeleteRelation {
+                    from: existing("web"),
+                    kind: RelationKind::SeeAlso,
+                    to: existing("gone"),
+                },
+            ]
+        );
+    }
+
     #[rstest]
     #[case::summary_null(
         r#"[{"op": "create_element", "key": "k", "type_ref": "t", "name": "n", "summary": null}]"#
@@ -272,6 +329,21 @@ mod tests {
     )]
     #[case::move_with_a_size(
         r#"[{"op": "move_element", "element": {"new": "a"}, "board": {"new": "b"}, "x": 0, "y": 0, "width": 9}]"#
+    )]
+    #[case::unknown_relation_kind(
+        r#"[{"op": "create_relation", "from": {"new": "a"}, "kind": "contains", "to": {"new": "b"}}]"#
+    )]
+    #[case::capitalized_relation_kind(
+        r#"[{"op": "create_relation", "from": {"new": "a"}, "kind": "Uses", "to": {"new": "b"}}]"#
+    )]
+    #[case::relation_without_a_kind(
+        r#"[{"op": "create_relation", "from": {"new": "a"}, "to": {"new": "b"}}]"#
+    )]
+    #[case::deletion_with_a_label(
+        r#"[{"op": "delete_relation", "from": {"new": "a"}, "kind": "uses", "to": {"new": "b"}, "label": "l"}]"#
+    )]
+    #[case::relation_label_as_number(
+        r#"[{"op": "create_relation", "from": {"new": "a"}, "kind": "uses", "to": {"new": "b"}, "label": 1}]"#
     )]
     #[case::unknown_field(r#"[{"op": "create_board", "key": "k", "title": "t", "zone": {}}]"#)]
     #[case::duplicate_field(r#"[{"op": "create_board", "key": "k", "key": "j", "title": "t"}]"#)]
@@ -355,12 +427,14 @@ mod tests {
             .pointer("/$defs")
             .and_then(serde_json::Value::as_object)
             .unwrap();
+        // The relation kinds are variants too, but strings, not objects.
         let variants: Vec<&serde_json::Value> = definitions
             .values()
             .filter_map(|definition| definition.pointer("/oneOf")?.as_array())
             .flatten()
+            .filter(|variant| variant.pointer("/type") == Some(&serde_json::json!("object")))
             .collect();
-        assert_eq!(variants.len(), 4 + 2 + 2, "{schema}");
+        assert_eq!(variants.len(), 6 + 2 + 2, "{schema}");
         for variant in variants {
             assert_eq!(
                 variant.pointer("/additionalProperties"),

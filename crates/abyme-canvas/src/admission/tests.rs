@@ -56,6 +56,14 @@ fn every_other_operation_is_refused_by_its_position_and_kind() {
             json!({"op": "move_element", "element": {"new": "secret-key"}, "board": {"new": "other-key"}, "x": 1, "y": 2}),
             "move_element with a new element or board",
         ),
+        (
+            json!({"op": "create_relation", "from": {"existing": "secret-id"}, "kind": "uses", "to": {"existing": "payments"}, "label": "SECRET-LABEL"}),
+            "create_relation",
+        ),
+        (
+            json!({"op": "delete_relation", "from": {"existing": "secret-id"}, "kind": "uses", "to": {"existing": "payments"}}),
+            "delete_relation",
+        ),
     ];
 
     for (refused, kind) in refused {

@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 
-use abyme_model::{ElementFields, Rect, TypeRef};
+use abyme_model::{ElementFields, Rect, Relations, TypeRef};
 use proptest::prelude::*;
 use rstest::rstest;
 
@@ -27,6 +27,7 @@ fn element(id: &str, type_ref: &str, name: &str, summary: Option<&str>) -> Eleme
             name: name.to_owned(),
             summary: summary.map(str::to_owned),
             body: String::new(),
+            relations: Relations::new(),
         },
     )
     .unwrap()
@@ -279,6 +280,7 @@ fn arbitrary_element(index: usize) -> impl Strategy<Value = Option<Element>> {
                     name,
                     summary,
                     body: String::new(),
+                    relations: Relations::new(),
                 },
             )
             .ok()

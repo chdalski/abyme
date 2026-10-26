@@ -20,6 +20,7 @@ fn main_element(name: &str, summary: Option<&str>) -> Result<Element, ElementErr
             name: name.to_owned(),
             summary: summary.map(str::to_owned),
             body: String::new(),
+            relations: Relations::new(),
         },
     )
 }
@@ -34,6 +35,7 @@ fn payment_service() -> Element {
             summary: Some("Payment processing through Stripe".to_owned()),
             body: "Handles payments through Stripe. Refunds run asynchronously\nthrough the refund-worker.\n"
                 .to_owned(),
+            relations: Relations::new(),
         },
     )
     .unwrap()
@@ -409,4 +411,236 @@ fn error_escapes_control_characters_from_the_file() {
 
     assert!(!message.chars().any(char::is_control), "{message:?}");
     assert!(message.starts_with("element main: "), "{message}");
+}
+
+/// The element `main` with the given relations.
+fn main_with_relations(
+    relations: &[(RelationKind, &str, Option<&str>)],
+) -> Result<Element, ElementError> {
+    let relations = relations
+        .iter()
+        .map(|(kind, to, label)| ((*kind, element_id(to)), label.map(str::to_owned)))
+        .collect();
+    Element::new(
+        element_id("main"),
+        ElementFields {
+            relations,
+            ..main_element("Main", None).unwrap().into_fields()
+        },
+    )
+}
+
+#[test]
+fn writes_relations_one_per_line_sorted_by_kind_name_then_target() {
+    let element = main_with_relations(&[
+        (RelationKind::Uses, "orders-db", Some("REST")),
+        (RelationKind::DependsOn, "payment", None),
+        (RelationKind::Uses, "checkout", None),
+    ])
+    .unwrap();
+
+    let expected = "id: \"main\"
+type: \"t\"
+name: \"Main\"
+relations:
+  - {kind: \"depends_on\", to: \"payment\"}
+  - {kind: \"uses\", to: \"checkout\"}
+  - {kind: \"uses\", to: \"orders-db\", label: \"REST\"}
+";
+    assert_eq!(frontmatter_of(&element.to_markdown()), expected);
+    assert_eq!(read_main(&element.to_markdown()).unwrap(), element);
+}
+
+#[test]
+fn writes_no_relations_key_without_relations() {
+    let element = main_element("Main", None).unwrap();
+
+    assert!(!element.to_markdown().contains("relations"));
+}
+
+#[rstest]
+#[case::quote_and_backslash("a\"b\\c")]
+#[case::flow_indicators("a, b} {c] [d")]
+#[case::colon_and_hash("a: b # c")]
+#[case::line_breaks("a\nb\rc\u{85}d\u{2028}e\u{2029}f")]
+#[case::tab_and_byte_order_mark("a\tb\u{feff}c")]
+fn reads_back_labels_with_special_characters(#[case] label: &str) {
+    let element = main_with_relations(&[(RelationKind::Uses, "x", Some(label))]).unwrap();
+
+    let read = read_main(&element.to_markdown()).unwrap();
+
+    assert_eq!(read, element);
+}
+
+#[test]
+fn reads_relations_written_by_hand_in_any_style() {
+    let text = main_file(
+        "relations:\n- kind: uses\n  to: orders-db\n  label: REST\n- {kind: 'concerns', \"to\": x}\n",
+    );
+
+    let read = read_main(&text).unwrap();
+
+    let expected = main_with_relations(&[
+        (RelationKind::Uses, "orders-db", Some("REST")),
+        (RelationKind::Concerns, "x", None),
+    ])
+    .unwrap();
+    assert_eq!(read.relations(), expected.relations());
+}
+
+#[test]
+fn reads_a_relation_whose_target_has_no_file() {
+    let read = read_main(&main_file("relations: [{kind: uses, to: nowhere}]\n")).unwrap();
+
+    assert_eq!(
+        read.relations().keys().collect::<Vec<_>>(),
+        [&(RelationKind::Uses, element_id("nowhere"))]
+    );
+}
+
+#[test]
+fn reads_an_empty_list_of_relations_as_none() {
+    let read = read_main(&main_file("relations: []\n")).unwrap();
+
+    assert_eq!(read.relations(), &Relations::new());
+    assert!(!read.to_markdown().contains("relations"));
+}
+
+#[rstest]
+#[case::anchor_on_the_list("relations: &a [{kind: uses, to: x}]\n", ElementProblem::Anchor)]
+#[case::tag_on_the_list("relations: !!seq [{kind: uses, to: x}]\n", ElementProblem::Tag)]
+#[case::alias_as_the_list("relations: *a\n", ElementProblem::Alias)]
+#[case::anchor_on_a_relation("relations:\n  - &a {kind: uses, to: x}\n", ElementProblem::Anchor)]
+#[case::tag_on_a_relation("relations:\n  - !!map {kind: uses, to: x}\n", ElementProblem::Tag)]
+#[case::alias_as_a_relation("relations:\n  - *a\n", ElementProblem::Alias)]
+#[case::anchor_on_a_relation_key("relations: [{&a kind: uses, to: x}]\n", ElementProblem::Anchor)]
+#[case::tag_on_a_relation_key("relations: [{!!str kind: uses, to: x}]\n", ElementProblem::Tag)]
+#[case::anchor_on_a_relation_value("relations: [{kind: &a uses, to: x}]\n", ElementProblem::Anchor)]
+#[case::tag_on_a_relation_value("relations: [{kind: !!str uses, to: x}]\n", ElementProblem::Tag)]
+#[case::alias_as_a_relation_value("relations: [{kind: uses, to: *a}]\n", ElementProblem::Alias)]
+#[case::plain_value("relations: x\n", ElementProblem::RelationsNotAList)]
+#[case::empty_value("relations:\n", ElementProblem::RelationsNotAList)]
+#[case::mapping_value("relations: {kind: uses, to: x}\n", ElementProblem::RelationsNotAList)]
+#[case::plain_relation("relations:\n  - x\n", ElementProblem::RelationNotAMapping)]
+#[case::list_as_a_relation("relations:\n  - [uses, x]\n", ElementProblem::RelationNotAMapping)]
+#[case::list_as_a_kind(
+    "relations: [{kind: [uses], to: x}]\n",
+    ElementProblem::NonScalarRelationValue { key: "\"kind\"".to_owned() }
+)]
+#[case::mapping_as_a_target(
+    "relations: [{kind: uses, to: {a: b}}]\n",
+    ElementProblem::NonScalarRelationValue { key: "\"to\"".to_owned() }
+)]
+#[case::list_as_a_label(
+    "relations: [{kind: uses, to: x, label: [a]}]\n",
+    ElementProblem::NonScalarRelationValue { key: "\"label\"".to_owned() }
+)]
+#[case::list_as_a_relation_key("relations: [{[a]: b}]\n", ElementProblem::NonScalarKey)]
+#[case::unknown_relation_key(
+    "relations: [{kind: uses, to: x, color: red}]\n",
+    ElementProblem::UnknownRelationKey { key: "\"color\"".to_owned() }
+)]
+#[case::relation_key_quoted_and_plain(
+    "relations: [{kind: uses, \"kind\": uses, to: x}]\n",
+    ElementProblem::DuplicateRelationKey { key: "\"kind\"".to_owned() }
+)]
+#[case::missing_kind("relations: [{to: x}]\n", ElementProblem::MissingRelationKey { key: "kind" })]
+#[case::missing_target("relations: [{kind: uses}]\n", ElementProblem::MissingRelationKey { key: "to" })]
+#[case::capitalized_kind(
+    "relations: [{kind: Uses, to: x}]\n",
+    ElementProblem::UnknownRelationKind { kind: "\"Uses\"".to_owned() }
+)]
+#[case::kind_with_a_trailing_space(
+    "relations: [{kind: \"uses \", to: x}]\n",
+    ElementProblem::UnknownRelationKind { kind: "\"uses \"".to_owned() }
+)]
+#[case::kind_not_in_the_mvp(
+    "relations: [{kind: contains, to: x}]\n",
+    ElementProblem::UnknownRelationKind { kind: "\"contains\"".to_owned() }
+)]
+#[case::same_relation_in_flow_and_block_style(
+    "relations:\n  - {kind: uses, to: x}\n  - kind: \"uses\"\n    to: \"x\"\n",
+    ElementProblem::DuplicateRelation { kind: RelationKind::Uses, to: element_id("x") }
+)]
+#[case::relation_to_itself(
+    "relations: [{kind: describes, to: main}]\n",
+    ElementProblem::SelfRelation { kind: RelationKind::Describes }
+)]
+#[case::list_value_outside_relations("summary: [a]\nrelations: []\n", ElementProblem::NonScalarValue { key: "\"summary\"".to_owned() })]
+#[case::relations_twice(
+    "relations: []\nrelations: []\n",
+    ElementProblem::DuplicateKey { key: "\"relations\"".to_owned() }
+)]
+fn rejects_relations_beyond_a_list_of_flat_mappings(
+    #[case] extra_lines: &str,
+    #[case] problem: ElementProblem,
+) {
+    assert_eq!(problem_of(&main_file(extra_lines)), problem);
+}
+
+#[rstest]
+#[case::path_traversal("../x")]
+#[case::uppercase("A")]
+#[case::device_name("con")]
+#[case::too_long("a234567890123456789012345678901234567890123456789012345678901234x")]
+fn rejects_a_relation_to_an_invalid_id(#[case] to: &str) {
+    let text = main_file(&format!("relations: [{{kind: uses, to: \"{to}\"}}]\n"));
+
+    assert!(matches!(
+        problem_of(&text),
+        ElementProblem::InvalidRelationTarget { .. }
+    ));
+}
+
+#[rstest]
+#[case::null('\u{0}')]
+#[case::escape('\u{1b}')]
+#[case::noncharacter('\u{fffe}')]
+fn rejects_a_label_character_without_showing_the_label(#[case] character: char) {
+    let label = format!("secret{character}");
+
+    let error = main_with_relations(&[(RelationKind::Uses, "x", Some(&label))]).unwrap_err();
+
+    assert_eq!(
+        error.problem(),
+        &ElementProblem::InvalidCharacter {
+            field: "label",
+            code: u32::from(character)
+        }
+    );
+    assert!(!error.to_string().contains("secret"), "{error}");
+}
+
+#[test]
+fn rejects_a_label_character_in_a_file_without_showing_the_label() {
+    let error = read_main(&main_file(
+        "relations: [{kind: uses, to: x, label: \"secret\\0\"}]\n",
+    ))
+    .unwrap_err();
+
+    assert!(!error.to_string().contains("secret"), "{error}");
+}
+
+#[test]
+fn rejects_a_relation_to_itself_when_building() {
+    let error = main_with_relations(&[(RelationKind::Uses, "main", None)]).unwrap_err();
+
+    assert_eq!(
+        error.problem(),
+        &ElementProblem::SelfRelation {
+            kind: RelationKind::Uses
+        }
+    );
+}
+
+#[test]
+fn rejects_a_label_that_takes_the_frontmatter_past_the_limit() {
+    let label = "a".repeat(MAX_FRONTMATTER_BYTES);
+
+    let error = main_with_relations(&[(RelationKind::Uses, "x", Some(&label))]).unwrap_err();
+
+    assert!(matches!(
+        error.problem(),
+        ElementProblem::FrontmatterTooLarge { .. }
+    ));
 }

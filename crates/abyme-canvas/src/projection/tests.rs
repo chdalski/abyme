@@ -4,7 +4,7 @@ use super::*;
 use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 
-use abyme_model::{Board, ElementFields, TypeRef};
+use abyme_model::{Board, ElementFields, Relations, TypeRef};
 use serde_json::{Value, json};
 
 fn element_id(value: &str) -> ElementId {
@@ -32,6 +32,7 @@ fn element(id: &str, name: &str, summary: Option<&str>, body: &str) -> Element {
             name: name.to_owned(),
             summary: summary.map(str::to_owned),
             body: body.to_owned(),
+            relations: Relations::new(),
         },
     )
     .unwrap()

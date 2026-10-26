@@ -41,15 +41,37 @@ pub fn normalized_len(frontmatter: &str) -> usize {
     frontmatter.len() - frontmatter.matches("\r\n").count()
 }
 
-/// The frontmatter lines of `element`, each ending with a line feed.
+/// The frontmatter lines of `element`, each ending with a line feed. The
+/// relations, if any, come last, one line each in their sorted order.
 pub fn emit(element: &Element) -> String {
     let summary = element
         .summary
         .as_deref()
         .map(|summary| format!("summary: {}\n", quoted(summary)))
         .unwrap_or_default();
+    let relations = element
+        .relations
+        .iter()
+        .map(|((kind, to), label)| {
+            let label = label
+                .as_deref()
+                .map(|label| format!(", label: {}", quoted(label)))
+                .unwrap_or_default();
+            format!(
+                "  - {{kind: {}, to: {}{label}}}\n",
+                quoted(kind.as_str()),
+                quoted(to.as_str())
+            )
+        })
+        .collect::<Vec<_>>()
+        .concat();
+    let relations = if relations.is_empty() {
+        relations
+    } else {
+        format!("relations:\n{relations}")
+    };
     format!(
-        "id: {}\ntype: {}\nname: {}\n{summary}",
+        "id: {}\ntype: {}\nname: {}\n{summary}{relations}",
         quoted(element.id.as_str()),
         quoted(element.type_ref.as_str()),
         quoted(&element.name),

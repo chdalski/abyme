@@ -26,7 +26,8 @@ The docs, the UI, and the code use these terms alike. The type names are in [[Da
 | [[Board Graph\|Inner board]] | the inside of an element, reached by zooming in |
 | [[Board Graph#Relations Across Boards\|Stub]] | short arrow for a relation to an element that is not on the board |
 | [[Board Graph#Relations Across Boards\|Implied relation]] | arrow on the parent board derived from an inner board, not stored |
-| [[Relations\|Relation]] | typed edge between elements |
+| [[Relations\|Relation]] | typed edge from one element to another, with an optional label |
+| [[Relations\|Relation kind]] | concerns / depends_on / describes / see_also / uses; later contains / corresponds_to / replaces |
 | [[First Slice#MVP\|Docs map]] | the Markdown documents of a repo as document representations, with relations to the code they describe |
 | [[Presentation]] | how an element appears on the board: box, card, note, document, image, chart, table |
 | [[Presentation#Sticky Notes\|Sticky note]] | native element with the presentation note, free or attached |

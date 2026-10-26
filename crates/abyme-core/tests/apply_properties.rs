@@ -4,7 +4,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU32;
 
 use abyme_core::{Applied, Created, LocalKey, Operation, Ref, Snapshot, Write, apply};
-use abyme_model::{Board, BoardId, Element, ElementFields, ElementId, Rect, TypeRef};
+use abyme_model::{
+    Board, BoardId, Element, ElementFields, ElementId, Rect, RelationKind, Relations, TypeRef,
+};
 use proptest::prelude::*;
 
 const ELEMENT_IDS: [&str; 4] = ["orders-db", "checkout", "ghost", "payment-service"];
@@ -34,9 +36,30 @@ fn board_id() -> impl Strategy<Value = BoardId> {
     prop::sample::select(BOARD_IDS.to_vec()).prop_filter_map("valid ID", |id| id.parse().ok())
 }
 
-/// An element with the given ID and fixed content.
-fn element(id: ElementId) -> Option<Element> {
+fn relation_kind() -> impl Strategy<Value = RelationKind> {
+    prop::sample::select(vec![
+        RelationKind::Concerns,
+        RelationKind::DependsOn,
+        RelationKind::Describes,
+        RelationKind::SeeAlso,
+        RelationKind::Uses,
+    ])
+}
+
+/// Relations to the known element IDs, some of which have no file.
+fn relations() -> impl Strategy<Value = Relations> {
+    prop::collection::btree_map(
+        (relation_kind(), element_id()),
+        proptest::option::of(Just("label".to_owned())),
+        0..3,
+    )
+}
+
+/// An element with the given ID, fixed content, and the given relations
+/// except one to itself.
+fn element(id: ElementId, mut relations: Relations) -> Option<Element> {
     let type_ref = TypeRef::try_from("t".to_owned()).ok()?;
+    relations.retain(|(_, to), _| *to != id);
     Element::new(
         id,
         ElementFields {
@@ -44,6 +67,7 @@ fn element(id: ElementId) -> Option<Element> {
             name: "name".to_owned(),
             summary: None,
             body: String::new(),
+            relations,
         },
     )
     .ok()
@@ -52,10 +76,12 @@ fn element(id: ElementId) -> Option<Element> {
 /// A snapshot with some of the known elements and boards; `ghost` never has
 /// a file, so placing it leaves an orphan placement.
 fn snapshot() -> impl Strategy<Value = Snapshot> {
-    let elements = prop::collection::btree_set(element_id(), 0..=3).prop_map(|ids| {
+    let elements = prop::collection::btree_map(element_id(), relations(), 0..=3).prop_map(|ids| {
         ids.into_iter()
-            .filter(|id| id.as_str() != "ghost")
-            .filter_map(|id| element(id.clone()).map(|element| (id, element)))
+            .filter(|(id, _)| id.as_str() != "ghost")
+            .filter_map(|(id, relations)| {
+                element(id.clone(), relations).map(|element| (id, element))
+            })
             .collect::<BTreeMap<_, _>>()
     });
     let board = (
@@ -131,7 +157,45 @@ fn operation() -> impl Strategy<Value = Operation> {
         (key(), name()).prop_map(|(key, title)| Operation::CreateBoard { key, title }),
         (element_ref(), board_ref())
             .prop_map(|(element, board)| Operation::PlaceElement { element, board }),
+        (
+            element_ref(),
+            relation_kind(),
+            element_ref(),
+            proptest::option::of(prop_oneof![Just("REST".to_owned()), any::<String>()]),
+        )
+            .prop_map(|(from, kind, to, label)| Operation::CreateRelation {
+                from,
+                kind,
+                to,
+                label,
+            }),
+        (element_ref(), relation_kind(), element_ref())
+            .prop_map(|(from, kind, to)| Operation::DeleteRelation { from, kind, to }),
     ]
+}
+
+/// The existing elements that a request's operations name as the element
+/// they change.
+fn named_existing_elements(operations: &[Operation]) -> BTreeSet<&ElementId> {
+    operations
+        .iter()
+        .filter_map(|operation| match operation {
+            Operation::CreateRelation {
+                from: Ref::Existing(id),
+                ..
+            }
+            | Operation::DeleteRelation {
+                from: Ref::Existing(id),
+                ..
+            } => Some(id),
+            Operation::CreateElement { .. }
+            | Operation::CreateBoard { .. }
+            | Operation::PlaceElement { .. }
+            | Operation::MoveElement { .. }
+            | Operation::CreateRelation { .. }
+            | Operation::DeleteRelation { .. } => None,
+        })
+        .collect()
 }
 
 /// Arbitrary text without the characters an element file cannot hold.
@@ -199,9 +263,13 @@ fn overlaps(a: &Rect, b: &Rect) -> bool {
         && i64::from(b.y) < bottom(a)
 }
 
-/// Checks that the element files written are exactly the elements the
-/// request created, in the order of their creation.
-fn check_elements_written_as_created(applied: &Applied) -> Result<(), TestCaseError> {
+/// Checks that the element files written start with exactly the elements
+/// the request created, in the order of their creation, followed only by
+/// existing elements, and that no element is written twice.
+fn check_elements_written_as_created(
+    snapshot: &Snapshot,
+    applied: &Applied,
+) -> Result<(), TestCaseError> {
     let created: Vec<&ElementId> = applied
         .created
         .iter()
@@ -218,12 +286,27 @@ fn check_elements_written_as_created(applied: &Applied) -> Result<(), TestCaseEr
             Write::Board(_) => None,
         })
         .collect();
-    prop_assert_eq!(written, created);
+    let (new, changed) = written.split_at(created.len().min(written.len()));
+    prop_assert_eq!(new, created.as_slice());
+    for id in changed {
+        prop_assert!(
+            snapshot.elements.contains_key(*id),
+            "{id} written after the new elements is no existing element"
+        );
+    }
+    let unique: BTreeSet<&&ElementId> = written.iter().collect();
+    prop_assert_eq!(unique.len(), written.len(), "an element is written twice");
     Ok(())
 }
 
-/// Checks every rule a successful result must keep.
-fn check(snapshot: &Snapshot, applied: &Applied) -> Result<(), TestCaseError> {
+/// Checks every rule a successful result must keep. An existing element
+/// file changes only through an operation that names that element.
+fn check(
+    snapshot: &Snapshot,
+    operations: &[Operation],
+    applied: &Applied,
+) -> Result<(), TestCaseError> {
+    let named = named_existing_elements(operations);
     let existing_element_ids: BTreeSet<&ElementId> = snapshot
         .elements
         .keys()
@@ -252,7 +335,7 @@ fn check(snapshot: &Snapshot, applied: &Applied) -> Result<(), TestCaseError> {
             }
         }
     }
-    check_elements_written_as_created(applied)?;
+    check_elements_written_as_created(snapshot, applied)?;
     let mut seen_board = false;
     let mut written_boards = BTreeSet::new();
     for write in &applied.writes {
@@ -260,8 +343,8 @@ fn check(snapshot: &Snapshot, applied: &Applied) -> Result<(), TestCaseError> {
             Write::Element(element) => {
                 prop_assert!(!seen_board, "an element follows a board");
                 prop_assert!(
-                    !existing_element_ids.contains(element.id()),
-                    "existing element {} overwritten",
+                    !existing_element_ids.contains(element.id()) || named.contains(element.id()),
+                    "existing element {} changed though no operation names it",
                     element.id()
                 );
                 prop_assert!(element.id().as_str().len() <= 64);
@@ -310,12 +393,12 @@ fn check(snapshot: &Snapshot, applied: &Applied) -> Result<(), TestCaseError> {
 
 proptest! {
     #[test]
-    fn writes_only_new_elements_and_readable_files(
+    fn writes_only_named_elements_and_readable_files(
         snapshot in snapshot(),
         operations in prop::collection::vec(operation(), 0..12),
     ) {
         if let Ok(applied) = apply(&snapshot, &operations) {
-            check(&snapshot, &applied)?;
+            check(&snapshot, &operations, &applied)?;
         }
     }
 
@@ -329,7 +412,7 @@ proptest! {
         prop_assert!(applied.is_ok(), "{applied:?}");
         if let Ok(applied) = applied {
             prop_assert_eq!(applied.created.len(), operations.len().div_ceil(2));
-            check(&snapshot, &applied)?;
+            check(&snapshot, &operations, &applied)?;
         }
     }
 }
