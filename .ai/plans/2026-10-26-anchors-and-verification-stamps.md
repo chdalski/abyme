@@ -27,7 +27,7 @@ the only way to set a stamp.
 ## Steps
 
 - [x] Anchors and stamps in the element file
-- [ ] Anchors in requests and in the element detail
+- [x] Anchors in requests and in the element detail
 
 ## Tasks
 
@@ -80,26 +80,26 @@ reads anchor and stamp through `read_element`. No request can set a stamp.
 
 Review path: Security-Hybrid
 
-- [ ] `create_element` takes an optional `anchor`. `update_element` takes
+- [x] `create_element` takes an optional `anchor`. `update_element` takes
       `anchor`: a string sets or replaces it and `null` removes it, as for
       `summary`. The value passes the checks of Task 1.
-- [ ] An update that gives the element a different anchor, also one where
+- [x] An update that gives the element a different anchor, also one where
       it had none, or removes its anchor, also removes the element's stamp;
       an update that leaves the anchor as it is keeps the stamp. No
       operation takes `verified` or `verified_by`.
-- [ ] `read_element` shows, after `Type:`, the lines
+- [x] `read_element` shows, after `Type:`, the lines
       `Anchor: crates/payment-service` or `Anchor: none`, and
       `Verified: <full commit ID> by ai` (or `by person`) or
       `Verified: none`.
-- [ ] The canvas still refuses `create_element` and `update_element`.
-- [ ] An MCP test creates an anchored element through `apply`, reads it
+- [x] The canvas still refuses `create_element` and `update_element`.
+- [x] An MCP test creates an anchored element through `apply`, reads it
       back through `read_element`, changes the anchor, and sees the stamp
       of a hand-written file removed.
-- [ ] Data Model, the `apply` and `read_element` tool descriptions, the
+- [x] Data Model, the `apply` and `read_element` tool descriptions, the
       Tools section of `crates/abyme-mcp/README.md`, and MCP Server's
       element detail describe the fields as delivered; `docs/Decisions.md`
       records the anchor form and that only `verify` sets a stamp.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace
+- [x] `cargo test --workspace`, `cargo clippy --workspace
       --all-targets`, and `cargo fmt --all --check` pass.
 
 ## Decisions

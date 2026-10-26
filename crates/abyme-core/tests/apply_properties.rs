@@ -5,7 +5,8 @@ use std::num::NonZeroU32;
 
 use abyme_core::{Applied, Created, LocalKey, Operation, Ref, Snapshot, Write, apply};
 use abyme_model::{
-    Board, BoardId, Element, ElementFields, ElementId, Rect, RelationKind, Relations, TypeRef,
+    Anchor, Board, BoardId, CommitId, Element, ElementFields, ElementId, Rect, RelationKind,
+    Relations, TypeRef, Verification, Verifier,
 };
 use proptest::prelude::*;
 
@@ -55,10 +56,12 @@ fn relations() -> impl Strategy<Value = Relations> {
     )
 }
 
-/// An element with the given ID, fixed content, and the given relations
-/// except one to itself.
+/// An element with the given ID, fixed content, the anchor `crates/<id>`
+/// with a stamp, and the given relations except one to itself.
 fn element(id: ElementId, mut relations: Relations) -> Option<Element> {
     let type_ref = TypeRef::try_from("t".to_owned()).ok()?;
+    let anchor = Anchor::try_from(format!("crates/{id}")).ok()?;
+    let commit = CommitId::try_from("a".repeat(40)).ok()?;
     relations.retain(|(_, to), _| *to != id);
     Element::new(
         id,
@@ -68,8 +71,11 @@ fn element(id: ElementId, mut relations: Relations) -> Option<Element> {
             summary: None,
             body: String::new(),
             relations,
-            anchor: None,
-            verified: None,
+            anchor: Some(anchor),
+            verified: Some(Verification {
+                commit,
+                by: Verifier::Person,
+            }),
         },
     )
     .ok()
@@ -138,6 +144,22 @@ fn name() -> impl Strategy<Value = String> {
     ]
 }
 
+/// Anchors that equal a snapshot element's, differ from it only in case, or
+/// are new, mixed with arbitrary text.
+fn anchor() -> impl Strategy<Value = String> {
+    prop_oneof![
+        prop::sample::select(vec![
+            "crates/orders-db",
+            "Crates/orders-db",
+            "crates/checkout",
+            "docs",
+            "../x",
+        ])
+        .prop_map(str::to_owned),
+        any::<String>(),
+    ]
+}
+
 fn operation() -> impl Strategy<Value = Operation> {
     prop_oneof![
         (
@@ -145,17 +167,19 @@ fn operation() -> impl Strategy<Value = Operation> {
             prop_oneof![Just("t".to_owned()), any::<String>()],
             name(),
             proptest::option::of(any::<String>()),
-            any::<String>()
+            any::<String>(),
+            proptest::option::of(anchor()),
         )
-            .prop_map(
-                |(key, type_ref, name, summary, body)| Operation::CreateElement {
+            .prop_map(|(key, type_ref, name, summary, body, anchor)| {
+                Operation::CreateElement {
                     key,
                     type_ref,
                     name,
                     summary,
                     body,
+                    anchor,
                 }
-            ),
+            }),
         (key(), name()).prop_map(|(key, title)| Operation::CreateBoard { key, title }),
         (element_ref(), board_ref())
             .prop_map(|(element, board)| Operation::PlaceElement { element, board }),
@@ -179,14 +203,16 @@ fn operation() -> impl Strategy<Value = Operation> {
             proptest::option::of(prop_oneof![Just("t".to_owned()), any::<String>()]),
             proptest::option::of(proptest::option::of(any::<String>())),
             proptest::option::of(any::<String>()),
+            proptest::option::of(proptest::option::of(anchor())),
         )
-            .prop_map(|(element, name, type_ref, summary, body)| {
+            .prop_map(|(element, name, type_ref, summary, body, anchor)| {
                 Operation::UpdateElement {
                     element,
                     name,
                     type_ref,
                     summary,
                     body,
+                    anchor,
                 }
             }),
         element_ref().prop_map(|element| Operation::DeleteElement { element }),
@@ -290,6 +316,7 @@ fn well_formed_request() -> impl Strategy<Value = Vec<Operation>> {
                     name,
                     summary,
                     body,
+                    anchor: None,
                 });
                 operations.push(Operation::PlaceElement {
                     element: Ref::New(key),
@@ -437,7 +464,8 @@ fn check_removals(
 }
 
 /// Checks every rule a successful result must keep. An existing element
-/// file changes only through an operation that names that element.
+/// file changes only through an operation that names that element, and
+/// keeps its stamp only with the anchor the stamp was given for.
 fn check(
     snapshot: &Snapshot,
     operations: &[Operation],
@@ -492,6 +520,13 @@ fn check(
                     Element::from_markdown(element.id(), &element.to_markdown()),
                     Ok(element.clone())
                 );
+                // No request sets a stamp, and one survives only with the
+                // anchor it was given for.
+                if let Some(stamp) = element.verified() {
+                    let before = snapshot.elements.get(element.id());
+                    prop_assert_eq!(before.and_then(Element::verified), Some(stamp));
+                    prop_assert_eq!(before.and_then(Element::anchor), element.anchor());
+                }
             }
             Write::Board(board) => {
                 seen_board = true;

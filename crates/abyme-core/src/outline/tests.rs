@@ -1,7 +1,10 @@
 use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 
-use abyme_model::{ElementFields, FORMAT_AND_SEPARATORS, Rect, Relations, TypeRef};
+use abyme_model::{
+    Anchor, CommitId, ElementFields, FORMAT_AND_SEPARATORS, Rect, Relations, TypeRef, Verification,
+    Verifier,
+};
 use proptest::prelude::*;
 use rstest::rstest;
 
@@ -782,6 +785,8 @@ fn renders_the_detail_of_an_element() {
         detail_of(&detail_snapshot(), "payment"),
         "Element: payment · Payment Service\n\
          Type: c4/container\n\
+         Anchor: none\n\
+         Verified: none\n\
          Summary: Payments through Stripe\n\
          Boards: b, onboarding\n\
          \n\
@@ -799,6 +804,66 @@ fn renders_the_detail_of_an_element() {
     );
 }
 
+/// `element` with the given anchor and stamp.
+fn anchored(element: Element, anchor: &str, stamp: Option<(&str, Verifier)>) -> Element {
+    let id = element.id().clone();
+    Element::new(
+        id,
+        ElementFields {
+            anchor: Some(Anchor::try_from(anchor.to_owned()).unwrap()),
+            verified: stamp.map(|(commit, by)| Verification {
+                commit: CommitId::try_from(commit.to_owned()).unwrap(),
+                by,
+            }),
+            ..element.into_fields()
+        },
+    )
+    .unwrap()
+}
+
+#[rstest]
+#[case::sha1_by_person("0123456789abcdef0123456789abcdef01234567", Verifier::Person, "person")]
+#[case::sha256_by_ai(&"fedcba9876543210".repeat(4), Verifier::Ai, "ai")]
+fn renders_the_anchor_and_the_stamp_after_the_type(
+    #[case] commit: &str,
+    #[case] by: Verifier,
+    #[case] name: &str,
+) {
+    let mut snapshot = snapshot("Board", Vec::new(), &[]);
+    let element = anchored(
+        element("x", "t", "X", Some("S")),
+        "crates/payment service/Überweisung.md",
+        Some((commit, by)),
+    );
+    snapshot.elements.insert(element.id().clone(), element);
+
+    assert!(
+        detail_of(&snapshot, "x").starts_with(&format!(
+            "Element: x · X\n\
+             Type: t\n\
+             Anchor: crates/payment service/Überweisung.md\n\
+             Verified: {commit} by {name}\n\
+             Summary: S\n\
+             Boards: none\n"
+        )),
+        "{}",
+        detail_of(&snapshot, "x")
+    );
+}
+
+#[test]
+fn renders_an_anchor_without_a_stamp() {
+    let mut snapshot = snapshot("Board", Vec::new(), &[]);
+    let element = anchored(element("x", "t", "X", None), "docs", None);
+    snapshot.elements.insert(element.id().clone(), element);
+
+    assert!(
+        detail_of(&snapshot, "x").contains("\nAnchor: docs\nVerified: none\n"),
+        "{}",
+        detail_of(&snapshot, "x")
+    );
+}
+
 #[test]
 fn renders_none_for_missing_boards_relations_and_leaves_out_a_missing_summary() {
     let mut snapshot = detail_snapshot();
@@ -809,6 +874,8 @@ fn renders_none_for_missing_boards_relations_and_leaves_out_a_missing_summary() 
         detail_of(&snapshot, "loose"),
         "Element: loose · Loose\n\
          Type: t\n\
+         Anchor: none\n\
+         Verified: none\n\
          Boards: none\n\
          \n\
          Outgoing relations:\n\
@@ -884,6 +951,8 @@ fn keeps_a_description_that_imitates_sections_after_the_real_ones() {
         format!(
             "Element: x · X\n\
              Type: t\n\
+             Anchor: none\n\
+             Verified: none\n\
              Boards: none\n\
              \n\
              Outgoing relations:\n\
@@ -925,6 +994,8 @@ fn escapes_every_single_line_value_of_the_detail(#[case] text: &str, #[case] exp
         format!(
             "Element: x · {expected}\n\
              Type: {expected}\n\
+             Anchor: none\n\
+             Verified: none\n\
              Summary: {expected}\n\
              Boards: none\n\
              \n\

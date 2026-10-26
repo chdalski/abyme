@@ -1,11 +1,11 @@
 //! The detail levels as the AI reads them: a board as a compact text
 //! outline, and one element in detail.
 //!
-//! Titles, types, names, summaries, relation labels, and descriptions come
-//! from files that a clone or a pull request can bring in. Every value but
-//! the description is written on one line, and every character that could
-//! break a line or hide or reorder text is escaped; the description keeps
-//! its lines and tabs.
+//! Titles, types, names, summaries, anchors, relation labels, and
+//! descriptions come from files that a clone or a pull request can bring
+//! in. Every value but the description is written on one line, and every
+//! character that could break a line or hide or reorder text is escaped;
+//! the description keeps its lines and tabs.
 
 use abyme_model::{Board, BoardId, Element, ElementId, Rect, RelationKind, hides_or_breaks_text};
 
@@ -114,8 +114,10 @@ pub fn element_list<'a>(
 
 /// Renders the element `id` in detail, in this order:
 ///
-/// - `Element:` with its ID and name, `Type:`, `Summary:` if it has one,
-///   and `Boards:` with every board that places it, by ID, or `none`;
+/// - `Element:` with its ID and name, `Type:`, `Anchor:` with its anchor or
+///   `none`, `Verified:` with the stamp's commit and `by ai` or
+///   `by person`, or `none`, `Summary:` if it has one, and `Boards:` with
+///   every board that places it, by ID, or `none`;
 /// - after a blank line, `Outgoing relations:` with one line per relation
 ///   as in the outline, a target without a file marked `⚠ missing`, or
 ///   `none`;
@@ -137,6 +139,13 @@ pub fn element_detail(snapshot: &Snapshot, id: &ElementId) -> Result<String, Unk
         .elements
         .get(id)
         .ok_or_else(|| UnknownElement(id.clone()))?;
+    let anchor = element
+        .anchor()
+        .map_or_else(|| "none".to_owned(), |anchor| one_line(anchor.as_str()));
+    let verified = element.verified().map_or_else(
+        || "none".to_owned(),
+        |stamp| format!("{} by {}", stamp.commit.as_str(), stamp.by.as_str()),
+    );
     let summary = element
         .summary()
         .map(|summary| format!("Summary: {}\n", one_line(summary)))
@@ -178,7 +187,8 @@ pub fn element_detail(snapshot: &Snapshot, id: &ElementId) -> Result<String, Unk
         boards.join(", ")
     };
     Ok(format!(
-        "Element: {id} · {}\nType: {}\n{summary}Boards: {boards}\n\n\
+        "Element: {id} · {}\nType: {}\nAnchor: {anchor}\nVerified: {verified}\n\
+         {summary}Boards: {boards}\n\n\
          Outgoing relations:\n{}\nIncoming relations:\n{}\nDescription:\n{}",
         one_line(element.name()),
         one_line(element.type_ref().as_str()),

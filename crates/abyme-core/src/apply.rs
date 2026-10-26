@@ -9,8 +9,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use abyme_model::{
-    Board, BoardId, Element, ElementFields, ElementId, ElementProblem, RelationKind, Relations,
-    TypeRef,
+    Anchor, Board, BoardId, Element, ElementFields, ElementId, ElementProblem, RelationKind,
+    Relations, TypeRef,
 };
 
 use crate::layout::Layout;
@@ -114,8 +114,8 @@ pub enum OperationProblem {
     /// The element already lies on a board.
     #[error("element {0} already has a home on a board")]
     AlreadyHomed(ElementId),
-    /// The type, name, summary, or a relation breaks a rule of the element
-    /// file.
+    /// The type, name, summary, anchor, or a relation breaks a rule of the
+    /// element file.
     #[error("{0}")]
     InvalidElement(ElementProblem),
     /// No free position on the board fits the coordinate range.
@@ -269,7 +269,15 @@ impl<'snapshot> Draft<'snapshot> {
                 name,
                 summary,
                 body,
-            } => self.create_element(key, type_ref, name, summary.as_deref(), body),
+                anchor,
+            } => self.create_element(
+                key,
+                type_ref,
+                name,
+                summary.as_deref(),
+                body,
+                anchor.as_deref(),
+            ),
             Operation::CreateBoard { key, title } => self.create_board(key, title),
             Operation::PlaceElement { element, board } => self.place_element(element, board),
             Operation::MoveElement {
@@ -284,12 +292,14 @@ impl<'snapshot> Draft<'snapshot> {
                 type_ref,
                 summary,
                 body,
+                anchor,
             } => self.update_element(
                 element,
                 name.as_deref(),
                 type_ref.as_deref(),
                 summary.as_ref().map(Option::as_deref),
                 body.as_deref(),
+                anchor.as_ref().map(Option::as_deref),
             ),
             Operation::CreateRelation {
                 from,
@@ -309,10 +319,15 @@ impl<'snapshot> Draft<'snapshot> {
         name: &str,
         summary: Option<&str>,
         body: &str,
+        anchor: Option<&str>,
     ) -> Result<(), OperationProblem> {
         self.check_new_key(key)?;
         let type_ref =
             TypeRef::try_from(type_ref.to_owned()).map_err(OperationProblem::InvalidElement)?;
+        let anchor = anchor
+            .map(|anchor| Anchor::try_from(anchor.to_owned()))
+            .transpose()
+            .map_err(OperationProblem::InvalidElement)?;
         let id =
             free_slug(name, "element", &self.taken_elements).ok_or(OperationProblem::NoFreeId)?;
         let element = Element::new(
@@ -323,7 +338,7 @@ impl<'snapshot> Draft<'snapshot> {
                 summary: summary.map(str::to_owned),
                 body: body.to_owned(),
                 relations: Relations::new(),
-                anchor: None,
+                anchor,
                 verified: None,
             },
         )
@@ -395,10 +410,13 @@ impl<'snapshot> Draft<'snapshot> {
     }
 
     /// Changes the fields an update names and keeps the others, the ID and
-    /// the relations included. An update that names no field is rejected.
+    /// the relations included. An anchor that differs from the element's,
+    /// also a new or a removed one, removes its verification stamp: the
+    /// element then stands for something nobody has checked. An update that
+    /// names no field is rejected.
     #[expect(
         clippy::option_option,
-        reason = "a missing summary keeps it, `Some(None)` removes it, and a text replaces it"
+        reason = "a missing summary or anchor keeps it, `Some(None)` removes it, and a text replaces it"
     )]
     fn update_element(
         &mut self,
@@ -407,13 +425,27 @@ impl<'snapshot> Draft<'snapshot> {
         type_ref: Option<&str>,
         summary: Option<Option<&str>>,
         body: Option<&str>,
+        anchor: Option<Option<&str>>,
     ) -> Result<(), OperationProblem> {
         let id = self.resolve_element(element)?;
-        if name.is_none() && type_ref.is_none() && summary.is_none() && body.is_none() {
+        if name.is_none()
+            && type_ref.is_none()
+            && summary.is_none()
+            && body.is_none()
+            && anchor.is_none()
+        {
             return Err(OperationProblem::NothingToUpdate(id));
         }
         let type_ref = type_ref
             .map(|type_ref| TypeRef::try_from(type_ref.to_owned()))
+            .transpose()
+            .map_err(OperationProblem::InvalidElement)?;
+        let anchor = anchor
+            .map(|anchor| {
+                anchor
+                    .map(|anchor| Anchor::try_from(anchor.to_owned()))
+                    .transpose()
+            })
             .transpose()
             .map_err(OperationProblem::InvalidElement)?;
         self.change_element(&id, |fields| {
@@ -428,6 +460,12 @@ impl<'snapshot> Draft<'snapshot> {
             }
             if let Some(body) = body {
                 body.clone_into(&mut fields.body);
+            }
+            if let Some(anchor) = anchor {
+                if fields.anchor != anchor {
+                    fields.verified = None;
+                }
+                fields.anchor = anchor;
             }
             Ok(())
         })

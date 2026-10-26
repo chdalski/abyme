@@ -44,6 +44,7 @@ fn create_element(name: &str) -> Operation {
         name: name.to_owned(),
         summary: None,
         body: String::new(),
+        anchor: None,
     }
 }
 

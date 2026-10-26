@@ -554,6 +554,8 @@ async fn read_element_shows_an_element_with_its_relations_and_description() -> T
         text(&read),
         "Element: payment-service · Payment Service\n\
          Type: c4/container\n\
+         Anchor: none\n\
+         Verified: none\n\
          Summary: Payments through Stripe\n\
          Boards: container-level\n\
          \n\
@@ -599,6 +601,8 @@ async fn apply_updates_an_element_and_read_element_shows_it() -> TestResult {
         text(&read),
         "Element: payment-service · Payments\n\
          Type: c4/container\n\
+         Anchor: none\n\
+         Verified: none\n\
          Boards: container-level\n\
          \n\
          Outgoing relations:\n\
@@ -638,6 +642,124 @@ async fn a_rejected_update_is_a_tool_error_and_changes_no_file() -> TestResult {
         "operation 2: no element has the ID nowhere"
     );
     assert_eq!(files(directory.path())?, before);
+
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+/// A hand-written element file with an anchor and a stamp by a person.
+const STAMPED: &str = "---\nid: stamped\ntype: t\nname: Stamped\nanchor: crates/stamped\n\
+    verified: \"0123456789abcdef0123456789abcdef01234567\"\nverified_by: person\n---\n";
+
+/// A project with the hand-written element `stamped`.
+fn project_with_a_stamped_element() -> TestResult<tempfile::TempDir> {
+    let directory = project()?;
+    let elements = directory.path().join("abyme/elements");
+    fs::create_dir_all(&elements)?;
+    fs::write(elements.join("stamped.md"), STAMPED)?;
+    Ok(directory)
+}
+
+#[tokio::test]
+async fn apply_sets_and_changes_anchors_and_a_changed_anchor_removes_the_stamp() -> TestResult {
+    let directory = project_with_a_stamped_element()?;
+    let session = start(directory.path()).await?;
+
+    let created = call(
+        &session,
+        "apply",
+        json!({"operations": [
+            {"op": "create_element", "key": "d", "type_ref": "doc", "name": "Docs Page",
+             "anchor": "docs/a \"b\" #c: d"}
+        ]}),
+    )
+    .await??;
+    assert_eq!(
+        created.is_error,
+        Some(true),
+        "a colon is refused: {created:?}"
+    );
+    let created = call(
+        &session,
+        "apply",
+        json!({"operations": [
+            {"op": "create_element", "key": "d", "type_ref": "doc", "name": "Docs Page",
+             "anchor": "docs/a \"b\" #c"}
+        ]}),
+    )
+    .await??;
+    assert_eq!(created.is_error, Some(false), "{created:?}");
+    let read = call(&session, "read_element", json!({"element": "docs-page"})).await??;
+    assert!(
+        text(&read).starts_with(
+            "Element: docs-page · Docs Page\n\
+             Type: doc\n\
+             Anchor: docs/a \"b\" #c\n\
+             Verified: none\n"
+        ),
+        "{}",
+        text(&read)
+    );
+
+    let read = call(&session, "read_element", json!({"element": "stamped"})).await??;
+    assert!(
+        text(&read).contains(
+            "\nAnchor: crates/stamped\n\
+             Verified: 0123456789abcdef0123456789abcdef01234567 by person\n"
+        ),
+        "{}",
+        text(&read)
+    );
+
+    let changed = call(
+        &session,
+        "apply",
+        json!({"operations": [
+            {"op": "update_element", "element": {"existing": "stamped"}, "anchor": "crates/other"}
+        ]}),
+    )
+    .await??;
+    assert_eq!(changed.is_error, Some(false), "{changed:?}");
+    let read = call(&session, "read_element", json!({"element": "stamped"})).await??;
+    assert!(
+        text(&read).contains("\nAnchor: crates/other\nVerified: none\n"),
+        "{}",
+        text(&read)
+    );
+    assert_eq!(
+        fs::read_to_string(directory.path().join("abyme/elements/stamped.md"))?,
+        "---\n\
+         id: \"stamped\"\n\
+         type: \"t\"\n\
+         name: \"Stamped\"\n\
+         anchor: \"crates/other\"\n\
+         ---\n"
+    );
+
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+#[tokio::test]
+async fn apply_refuses_to_set_a_stamp_and_changes_no_file() -> TestResult {
+    let directory = project_with_a_stamped_element()?;
+    let session = start(directory.path()).await?;
+    let before = files(directory.path())?;
+
+    // With a name to change, only the stamp field can make the request fail.
+    for (field, value) in [
+        ("verified", "0123456789abcdef0123456789abcdef01234567"),
+        ("verified_by", "person"),
+    ] {
+        let mut update =
+            json!({"op": "update_element", "element": {"existing": "stamped"}, "name": "X"});
+        update[field] = json!(value);
+        let refused = call(&session, "apply", json!({"operations": [update]})).await??;
+
+        assert_eq!(refused.is_error, Some(true), "{refused:?}");
+        assert!(text(&refused).contains(field), "{}", text(&refused));
+        assert_eq!(files(directory.path())?, before);
+    }
 
     assert_only_protocol_messages(&finish(session).await?);
     Ok(())

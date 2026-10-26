@@ -3,7 +3,7 @@
 use super::*;
 use std::num::NonZeroU32;
 
-use abyme_model::Rect;
+use abyme_model::{Rect, hides_or_breaks_text};
 use rstest::rstest;
 
 use crate::operation::Operations;
@@ -1458,4 +1458,144 @@ fn keeps_the_anchor_and_the_stamp_when_a_relation_changes() {
     let loose = changed.first().unwrap();
     assert_eq!(loose.anchor(), stamped.anchor());
     assert_eq!(loose.verified(), stamped.verified());
+}
+
+const COMMIT: &str = "0123456789abcdef0123456789abcdef01234567";
+
+/// The snapshot with `anchored`, anchored on `crates/anchored`, and
+/// `native`, without an anchor; both carry a stamp.
+fn stamped_snapshot() -> Snapshot {
+    let mut snapshot = snapshot();
+    for (id, anchor) in [("anchored", "anchor: crates/anchored\n"), ("native", "")] {
+        let element = Element::from_markdown(
+            &element_id(id),
+            &format!(
+                "---\nid: {id}\ntype: t\nname: N\n{anchor}verified: \"{COMMIT}\"\nverified_by: person\n---\n"
+            ),
+        )
+        .unwrap();
+        snapshot.elements.insert(element_id(id), element);
+    }
+    snapshot
+}
+
+/// The element `id` as the request wrote it.
+fn written<'a>(applied: &'a Applied, id: &str) -> &'a Element {
+    written_elements(applied)
+        .into_iter()
+        .find(|element| element.id().as_str() == id)
+        .unwrap()
+}
+
+#[test]
+fn creates_an_element_with_an_anchor_and_no_stamp() {
+    let json = r#"[{"op": "create_element", "key": "e", "type_ref": "t", "name": "Fresh", "anchor": "crates/fresh"}]"#;
+
+    let applied = apply(&snapshot(), &operations(json)).unwrap();
+
+    let fresh = written(&applied, "fresh");
+    assert_eq!(fresh.anchor().map(Anchor::as_str), Some("crates/fresh"));
+    assert_eq!(fresh.verified(), None);
+}
+
+#[rstest]
+#[case::other_anchor("anchored", serde_json::json!("crates/other"), Some("crates/other"), false)]
+#[case::removed_anchor("anchored", serde_json::Value::Null, None, false)]
+#[case::other_case("anchored", serde_json::json!("Crates/anchored"), Some("Crates/anchored"), false)]
+#[case::same_anchor("anchored", serde_json::json!("crates/anchored"), Some("crates/anchored"), true)]
+#[case::first_anchor("native", serde_json::json!("docs"), Some("docs"), false)]
+#[case::no_anchor_removed("native", serde_json::Value::Null, None, true)]
+fn keeps_the_stamp_only_while_the_anchor_stays_the_same(
+    #[case] id: &str,
+    #[case] anchor: serde_json::Value,
+    #[case] expected: Option<&str>,
+    #[case] keeps_the_stamp: bool,
+) {
+    let json = serde_json::json!([
+        {"op": "update_element", "element": {"existing": id}, "anchor": anchor}
+    ]);
+
+    let applied = apply(&stamped_snapshot(), &operations(&json.to_string())).unwrap();
+
+    let updated = written(&applied, id);
+    assert_eq!(updated.anchor().map(Anchor::as_str), expected);
+    assert_eq!(updated.verified().is_some(), keeps_the_stamp);
+}
+
+#[test]
+fn drops_the_stamp_of_an_anchor_changed_and_changed_back_in_one_request() {
+    let json = r#"[
+        {"op": "update_element", "element": {"existing": "anchored"}, "anchor": "crates/other"},
+        {"op": "update_element", "element": {"existing": "anchored"}, "anchor": "crates/anchored"}
+    ]"#;
+
+    let applied = apply(&stamped_snapshot(), &operations(json)).unwrap();
+
+    let updated = written(&applied, "anchored");
+    assert_eq!(
+        updated.anchor().map(Anchor::as_str),
+        Some("crates/anchored")
+    );
+    assert_eq!(updated.verified(), None);
+}
+
+#[test]
+fn keeps_the_anchor_and_the_stamp_when_other_fields_change() {
+    let json = r#"[{"op": "update_element", "element": {"existing": "anchored"}, "name": "M", "summary": "S", "body": "B"}]"#;
+    let snapshot = stamped_snapshot();
+
+    let applied = apply(&snapshot, &operations(json)).unwrap();
+
+    let before = snapshot.elements.get(&element_id("anchored")).unwrap();
+    let updated = written(&applied, "anchored");
+    assert_eq!(updated.anchor(), before.anchor());
+    assert_eq!(updated.verified(), before.verified());
+}
+
+#[rstest]
+#[case::dot_dot_segment("crates/../etc")]
+#[case::leading_slash("/etc/passwd")]
+#[case::reserved_folder("abyme/elements")]
+#[case::git_folder_in_any_case("a/.GIT/b")]
+#[case::colon("C:x")]
+#[case::right_to_left_override("a\u{202e}b")]
+#[case::line_feed("a\nb")]
+#[case::too_long(&"a".repeat(4097))]
+fn rejects_an_invalid_anchor_in_a_creation_and_an_update(#[case] anchor: &str) {
+    let snapshot = stamped_snapshot();
+    let requests = [
+        serde_json::json!([
+            {"op": "create_element", "key": "e", "type_ref": "t", "name": "N", "anchor": anchor}
+        ]),
+        serde_json::json!([
+            {"op": "update_element", "element": {"existing": "anchored"}, "anchor": anchor}
+        ]),
+    ];
+
+    for request in requests {
+        let problem = problem(&snapshot, &request.to_string());
+
+        assert!(
+            matches!(
+                problem,
+                OperationProblem::InvalidElement(ElementProblem::InvalidAnchor { .. })
+            ),
+            "{problem:?}"
+        );
+    }
+}
+
+#[test]
+fn shows_a_rejected_anchor_escaped_and_shortened() {
+    let anchor = format!("\u{202e}\u{1b}[31m{}", "x".repeat(10_000));
+    let json = serde_json::json!([
+        {"op": "update_element", "element": {"existing": "anchored"}, "anchor": anchor}
+    ]);
+
+    let error = apply(&stamped_snapshot(), &operations(&json.to_string())).unwrap_err();
+
+    let message = error.to_string();
+    assert!(message.len() < 600, "{} bytes", message.len());
+    assert!(!message.chars().any(hides_or_breaks_text), "{message:?}");
+    assert!(message.contains("\\u{202e}"), "{message:?}");
 }

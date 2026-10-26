@@ -40,6 +40,10 @@ pub enum Operation {
         /// The description as Markdown.
         #[serde(default)]
         body: String,
+        /// The path relative to the project root that the element stands
+        /// for, such as `crates/payment-service`.
+        #[serde(default)]
+        anchor: Option<String>,
     },
     /// Creates a board. Its ID is derived from the title.
     CreateBoard {
@@ -112,6 +116,16 @@ pub enum Operation {
         )]
         #[cfg_attr(feature = "json-schema", schemars(with = "String"))]
         body: Option<String>,
+        /// The new anchor, a path relative to the project root; `null`
+        /// removes it. A changed, new, or removed anchor removes the
+        /// element's verification stamp.
+        #[serde(
+            default,
+            deserialize_with = "present",
+            skip_serializing_if = "Option::is_none"
+        )]
+        #[cfg_attr(feature = "json-schema", schemars(with = "Option<String>"))]
+        anchor: Option<Option<String>>,
     },
     /// Deletes an element: its file, its placement on every board, and its
     /// own relations. It is rejected while other elements still relate to it.
@@ -186,7 +200,7 @@ pub struct LocalKeyError {
 
 /// Reads a field that is present: `None` stands only for a field the
 /// request leaves out. So `null` is rejected where the field's own type
-/// rejects it, and a summary of `null` reads as `Some(None)`.
+/// rejects it, and a summary or an anchor of `null` reads as `Some(None)`.
 fn present<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -288,8 +302,32 @@ mod tests {
                 name: "Payment Service".to_owned(),
                 summary: None,
                 body: String::new(),
+                anchor: None,
             })
         );
+    }
+
+    #[test]
+    fn reads_a_created_element_with_or_without_an_anchor() {
+        let cases = [
+            ("", None),
+            (r#", "anchor": null"#, None),
+            (r#", "anchor": "crates/pay""#, Some("crates/pay")),
+        ];
+
+        for (field, expected) in cases {
+            let json = format!(
+                r#"[{{"op": "create_element", "key": "k", "type_ref": "t", "name": "n"{field}}}]"#
+            );
+            let operations = read(&json).unwrap();
+
+            match operations.as_slice() {
+                [Operation::CreateElement { anchor, .. }] => {
+                    assert_eq!(anchor.as_deref(), expected, "{field}");
+                }
+                other => panic!("expected one creation, got {other:?}"),
+            }
+        }
     }
 
     #[test]
@@ -369,6 +407,29 @@ mod tests {
     }
 
     #[test]
+    fn reads_an_update_that_keeps_removes_or_replaces_the_anchor() {
+        let cases = [
+            (r#""name": "N""#, None),
+            (r#""anchor": null"#, Some(None)),
+            (r#""anchor": "crates/pay""#, Some(Some("crates/pay"))),
+        ];
+
+        for (fields, expected) in cases {
+            let json = format!(
+                r#"[{{"op": "update_element", "element": {{"existing": "a"}}, {fields}}}]"#
+            );
+            let operations = read(&json).unwrap();
+
+            match operations.as_slice() {
+                [Operation::UpdateElement { anchor, .. }] => {
+                    assert_eq!(anchor.as_ref().map(Option::as_deref), expected, "{fields}");
+                }
+                other => panic!("expected one update, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
     fn reads_a_deletion() {
         let json = r#"[{"op": "delete_element", "element": {"existing": "orders-db"}}]"#;
 
@@ -383,7 +444,7 @@ mod tests {
     #[test]
     fn reads_an_update_of_every_field() {
         let json = r#"[{"op": "update_element", "element": {"new": "pay"}, "name": "Payments",
-            "type_ref": "c4/component", "summary": "S", "body": "B"}]"#;
+            "type_ref": "c4/component", "summary": "S", "body": "B", "anchor": "crates/pay"}]"#;
 
         assert_eq!(
             read(json).unwrap(),
@@ -393,6 +454,7 @@ mod tests {
                 type_ref: Some("c4/component".to_owned()),
                 summary: Some(Some("S".to_owned())),
                 body: Some("B".to_owned()),
+                anchor: Some(Some("crates/pay".to_owned())),
             }]
         );
     }
@@ -473,6 +535,33 @@ mod tests {
     )]
     #[case::update_summary_twice(
         r#"[{"op": "update_element", "element": {"existing": "a"}, "summary": null, "summary": "x"}]"#
+    )]
+    #[case::update_anchor_as_number(
+        r#"[{"op": "update_element", "element": {"existing": "a"}, "anchor": 5}]"#
+    )]
+    #[case::update_anchor_as_object(
+        r#"[{"op": "update_element", "element": {"existing": "a"}, "anchor": {}}]"#
+    )]
+    #[case::update_anchor_as_array(
+        r#"[{"op": "update_element", "element": {"existing": "a"}, "anchor": []}]"#
+    )]
+    #[case::create_anchor_as_number(
+        r#"[{"op": "create_element", "key": "k", "type_ref": "t", "name": "n", "anchor": 5}]"#
+    )]
+    #[case::create_with_a_commit(
+        r#"[{"op": "create_element", "key": "k", "type_ref": "t", "name": "n", "verified": "0000000000000000000000000000000000000000"}]"#
+    )]
+    #[case::create_with_a_verifier(
+        r#"[{"op": "create_element", "key": "k", "type_ref": "t", "name": "n", "verified_by": "person"}]"#
+    )]
+    #[case::update_with_a_commit(
+        r#"[{"op": "update_element", "element": {"existing": "a"}, "verified": "0000000000000000000000000000000000000000"}]"#
+    )]
+    #[case::update_with_a_verifier(
+        r#"[{"op": "update_element", "element": {"existing": "a"}, "verified_by": "person"}]"#
+    )]
+    #[case::move_with_an_anchor(
+        r#"[{"op": "move_element", "element": {"new": "a"}, "board": {"new": "b"}, "x": 0, "y": 0, "anchor": "x"}]"#
     )]
     #[case::update_name_twice(
         r#"[{"op": "update_element", "element": {"existing": "a"}, "name": "x", "name": "y"}]"#
@@ -596,7 +685,7 @@ mod tests {
 
     #[cfg(feature = "json-schema")]
     #[test]
-    fn schema_lets_only_the_summary_of_an_update_be_null() {
+    fn schema_lets_only_the_summary_and_the_anchor_of_an_update_be_null() {
         let schema = serde_json::to_value(schemars::schema_for!(Operations)).unwrap();
 
         let update = schema
@@ -623,11 +712,13 @@ mod tests {
                 "{update}"
             );
         }
-        assert_eq!(
-            update.pointer("/properties/summary/type"),
-            Some(&serde_json::json!(["string", "null"])),
-            "{update}"
-        );
+        for field in ["summary", "anchor"] {
+            assert_eq!(
+                update.pointer(&format!("/properties/{field}/type")),
+                Some(&serde_json::json!(["string", "null"])),
+                "{update}"
+            );
+        }
     }
 
     #[cfg(feature = "json-schema")]

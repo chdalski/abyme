@@ -135,11 +135,16 @@ impl AbymeServer {
     #[tool(
         description = "Applies operations to the Abyme project in one transaction: either all of them or none. \
             create_board takes a key and a title; create_element takes a key, type_ref, name, and optionally \
-            summary and body; place_element gives an element its home on a board; move_element takes an \
+            summary, body, and anchor; place_element gives an element its home on a board; move_element takes an \
             element, the board it lies on, and a new x and y from -1000000 to 1000000, and keeps its size; \
-            update_element takes element and any of name, type_ref, summary (null removes it), and body, \
-            and changes only the fields it names; the ID stays. Text is stored exactly as sent: send only \
-            the fields you change, since the escapes read_board and read_element show are not decoded; \
+            update_element takes element and any of name, type_ref, summary (null removes it), body, and \
+            anchor (null removes it), and changes only the fields it names; the ID stays. An anchor is the \
+            path relative to the project root that the element stands for, covering everything below it, \
+            such as crates/payment-service: no leading or trailing /, no . or .. segment, no backslash or \
+            colon, and nothing in abyme/, .abyme/, or a .git folder; Abyme does not check that the path \
+            exists. A changed, new, or removed anchor removes the element's verification stamp, which no \
+            request can set. Text is stored exactly as sent: send only the fields you change, since the \
+            escapes read_board and read_element show are not decoded; \
             delete_element takes element and removes its file, its placement on every board, and its own \
             relations, and is refused while other elements still relate to it (delete those relations \
             first); it also clears the placements of an element whose file is missing; \
@@ -206,11 +211,13 @@ impl AbymeServer {
     }
 
     #[tool(
-        description = "Returns one element of the Abyme project in detail: its ID and name, type, summary, \
-            the boards that place it, its outgoing relations (a target without a file is marked ⚠ missing), \
-            the relations of other elements to it, and last its description. The single-line values are \
-            escaped onto one line as in read_board. The description keeps its line breaks and tabs; other \
-            control and invisible characters in it appear as \\u{...} escapes.",
+        description = "Returns one element of the Abyme project in detail: its ID and name, type, anchor \
+            (or none), verification stamp as the commit it was last verified against and by ai or person \
+            (or none), summary, the boards that place it, its outgoing relations (a target without a \
+            file is marked ⚠ missing), the relations of other elements to it, and last its description. \
+            The single-line values are escaped onto one line as in read_board. The description keeps its \
+            line breaks and tabs; other control and invisible characters in it appear as \\u{...} \
+            escapes.",
         input_schema = schema_for_type::<ReadElementArguments>()
     )]
     async fn read_element(
