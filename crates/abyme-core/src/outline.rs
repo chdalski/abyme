@@ -1,13 +1,13 @@
 //! A board as a compact text outline, the way the AI reads it.
 //!
-//! Titles, types, names, and summaries come from files that a clone or a
-//! pull request can bring in, so the outline writes each of them on one
-//! line and escapes every character that could break a line or hide or
-//! reorder text.
+//! Titles, types, names, summaries, and relation labels come from files that
+//! a clone or a pull request can bring in, so the outline writes each of
+//! them on one line and escapes every character that could break a line or
+//! hide or reorder text.
 
 use std::ops::RangeInclusive;
 
-use abyme_model::{Board, BoardId, Element, ElementId, Rect};
+use abyme_model::{Board, BoardId, Element, ElementId, Rect, RelationKind};
 
 use crate::apply::Snapshot;
 
@@ -69,6 +69,12 @@ pub struct UnknownBoard(pub BoardId);
 /// the placement's position and size from the board file, right after the
 /// ID.
 ///
+/// If relations connect elements on the board, a blank line and one line
+/// per relation follow: `<from> → <to>`, the kind, and the label, if any.
+/// A relation is shown when its source's file exists and both ends lie on
+/// the board; the lines come by source, then in the order of the source's
+/// relations.
+///
 /// # Errors
 ///
 /// Returns [`UnknownBoard`] when the snapshot has no such board.
@@ -92,7 +98,19 @@ pub fn outline(
             columns
         })
         .collect();
-    Ok(format!("{}\n\n{}", header(found), lines(&rows)))
+    let relations = relation_rows(snapshot, found);
+    // The relation lines are aligned on their own, so that they never change
+    // the columns of the element lines.
+    let relation_lines = if relations.is_empty() {
+        String::new()
+    } else {
+        format!("\n{}", lines(&relations))
+    };
+    Ok(format!(
+        "{}\n\n{}{relation_lines}",
+        header(found),
+        lines(&rows)
+    ))
 }
 
 /// Renders the elements with the given IDs as the outline's element lines.
@@ -135,6 +153,36 @@ fn position(rect: &Rect) -> String {
 
 fn header(board: &Board) -> String {
     format!("Board: {} · {}", board.id, one_line(&board.title))
+}
+
+/// The rows of the relations between elements on `board`: by source, then
+/// in the order of the source's relations.
+fn relation_rows(snapshot: &Snapshot, board: &Board) -> Vec<Vec<String>> {
+    board
+        .placements
+        .keys()
+        .filter_map(|id| snapshot.elements.get(id))
+        .flat_map(|source| {
+            source
+                .relations()
+                .iter()
+                .filter(|((_, to), _)| board.placements.contains_key(to))
+                .map(|((kind, to), label)| relation_row(source.id(), *kind, to, label.as_deref()))
+        })
+        .collect()
+}
+
+/// The columns of one relation's line. The label is the last column, so it
+/// is never padded; an empty label is left out like a missing one.
+fn relation_row(
+    from: &ElementId,
+    kind: RelationKind,
+    to: &ElementId,
+    label: Option<&str>,
+) -> Vec<String> {
+    let mut columns = vec![format!("{from} → {to}"), kind.as_str().to_owned()];
+    columns.extend(label.filter(|label| !label.is_empty()).map(one_line));
+    columns
 }
 
 /// The columns of one placement's line; the last one is never padded.

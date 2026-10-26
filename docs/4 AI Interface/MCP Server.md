@@ -55,9 +55,9 @@ checkout-service  container  Kotlin    order completion
 payment-service   container  Go        Stripe payments   ⚠ review
 orders-db         datastore  Postgres
 
-web-shop → checkout-service          REST
-checkout-service → payment-service   REST, synchronous
-checkout-service → orders-db         writes orders
+checkout-service → orders-db        uses  writes orders
+checkout-service → payment-service  uses  REST, synchronous
+web-shop → checkout-service         uses  REST
 
 Notes: "Bottleneck on Black Friday" (at payment-service)
 ```
@@ -65,7 +65,8 @@ Notes: "Bottleneck on Black Friday" (at payment-service)
 As a rough estimate, this takes 5 to 10 times fewer tokens than the same board as JSON with geometry. A prototype still has to confirm this.
 
 - **Real IDs:** The outline shows the element IDs themselves, which are short, readable slugs (see [[Data Model#Rules]]). The server needs no state between calls, and an ID from an older response never points to the wrong element.
-- **One line per element:** Text from boards and elements stays on its line. Backslashes, line breaks, control characters, and invisible format characters are written as escapes such as `\\`, `\n`, and `\u{202e}`, so content can neither break the outline nor hide text from a reader.
+- **One line per element:** Text from boards and elements, relation labels included, stays on its line. Backslashes, line breaks, control characters, and invisible format characters are written as escapes such as `\\`, `\n`, and `\u{202e}`, so content can neither break the outline nor hide text from a reader.
+- **Relations as arrows:** After the elements and a blank line, one line per relation between two elements on the board: source → target, kind, and label. They come by source, then by kind and target. Relations to elements on other boards are left out.
 - **Missing elements:** A placement whose element file does not exist, for example after a merge, shows its ID and `⚠ missing`.
 - **Coordinates** only on request, when the AI wants to arrange elements: `read_board` with `"coordinates": true` shows each element's position and size right after its ID, such as `@400,200 180x90`.
 - **Geometry is translated into relations.** “Lies in frame X” is reliable and important. “Lies near Y” is only a hint.

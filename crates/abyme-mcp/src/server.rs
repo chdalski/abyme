@@ -156,9 +156,11 @@ impl AbymeServer {
 
     #[tool(
         description = "Returns a board of the Abyme project as an outline: a header with the board's ID and \
-            title, then one line per element with its ID, type, name, and summary. Text from the repository \
-            is escaped onto one line. With coordinates true, each line also shows the element's position and \
-            size right after its ID, as @x,y WIDTHxHEIGHT.",
+            title, then one line per element with its ID, type, name, and summary, then, after a blank line, \
+            one line per relation between two elements on the board, as source → target, kind, and label. \
+            Text from the repository, relation labels included, is escaped onto one line. With coordinates \
+            true, each element line also shows the element's position and size right after its ID, as \
+            @x,y WIDTHxHEIGHT.",
         input_schema = schema_for_type::<ReadBoardArguments>()
     )]
     async fn read_board(

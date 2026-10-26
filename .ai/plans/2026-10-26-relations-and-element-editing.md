@@ -40,7 +40,7 @@ through a new tool `read_element`.
 - [x] Build elements from a fields struct
 - [x] Keep a working set of elements in `apply`
 - [x] Relations between elements
-- [ ] Relations in the board outline
+- [x] Relations in the board outline
 - [ ] The tool `read_element`
 - [ ] `update_element`
 - [ ] `delete_element`
@@ -147,18 +147,18 @@ AI sees a board's arrows.
 
 Review path: Security-Hybrid
 
-- [ ] After the element lines and a blank line, the outline lists one
+- [x] After the element lines and a blank line, the outline lists one
       line per relation whose source and target both lie on the board,
       as `<from> → <to>  <kind>  <label>`, sorted by source, then in the
       order of the element file. A label stays on its line and is escaped
       like every other text in the outline. A board without such
       relations shows no relation lines.
-- [ ] An MCP test reads a board with relations through `read_board` and
+- [x] An MCP test reads a board with relations through `read_board` and
       sees their lines.
-- [ ] The outline example in `docs/4 AI Interface/MCP Server.md`, the
+- [x] The outline example in `docs/4 AI Interface/MCP Server.md`, the
       `read_board` tool's description, and the README's Tools section
       match the delivered format.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace
+- [x] `cargo test --workspace`, `cargo clippy --workspace
       --all-targets`, and `cargo fmt --all --check` pass.
 
 ### Task 5: The tool `read_element`

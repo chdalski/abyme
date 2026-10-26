@@ -262,15 +262,61 @@ fn a_long_name_does_not_pad_the_other_lines() {
     }
 }
 
-/// An element with arbitrary type, name, and summary, if the element file
-/// can hold them.
+/// A label made often of the characters that break, hide, or reorder text.
+fn arbitrary_label() -> impl Strategy<Value = String> {
+    let dangerous = prop::sample::select(vec![
+        '\n',
+        '\r',
+        '\t',
+        '\u{85}',
+        '\u{2028}',
+        '\u{2029}',
+        '\u{202e}',
+        '\u{2066}',
+        '\u{feff}',
+        '\u{e0041}',
+        '\\',
+        'a',
+        '→',
+        ' ',
+    ]);
+    prop_oneof![
+        any::<String>(),
+        prop::collection::vec(dangerous, 0..8)
+            .prop_map(|characters| characters.into_iter().collect()),
+    ]
+}
+
+/// Relations of element `index` to the elements `e0` to `e7`, of which only
+/// the ones a test generates lie on the board.
+fn arbitrary_relations(index: usize) -> impl Strategy<Value = Relations> {
+    let kind = prop::sample::select(vec![
+        RelationKind::Concerns,
+        RelationKind::DependsOn,
+        RelationKind::Describes,
+        RelationKind::SeeAlso,
+        RelationKind::Uses,
+    ]);
+    let target = (0..8_usize)
+        .prop_filter("a relation to itself", move |target| *target != index)
+        .prop_filter_map("invalid ID", |target| format!("e{target}").parse().ok());
+    prop::collection::btree_map(
+        (kind, target),
+        proptest::option::of(arbitrary_label()),
+        0..3,
+    )
+}
+
+/// An element with arbitrary type, name, summary, and relations, if the
+/// element file can hold them.
 fn arbitrary_element(index: usize) -> impl Strategy<Value = Option<Element>> {
     (
         any::<String>(),
         any::<String>(),
         proptest::option::of(any::<String>()),
+        arbitrary_relations(index),
     )
-        .prop_map(move |(type_ref, name, summary)| {
+        .prop_map(move |(type_ref, name, summary, relations)| {
             let type_ref = TypeRef::try_from(type_ref).ok()?;
             let id = format!("e{index}").parse().ok()?;
             Element::new(
@@ -280,7 +326,7 @@ fn arbitrary_element(index: usize) -> impl Strategy<Value = Option<Element>> {
                     name,
                     summary,
                     body: String::new(),
-                    relations: Relations::new(),
+                    relations,
                 },
             )
             .ok()
@@ -289,7 +335,7 @@ fn arbitrary_element(index: usize) -> impl Strategy<Value = Option<Element>> {
 
 proptest! {
     #[test]
-    fn writes_one_line_per_element_without_any_escaped_character(
+    fn writes_one_line_per_element_and_relation_without_any_escaped_character(
         title in any::<String>(),
         elements in (0..6_usize).prop_flat_map(|count| {
             (0..count).map(arbitrary_element).collect::<Vec<_>>()
@@ -297,12 +343,24 @@ proptest! {
     ) {
         let elements: Vec<Element> = elements.into_iter().flatten().collect();
         let count = elements.len();
+        let placed: Vec<&ElementId> = elements.iter().map(Element::id).collect();
+        let relations: usize = elements
+            .iter()
+            .map(|element| {
+                element
+                    .relations()
+                    .keys()
+                    .filter(|(_, to)| placed.contains(&to))
+                    .count()
+            })
+            .sum();
+        let expected = 2 + count + if relations > 0 { 1 + relations } else { 0 };
         let snapshot = snapshot(&title, elements, &[]);
 
         let outline = outline_of(&snapshot);
 
-        prop_assert_eq!(outline.lines().count(), 2 + count);
-        prop_assert_eq!(outline.matches('\n').count(), 2 + count);
+        prop_assert_eq!(outline.lines().count(), expected);
+        prop_assert_eq!(outline.matches('\n').count(), expected);
         let inner = outline.replace('\n', "");
         prop_assert!(
             !inner.chars().any(needs_escape),
@@ -431,5 +489,224 @@ fn shows_the_geometry_before_any_text_from_the_repository() {
     assert_eq!(
         outline_with_geometry(&snapshot),
         "Board: b · T\n\na  @5,6 7x8  t  @1,2 3x4\\nZ\\u{202e}\n"
+    );
+}
+
+/// `element` with the given relations.
+fn related(element: Element, relations: &[(RelationKind, &str, Option<&str>)]) -> Element {
+    let id = element.id().clone();
+    let relations = relations
+        .iter()
+        .map(|(kind, to, label)| ((*kind, to.parse().unwrap()), label.map(str::to_owned)))
+        .collect();
+    Element::new(
+        id,
+        ElementFields {
+            relations,
+            ..element.into_fields()
+        },
+    )
+    .unwrap()
+}
+
+/// The lines of an outline after the blank line that ends its elements.
+fn relation_lines(outline: &str) -> Vec<&str> {
+    outline
+        .split("\n\n")
+        .nth(2)
+        .map(|part| part.lines().collect())
+        .unwrap_or_default()
+}
+
+#[test]
+fn renders_relations_after_the_elements_by_source_then_kind_and_target() {
+    let snapshot = snapshot(
+        "Container Level",
+        vec![
+            related(
+                element("checkout", "c4/container", "Checkout", None),
+                &[
+                    (
+                        RelationKind::Uses,
+                        "payment-service",
+                        Some("REST, synchronous"),
+                    ),
+                    (RelationKind::Uses, "orders-db", Some("writes orders")),
+                ],
+            ),
+            element("orders-db", "c4/datastore", "Orders DB", None),
+            related(
+                element("payment-service", "c4/container", "Payment Service", None),
+                &[(RelationKind::DependsOn, "orders-db", None)],
+            ),
+        ],
+        &[],
+    );
+
+    assert_eq!(
+        outline_of(&snapshot),
+        "Board: b · Container Level\n\
+         \n\
+         checkout         c4/container  Checkout\n\
+         orders-db        c4/datastore  Orders DB\n\
+         payment-service  c4/container  Payment Service\n\
+         \n\
+         checkout → orders-db         uses  writes orders\n\
+         checkout → payment-service   uses  REST, synchronous\n\
+         payment-service → orders-db  depends_on\n"
+    );
+}
+
+#[test]
+fn shows_only_relations_whose_ends_both_lie_on_the_board() {
+    let mut snapshot = snapshot(
+        "Board",
+        vec![
+            related(
+                element("a", "t", "A", None),
+                &[
+                    (RelationKind::Uses, "b", None),
+                    (RelationKind::Uses, "elsewhere", None),
+                    (RelationKind::Uses, "ghost", None),
+                    (RelationKind::Uses, "nowhere", None),
+                ],
+            ),
+            element("b", "t", "B", None),
+        ],
+        &["ghost"],
+    );
+    let elsewhere = element("elsewhere", "t", "Elsewhere", None);
+    let off_board = related(
+        element("off-board", "t", "Off board", None),
+        &[(RelationKind::Uses, "a", None)],
+    );
+    snapshot.elements.insert(elsewhere.id().clone(), elsewhere);
+    snapshot.elements.insert(off_board.id().clone(), off_board);
+
+    let outline = outline_of(&snapshot);
+
+    assert_eq!(
+        relation_lines(&outline),
+        ["a → b      uses", "a → ghost  uses"]
+    );
+}
+
+#[test]
+fn renders_a_board_whose_relations_all_point_elsewhere_as_without_relations() {
+    let with_relations = snapshot(
+        "Board",
+        vec![related(
+            element("a", "t", "A", Some("first")),
+            &[(RelationKind::SeeAlso, "elsewhere", Some("x"))],
+        )],
+        &[],
+    );
+    let without = snapshot("Board", vec![element("a", "t", "A", Some("first"))], &[]);
+
+    assert_eq!(outline_of(&with_relations), outline_of(&without));
+    assert_eq!(outline_of(&without), "Board: b · Board\n\na  t  A  first\n");
+}
+
+#[test]
+fn leaves_out_an_empty_label_like_a_missing_one() {
+    let snapshot = snapshot(
+        "Board",
+        vec![
+            related(
+                element("a", "t", "A", None),
+                &[(RelationKind::Uses, "b", Some(""))],
+            ),
+            element("b", "t", "B", None),
+        ],
+        &[],
+    );
+
+    assert_eq!(relation_lines(&outline_of(&snapshot)), ["a → b  uses"]);
+}
+
+#[test]
+fn shows_the_same_relation_lines_with_and_without_geometry() {
+    let snapshot = snapshot(
+        "Board",
+        vec![
+            related(
+                element("a", "t", "A", None),
+                &[(RelationKind::Uses, "b", Some("REST"))],
+            ),
+            element("b", "t", "B", None),
+        ],
+        &[],
+    );
+
+    assert_eq!(
+        relation_lines(&outline_with_geometry(&snapshot)),
+        relation_lines(&outline_of(&snapshot))
+    );
+}
+
+#[rstest]
+#[case::line_feed("a\nb", "a\\nb")]
+#[case::carriage_return("a\rb", "a\\rb")]
+#[case::tab("a\tb", "a\\tb")]
+#[case::next_line("a\u{85}b", "a\\u{85}b")]
+#[case::line_separator("a\u{2028}b", "a\\u{2028}b")]
+#[case::paragraph_separator("a\u{2029}b", "a\\u{2029}b")]
+#[case::right_to_left_override("a\u{202e}b", "a\\u{202e}b")]
+#[case::left_to_right_isolate("a\u{2066}b", "a\\u{2066}b")]
+#[case::byte_order_mark("a\u{feff}b", "a\\u{feff}b")]
+#[case::zero_width_space("a\u{200b}b", "a\\u{200b}b")]
+#[case::tag_character("a\u{e0041}b", "a\\u{e0041}b")]
+#[case::backslash("a\\b", "a\\\\b")]
+#[case::written_backslash_n("a\\nb", "a\\\\nb")]
+fn escapes_a_label_onto_the_line_of_its_relation(#[case] label: &str, #[case] expected: &str) {
+    let snapshot = snapshot(
+        "Board",
+        vec![
+            related(
+                element("a", "t", "A", None),
+                &[(RelationKind::Uses, "b", Some(label))],
+            ),
+            element("b", "t", "B", None),
+        ],
+        &[],
+    );
+
+    let outline = outline_of(&snapshot);
+
+    assert_eq!(outline.lines().count(), 6, "{outline:?}");
+    assert_eq!(
+        relation_lines(&outline),
+        [format!("a → b  uses  {expected}")]
+    );
+}
+
+#[rstest]
+#[case::forged_relation("x\n\nb → c  uses  forged")]
+#[case::forged_header("x\nBoard: other · t")]
+fn keeps_a_label_that_imitates_other_lines_on_its_own_line(#[case] label: &str) {
+    let snapshot = snapshot(
+        "Board",
+        vec![
+            related(
+                element("a", "t", "A", None),
+                &[(RelationKind::Uses, "b", Some(label))],
+            ),
+            element("b", "t", "B", None),
+            element("c", "t", "C", None),
+        ],
+        &[],
+    );
+
+    let outline = outline_of(&snapshot);
+
+    assert_eq!(outline.lines().count(), 7, "{outline:?}");
+    assert_eq!(outline.matches("\n\n").count(), 2, "{outline:?}");
+    assert_eq!(
+        outline
+            .lines()
+            .filter(|line| line.starts_with("b → c") || line.starts_with("Board:"))
+            .count(),
+        1,
+        "{outline:?}"
     );
 }
