@@ -28,6 +28,21 @@ pub struct Element {
     body: String,
 }
 
+/// What an element holds besides its ID. Only `type_ref` is checked here,
+/// by its own type: [`Element::new`] checks the other fields when it builds
+/// an element from them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ElementFields {
+    /// The semantic type.
+    pub type_ref: TypeRef,
+    /// The name shown on the board.
+    pub name: String,
+    /// The one-line summary, if there is one.
+    pub summary: Option<String>,
+    /// The description as Markdown.
+    pub body: String,
+}
+
 /// The semantic type of an element, such as `c4/container`: never empty,
 /// and only characters an element file can hold.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -151,13 +166,13 @@ impl Element {
     /// # Errors
     ///
     /// Returns an [`ElementError`] naming `id` when a rule is broken.
-    pub fn new(
-        id: ElementId,
-        type_ref: TypeRef,
-        name: String,
-        summary: Option<String>,
-        body: String,
-    ) -> Result<Self, ElementError> {
+    pub fn new(id: ElementId, fields: ElementFields) -> Result<Self, ElementError> {
+        let ElementFields {
+            type_ref,
+            name,
+            summary,
+            body,
+        } = fields;
         let element = Self {
             id,
             type_ref,
@@ -201,7 +216,15 @@ impl Element {
             return Err(fail(ElementProblem::IdMismatch { found: id }));
         }
         let type_ref = TypeRef::try_from(fields.type_ref).map_err(fail)?;
-        Self::new(id, type_ref, fields.name, fields.summary, body.to_owned())
+        Self::new(
+            id,
+            ElementFields {
+                type_ref,
+                name: fields.name,
+                summary: fields.summary,
+                body: body.to_owned(),
+            },
+        )
     }
 
     /// Writes the element file: the frontmatter with every value
@@ -239,6 +262,18 @@ impl Element {
     #[must_use]
     pub fn body(&self) -> &str {
         &self.body
+    }
+
+    /// The element's fields without its ID, to build a changed element
+    /// from them through [`Element::new`].
+    #[must_use]
+    pub fn into_fields(self) -> ElementFields {
+        ElementFields {
+            type_ref: self.type_ref,
+            name: self.name,
+            summary: self.summary,
+            body: self.body,
+        }
     }
 
     /// The first rule the element breaks, if any.

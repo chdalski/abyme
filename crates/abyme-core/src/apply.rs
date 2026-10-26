@@ -8,7 +8,7 @@ use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-use abyme_model::{Board, BoardId, Element, ElementId, ElementProblem, TypeRef};
+use abyme_model::{Board, BoardId, Element, ElementFields, ElementId, ElementProblem, TypeRef};
 
 use crate::layout::Layout;
 use crate::operation::{LocalKey, MAX_COORDINATE, Operation, Ref};
@@ -242,10 +242,12 @@ impl<'snapshot> Draft<'snapshot> {
             free_slug(name, "element", &self.taken_elements).ok_or(OperationProblem::NoFreeId)?;
         let element = Element::new(
             id.clone(),
-            type_ref,
-            name.to_owned(),
-            summary.map(str::to_owned),
-            body.to_owned(),
+            ElementFields {
+                type_ref,
+                name: name.to_owned(),
+                summary: summary.map(str::to_owned),
+                body: body.to_owned(),
+            },
         )
         .map_err(|error| OperationProblem::InvalidElement(error.problem().clone()))?;
         self.taken_elements.insert(id.clone());

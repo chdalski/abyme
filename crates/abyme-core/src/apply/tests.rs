@@ -32,10 +32,12 @@ fn rect(x: i32, y: i32) -> Rect {
 fn element(id: &str) -> Element {
     Element::new(
         element_id(id),
-        TypeRef::try_from("t".to_owned()).unwrap(),
-        id.to_owned(),
-        None,
-        String::new(),
+        ElementFields {
+            type_ref: TypeRef::try_from("t".to_owned()).unwrap(),
+            name: id.to_owned(),
+            summary: None,
+            body: String::new(),
+        },
     )
     .unwrap()
 }

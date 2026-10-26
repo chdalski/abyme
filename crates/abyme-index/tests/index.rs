@@ -15,7 +15,7 @@ use abyme_index::{
     EmbedError, Embedder, Index, IndexError, MAX_QUERY_CHARS, MAX_RESULTS, ModelFile, ModelFiles,
     ModelSpec, ProjectKey, UserCache, indexed_text,
 };
-use abyme_model::{Element, ElementId, TypeRef};
+use abyme_model::{Element, ElementFields, ElementId, TypeRef};
 use fastembed::{Pooling, QuantizationMode};
 use futures::TryStreamExt as _;
 use lancedb::arrow::arrow_array::types::Float32Type;
@@ -144,10 +144,12 @@ impl Embedder for BrokenEmbedder {
 fn element(id: &str, name: &str, body: &str) -> TestResult<Element> {
     Ok(Element::new(
         id.parse()?,
-        TypeRef::try_from("c4/container".to_owned())?,
-        name.to_owned(),
-        None,
-        body.to_owned(),
+        ElementFields {
+            type_ref: TypeRef::try_from("c4/container".to_owned())?,
+            name: name.to_owned(),
+            summary: None,
+            body: body.to_owned(),
+        },
     )?)
 }
 

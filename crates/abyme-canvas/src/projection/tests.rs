@@ -4,7 +4,7 @@ use super::*;
 use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 
-use abyme_model::{Board, TypeRef};
+use abyme_model::{Board, ElementFields, TypeRef};
 use serde_json::{Value, json};
 
 fn element_id(value: &str) -> ElementId {
@@ -27,10 +27,12 @@ fn rect(x: i32, y: i32, width: u32, height: u32) -> Rect {
 fn element(id: &str, name: &str, summary: Option<&str>, body: &str) -> Element {
     Element::new(
         element_id(id),
-        TypeRef::try_from("c4/container".to_owned()).unwrap(),
-        name.to_owned(),
-        summary.map(str::to_owned),
-        body.to_owned(),
+        ElementFields {
+            type_ref: TypeRef::try_from("c4/container".to_owned()).unwrap(),
+            name: name.to_owned(),
+            summary: summary.map(str::to_owned),
+            body: body.to_owned(),
+        },
     )
     .unwrap()
 }

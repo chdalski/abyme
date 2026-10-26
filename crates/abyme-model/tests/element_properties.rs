@@ -1,6 +1,6 @@
 //! Properties of the element file that hold for any element and any input.
 
-use abyme_model::{Element, ElementId, TypeRef};
+use abyme_model::{Element, ElementFields, ElementId, TypeRef};
 use proptest::prelude::*;
 
 /// Characters an element file can hold in its values; the same rule as the
@@ -53,7 +53,15 @@ fn element() -> impl Strategy<Value = Element> {
         any::<String>(),
     )
         .prop_map(|(id, type_ref, name, summary, body)| {
-            Element::new(id, type_ref, name, summary, body)
+            Element::new(
+                id,
+                ElementFields {
+                    type_ref,
+                    name,
+                    summary,
+                    body,
+                },
+            )
         })
         .prop_filter_map("frontmatter over the limit", Result::ok)
 }

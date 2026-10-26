@@ -15,10 +15,12 @@ fn type_ref(value: &str) -> TypeRef {
 fn main_element(name: &str, summary: Option<&str>) -> Result<Element, ElementError> {
     Element::new(
         element_id("main"),
-        type_ref("t"),
-        name.to_owned(),
-        summary.map(str::to_owned),
-        String::new(),
+        ElementFields {
+            type_ref: type_ref("t"),
+            name: name.to_owned(),
+            summary: summary.map(str::to_owned),
+            body: String::new(),
+        },
     )
 }
 
@@ -26,11 +28,13 @@ fn main_element(name: &str, summary: Option<&str>) -> Result<Element, ElementErr
 fn payment_service() -> Element {
     Element::new(
         element_id("payment-service"),
-        type_ref("c4/container"),
-        "Payment Service".to_owned(),
-        Some("Payment processing through Stripe".to_owned()),
-        "Handles payments through Stripe. Refunds run asynchronously\nthrough the refund-worker.\n"
-            .to_owned(),
+        ElementFields {
+            type_ref: type_ref("c4/container"),
+            name: "Payment Service".to_owned(),
+            summary: Some("Payment processing through Stripe".to_owned()),
+            body: "Handles payments through Stripe. Refunds run asynchronously\nthrough the refund-worker.\n"
+                .to_owned(),
+        },
     )
     .unwrap()
 }
@@ -76,6 +80,35 @@ fn reads_back_what_it_writes() {
     let read = Element::from_markdown(element.id(), &element.to_markdown()).unwrap();
 
     assert_eq!(read, element);
+}
+
+#[test]
+fn rebuilds_the_same_element_from_its_fields() {
+    let element = payment_service();
+
+    let rebuilt = Element::new(element.id().clone(), element.clone().into_fields()).unwrap();
+
+    assert_eq!(rebuilt, element);
+}
+
+#[test]
+fn checks_changed_fields_again_when_rebuilding() {
+    let element = payment_service();
+    let fields = ElementFields {
+        name: "Payment\u{0}Service".to_owned(),
+        ..element.clone().into_fields()
+    };
+
+    let error = Element::new(element.id().clone(), fields).unwrap_err();
+
+    assert_eq!(error.element(), element.id());
+    assert_eq!(
+        error.problem(),
+        &ElementProblem::InvalidCharacter {
+            field: "name",
+            code: 0
+        }
+    );
 }
 
 #[test]

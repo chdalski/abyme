@@ -1,5 +1,5 @@
 **Repository:** root
-**Status:** NotStarted
+**Status:** InProgress
 **Created:** 2026-10-26
 
 ## Goal
@@ -37,7 +37,7 @@ through a new tool `read_element`.
 
 ## Steps
 
-- [ ] Build elements from a fields struct
+- [x] Build elements from a fields struct
 - [ ] Keep a working set of elements in `apply`
 - [ ] Relations between elements
 - [ ] Relations in the board outline
@@ -56,15 +56,15 @@ Behavior is unchanged.
 
 Review path: Security-Hybrid
 
-- [ ] Elements are built from an ID and a struct of named fields, and an
+- [x] Elements are built from an ID and a struct of named fields, and an
       element can be turned back into those fields; no constructor with
       positional fields remains.
-- [ ] The tests in `crates/abyme-model/src/element/tests.rs`,
+- [x] The tests in `crates/abyme-model/src/element/tests.rs`,
       `crates/abyme-model/tests/element_properties.rs`,
       `crates/abyme-core/src/apply/tests.rs`, and
       `crates/abyme-core/tests/apply_properties.rs` pass with their
       assertions unchanged; only the calls that build elements change.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace
+- [x] `cargo test --workspace`, `cargo clippy --workspace
       --all-targets`, and `cargo fmt --all --check` pass.
 
 ### Task 2: Keep a working set of elements in `apply`

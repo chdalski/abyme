@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 
-use abyme_model::{Rect, TypeRef};
+use abyme_model::{ElementFields, Rect, TypeRef};
 use proptest::prelude::*;
 use rstest::rstest;
 
@@ -22,10 +22,12 @@ fn rect() -> Rect {
 fn element(id: &str, type_ref: &str, name: &str, summary: Option<&str>) -> Element {
     Element::new(
         id.parse().unwrap(),
-        TypeRef::try_from(type_ref.to_owned()).unwrap(),
-        name.to_owned(),
-        summary.map(str::to_owned),
-        String::new(),
+        ElementFields {
+            type_ref: TypeRef::try_from(type_ref.to_owned()).unwrap(),
+            name: name.to_owned(),
+            summary: summary.map(str::to_owned),
+            body: String::new(),
+        },
     )
     .unwrap()
 }
@@ -270,7 +272,16 @@ fn arbitrary_element(index: usize) -> impl Strategy<Value = Option<Element>> {
         .prop_map(move |(type_ref, name, summary)| {
             let type_ref = TypeRef::try_from(type_ref).ok()?;
             let id = format!("e{index}").parse().ok()?;
-            Element::new(id, type_ref, name, summary, String::new()).ok()
+            Element::new(
+                id,
+                ElementFields {
+                    type_ref,
+                    name,
+                    summary,
+                    body: String::new(),
+                },
+            )
+            .ok()
         })
 }
 

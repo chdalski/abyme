@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU32;
 
 use abyme_core::{Applied, Created, LocalKey, Operation, Ref, Snapshot, Write, apply};
-use abyme_model::{Board, BoardId, Element, ElementId, Rect, TypeRef};
+use abyme_model::{Board, BoardId, Element, ElementFields, ElementId, Rect, TypeRef};
 use proptest::prelude::*;
 
 const ELEMENT_IDS: [&str; 4] = ["orders-db", "checkout", "ghost", "payment-service"];
@@ -37,7 +37,16 @@ fn board_id() -> impl Strategy<Value = BoardId> {
 /// An element with the given ID and fixed content.
 fn element(id: ElementId) -> Option<Element> {
     let type_ref = TypeRef::try_from("t".to_owned()).ok()?;
-    Element::new(id, type_ref, "name".to_owned(), None, String::new()).ok()
+    Element::new(
+        id,
+        ElementFields {
+            type_ref,
+            name: "name".to_owned(),
+            summary: None,
+            body: String::new(),
+        },
+    )
+    .ok()
 }
 
 /// A snapshot with some of the known elements and boards; `ghost` never has
