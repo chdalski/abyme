@@ -199,6 +199,29 @@ fn overlaps(a: &Rect, b: &Rect) -> bool {
         && i64::from(b.y) < bottom(a)
 }
 
+/// Checks that the element files written are exactly the elements the
+/// request created, in the order of their creation.
+fn check_elements_written_as_created(applied: &Applied) -> Result<(), TestCaseError> {
+    let created: Vec<&ElementId> = applied
+        .created
+        .iter()
+        .filter_map(|(_, created)| match created {
+            Created::Element(id) => Some(id),
+            Created::Board(_) => None,
+        })
+        .collect();
+    let written: Vec<&ElementId> = applied
+        .writes
+        .iter()
+        .filter_map(|write| match write {
+            Write::Element(element) => Some(element.id()),
+            Write::Board(_) => None,
+        })
+        .collect();
+    prop_assert_eq!(written, created);
+    Ok(())
+}
+
 /// Checks every rule a successful result must keep.
 fn check(snapshot: &Snapshot, applied: &Applied) -> Result<(), TestCaseError> {
     let existing_element_ids: BTreeSet<&ElementId> = snapshot
@@ -229,6 +252,7 @@ fn check(snapshot: &Snapshot, applied: &Applied) -> Result<(), TestCaseError> {
             }
         }
     }
+    check_elements_written_as_created(applied)?;
     let mut seen_board = false;
     let mut written_boards = BTreeSet::new();
     for write in &applied.writes {

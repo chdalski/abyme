@@ -134,6 +134,31 @@ fn writes_elements_before_boards() {
 }
 
 #[test]
+fn writes_new_elements_in_the_order_of_their_creation() {
+    let json = r#"[
+        {"op": "create_element", "key": "z", "type_ref": "t", "name": "Zeta"},
+        {"op": "create_element", "key": "a", "type_ref": "t", "name": "Alpha"},
+        {"op": "create_board", "key": "b", "title": "B"}
+    ]"#;
+
+    let applied = apply(&snapshot(), &operations(json)).unwrap();
+
+    let written: Vec<&str> = applied
+        .writes
+        .iter()
+        .map(|write| match write {
+            Write::Element(element) => element.id().as_str(),
+            Write::Board(board) => board.id.as_str(),
+        })
+        .collect();
+    assert_eq!(written, ["zeta", "alpha", "b"]);
+    assert!(matches!(
+        applied.writes.as_slice(),
+        [Write::Element(_), Write::Element(_), Write::Board(_)]
+    ));
+}
+
+#[test]
 fn keeps_every_existing_placement_and_the_title_of_a_changed_board() {
     let json = r#"[{"op": "place_element", "element": {"existing": "loose"}, "board": {"existing": "main"}}]"#;
 
@@ -433,6 +458,13 @@ fn shortens_a_long_name_to_a_valid_slug() {
 #[case::orphan_is_not_an_element(
     r#"[{"op": "place_element", "element": {"existing": "ghost"}, "board": {"existing": "main"}}]"#,
     OperationProblem::UnknownElement(element_id("ghost"))
+)]
+#[case::existing_names_no_element_the_request_creates(
+    r#"[
+        {"op": "create_element", "key": "e", "type_ref": "t", "name": "E"},
+        {"op": "place_element", "element": {"existing": "e"}, "board": {"existing": "main"}}
+    ]"#,
+    OperationProblem::UnknownElement(element_id("e"))
 )]
 #[case::unknown_board(
     r#"[{"op": "place_element", "element": {"existing": "loose"}, "board": {"existing": "nope"}}]"#,

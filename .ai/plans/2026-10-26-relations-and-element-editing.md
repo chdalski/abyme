@@ -38,7 +38,7 @@ through a new tool `read_element`.
 ## Steps
 
 - [x] Build elements from a fields struct
-- [ ] Keep a working set of elements in `apply`
+- [x] Keep a working set of elements in `apply`
 - [ ] Relations between elements
 - [ ] Relations in the board outline
 - [ ] The tool `read_element`
@@ -76,16 +76,16 @@ unchanged.
 
 Review path: Security-Hybrid
 
-- [ ] `apply` looks up and records the elements of a request through one
+- [x] `apply` looks up and records the elements of a request through one
       working set, with the snapshot as fallback.
-- [ ] `{"existing": "<id>"}` still names only an element whose file
+- [x] `{"existing": "<id>"}` still names only an element whose file
       exists before the request, and new element files are still written
       in the order of their creation, before every board.
-- [ ] The tests in `crates/abyme-core/src/apply/tests.rs`,
+- [x] The tests in `crates/abyme-core/src/apply/tests.rs`,
       `crates/abyme-core/tests/apply_properties.rs`, and
       `crates/abyme-core/tests/project.rs` pass with their assertions
       unchanged.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace
+- [x] `cargo test --workspace`, `cargo clippy --workspace
       --all-targets`, and `cargo fmt --all --check` pass.
 
 ### Task 3: Relations between elements

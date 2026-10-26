@@ -146,7 +146,9 @@ struct Draft<'snapshot> {
     snapshot: &'snapshot Snapshot,
     keys: BTreeMap<LocalKey, Created>,
     created: Vec<(LocalKey, Created)>,
-    new_elements: Vec<Element>,
+    /// The elements as the request has them so far, by ID. An element the
+    /// request has not touched is read from the snapshot.
+    elements: BTreeMap<ElementId, Element>,
     taken_elements: BTreeSet<ElementId>,
     taken_boards: BTreeSet<BoardId>,
     homed: BTreeSet<ElementId>,
@@ -199,7 +201,7 @@ impl<'snapshot> Draft<'snapshot> {
             snapshot,
             keys: BTreeMap::new(),
             created: Vec::new(),
-            new_elements: Vec::new(),
+            elements: BTreeMap::new(),
             taken_elements,
             taken_boards: snapshot.boards.keys().cloned().collect(),
             homed: placed,
@@ -251,7 +253,7 @@ impl<'snapshot> Draft<'snapshot> {
         )
         .map_err(|error| OperationProblem::InvalidElement(error.problem().clone()))?;
         self.taken_elements.insert(id.clone());
-        self.new_elements.push(element);
+        self.elements.insert(id.clone(), element);
         self.record(key, Created::Element(id));
         Ok(())
     }
@@ -333,19 +335,37 @@ impl<'snapshot> Draft<'snapshot> {
         }
     }
 
+    /// The element with this ID as the request has it so far, if any.
+    fn element(&self, id: &ElementId) -> Option<&Element> {
+        self.elements
+            .get(id)
+            .or_else(|| self.snapshot.elements.get(id))
+    }
+
+    /// The ID a reference names: an `existing` one only names an element
+    /// whose file exists before the request, a `new` one an element an
+    /// earlier operation created. Either must still be an element of the
+    /// request, which the one lookup in [`Self::element`] decides.
     fn resolve_element(&self, reference: &Ref<ElementId>) -> Result<ElementId, OperationProblem> {
-        match reference {
-            Ref::Existing(id) if self.snapshot.elements.contains_key(id) => Ok(id.clone()),
-            Ref::Existing(id) => Err(OperationProblem::UnknownElement(id.clone())),
+        let id = match reference {
+            Ref::Existing(id) if self.snapshot.elements.contains_key(id) => id.clone(),
+            Ref::Existing(id) => return Err(OperationProblem::UnknownElement(id.clone())),
             Ref::New(key) => match self.keys.get(key) {
-                Some(Created::Element(id)) => Ok(id.clone()),
-                Some(Created::Board(_)) => Err(OperationProblem::WrongKind {
-                    key: key.clone(),
-                    expected: Kind::Element,
-                    actual: Kind::Board,
-                }),
-                None => Err(OperationProblem::UnknownKey(key.clone())),
+                Some(Created::Element(id)) => id.clone(),
+                Some(Created::Board(_)) => {
+                    return Err(OperationProblem::WrongKind {
+                        key: key.clone(),
+                        expected: Kind::Element,
+                        actual: Kind::Board,
+                    });
+                }
+                None => return Err(OperationProblem::UnknownKey(key.clone())),
             },
+        };
+        if self.element(&id).is_some() {
+            Ok(id)
+        } else {
+            Err(OperationProblem::UnknownElement(id))
         }
     }
 
@@ -378,14 +398,24 @@ impl<'snapshot> Draft<'snapshot> {
         self.created.push((key.clone(), created));
     }
 
-    fn finish(self) -> Applied {
-        let elements = self.new_elements.into_iter().map(Write::Element);
+    /// The writes: the created elements in the order of their creation,
+    /// then each changed board.
+    fn finish(mut self) -> Applied {
+        let elements: Vec<Write> = self
+            .created
+            .iter()
+            .filter_map(|(_, created)| match created {
+                Created::Element(id) => self.elements.remove(id),
+                Created::Board(_) => None,
+            })
+            .map(Write::Element)
+            .collect();
         let boards = self
             .boards
             .into_values()
             .map(|(board, _)| Write::Board(board));
         Applied {
-            writes: elements.chain(boards).collect(),
+            writes: elements.into_iter().chain(boards).collect(),
             created: self.created,
         }
     }
