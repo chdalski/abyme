@@ -12,11 +12,37 @@ targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
 all-features = true
 
 [advisories]
-# A vulnerability always fails the check; so do an unsound or unmaintained
-# crate wherever it sits in the graph, and a yanked version.
+# A vulnerability, an unsound or unmaintained crate wherever it sits in the
+# graph, and a yanked version fail the check, unless an entry in `ignore` names
+# the advisory by its ID.
 unmaintained = "all"
 unsound = "all"
 yanked = "deny"
+
+[[advisories.ignore]]
+id = "RUSTSEC-2024-0429"
+reason = """glib 0.18 comes with gtk-rs, which Tauri uses on Linux. The unsound \
+`Variant::array_iter_str` (`VariantStrIter`) is called neither by Abyme nor by \
+Tauri's GTK stack. Remove once Tauri uses glib 0.20 or later on Linux."""
+
+[[advisories.ignore]]
+id = "RUSTSEC-2024-0436"
+reason = """paste is a build-time proc-macro of arrow-flight and lance-bitpacking \
+in lancedb, and of tokenizers in fastembed. Remove once neither lancedb's nor \
+fastembed's tree contains paste."""
+
+[[advisories.ignore]]
+id = "RUSTSEC-2024-0370"
+reason = """proc-macro-error is a build-time proc-macro of glib-macros 0.18 in \
+gtk-rs, which Tauri uses on Linux. Remove once Tauri moves off gtk-rs 0.18."""
+
+[[advisories.ignore]]
+id = "RUSTSEC-2024-0449"
+reason = """unsafe-libyaml comes through serde_yaml_ng in lindera, which lancedb \
+0.40 always compiles into lance-index. Abyme's full-text index uses lance's \
+`simple` tokenizer, and lindera parses YAML only for a `lindera/*` tokenizer, \
+which Abyme does not select. Remove once lancedb no longer enables lindera or \
+lindera drops serde_yaml_ng."""
 
 [licenses]
 # Licenses that permit use in an MIT project without conditions beyond
@@ -29,6 +55,7 @@ allow = [
     "BSD-3-Clause",
     "BSL-1.0",
     "CC0-1.0",
+    "CDLA-Permissive-2.0",
     "ISC",
     "MIT",
     "MIT-0",
