@@ -6,11 +6,12 @@
 //! with an escaped message, which the AI can act on. The synchronous core
 //! runs on a blocking thread, and the project is found again on every call.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use abyme_core::{
-    Created, Geometry, LocalKey, Operations, Project, element_detail, element_list, outline,
+    Created, Geometry, LocalKey, Operations, Project, Snapshot, element_detail, element_list,
+    outline,
 };
 use abyme_index::{Index, MAX_QUERY_CHARS, spec};
 use abyme_model::{BoardId, ElementId, shown};
@@ -197,8 +198,7 @@ impl AbymeServer {
         };
         let start = self.start.clone();
         on_core(move || {
-            let project = Project::discover(&start).map_err(|error| error.to_string())?;
-            let snapshot = project.snapshot().map_err(|error| error.to_string())?;
+            let (_, snapshot) = read_project(&start)?;
             let geometry = if arguments.coordinates {
                 Geometry::Shown
             } else {
@@ -231,8 +231,7 @@ impl AbymeServer {
         };
         let start = self.start.clone();
         on_core(move || {
-            let project = Project::discover(&start).map_err(|error| error.to_string())?;
-            let snapshot = project.snapshot().map_err(|error| error.to_string())?;
+            let (_, snapshot) = read_project(&start)?;
             let text =
                 element_detail(&snapshot, &arguments.element).map_err(|error| error.to_string())?;
             bounded(
@@ -265,8 +264,7 @@ impl AbymeServer {
         let (start, models) = (self.start.clone(), Arc::clone(&self.models));
         let runtime = Handle::current();
         on_core(move || {
-            let project = Project::discover(&start).map_err(|error| error.to_string())?;
-            let snapshot = project.snapshot().map_err(|error| error.to_string())?;
+            let (project, snapshot) = read_project(&start)?;
             let spec = spec(project.embedding_model());
             let found = models
                 .with(spec, |cache, embedder| {
@@ -315,6 +313,14 @@ fn parsed<T: DeserializeOwned>(arguments: JsonObject) -> Result<T, CallToolResul
             shown(&error.to_string(), SHOWN_LIMIT)
         ))])
     })
+}
+
+/// The project the directory `start` lies in, with all of its elements and
+/// boards as they are now.
+fn read_project(start: &Path) -> Result<(Project, Snapshot), String> {
+    let project = Project::discover(start).map_err(|error| error.to_string())?;
+    let snapshot = project.snapshot().map_err(|error| error.to_string())?;
+    Ok((project, snapshot))
 }
 
 /// Runs work of the synchronous core on a blocking thread. Its error becomes

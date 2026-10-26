@@ -42,7 +42,7 @@ the AI can keep the boards honest from one session to the next.
 ## Steps
 
 - [x] A content change removes the stamp
-- [ ] One helper reads the project for the MCP read tools
+- [x] One helper reads the project for the MCP read tools
 - [ ] Review flags of an element from Git, in `read_element`
 - [ ] Flags passed one hop along relations
 - [ ] Markers in `read_board` and `search`
@@ -81,9 +81,9 @@ of the next tasks enter in one place. Behavior is unchanged.
 
 Review path: Reviewer-only
 
-- [ ] The three read tools find and read the project through one
+- [x] The three read tools find and read the project through one
       function, with the same errors as before.
-- [ ] These tests in `crates/abyme-mcp/tests/server.rs` pass with their
+- [x] These tests in `crates/abyme-mcp/tests/server.rs` pass with their
       assertions unchanged: `applies_operations_and_reads_the_board_back`,
       `read_board_shows_relations_with_their_labels_escaped_onto_one_line`,
       `read_element_shows_an_element_with_its_relations_and_description`,
@@ -91,7 +91,7 @@ Review path: Reviewer-only
       `read_board_shows_coordinates_only_on_request`,
       `without_a_project_every_tool_asks_for_init_and_writes_nothing`, and
       `without_a_cache_search_fails_and_the_other_tools_keep_working`.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
       and `cargo fmt --all --check` pass.
 
 ### Task 3: Review flags of an element from Git, in `read_element`
