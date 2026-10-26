@@ -410,10 +410,7 @@ impl<'snapshot> Draft<'snapshot> {
     }
 
     /// Changes the fields an update names and keeps the others, the ID and
-    /// the relations included. An anchor that differs from the element's,
-    /// also a new or a removed one, removes its verification stamp: the
-    /// element then stands for something nobody has checked. An update that
-    /// names no field is rejected.
+    /// the relations included. An update that names no field is rejected.
     #[expect(
         clippy::option_option,
         reason = "a missing summary or anchor keeps it, `Some(None)` removes it, and a text replaces it"
@@ -462,9 +459,6 @@ impl<'snapshot> Draft<'snapshot> {
                 body.clone_into(&mut fields.body);
             }
             if let Some(anchor) = anchor {
-                if fields.anchor != anchor {
-                    fields.verified = None;
-                }
                 fields.anchor = anchor;
             }
             Ok(())
@@ -603,10 +597,12 @@ impl<'snapshot> Draft<'snapshot> {
 
     /// Changes the fields of the element `id`, an element of the request,
     /// and keeps the element rebuilt through [`Element::new`] in the working
-    /// set; its ID never changes. An element is copied from the snapshot
-    /// only the first time a request changes it. On an error the element
-    /// may be gone from the working set; the whole request fails then
-    /// anyway.
+    /// set; its ID never changes. Every change removes the element's
+    /// verification stamp, also one that leaves every value as it was: a
+    /// stamp vouches only for the element as it was verified. An element is
+    /// copied from the snapshot only the first time a request changes it.
+    /// On an error the element may be gone from the working set; the whole
+    /// request fails then anyway.
     fn change_element(
         &mut self,
         id: &ElementId,
@@ -621,6 +617,7 @@ impl<'snapshot> Draft<'snapshot> {
         };
         let mut fields = current.into_fields();
         change(&mut fields)?;
+        fields.verified = None;
         let element = Element::new(id.clone(), fields)
             .map_err(|error| OperationProblem::InvalidElement(error.problem().clone()))?;
         self.elements.insert(id.clone(), element);

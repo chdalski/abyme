@@ -1438,39 +1438,25 @@ fn creates_elements_without_an_anchor_or_a_stamp() {
     assert_eq!(fresh.verified(), None);
 }
 
-#[test]
-fn keeps_the_anchor_and_the_stamp_when_a_relation_changes() {
-    let mut snapshot = snapshot();
-    let stamped = Element::from_markdown(
-        &element_id("loose"),
-        "---\nid: loose\ntype: t\nname: Loose\nanchor: crates/loose\n\
-         verified: \"0123456789abcdef0123456789abcdef01234567\"\nverified_by: person\n---\n",
-    )
-    .unwrap();
-    snapshot
-        .elements
-        .insert(element_id("loose"), stamped.clone());
-    let json = r#"[{"op": "create_relation", "from": {"existing": "loose"}, "kind": "uses", "to": {"existing": "orders-db"}}]"#;
-
-    let applied = apply(&snapshot, &operations(json)).unwrap();
-
-    let changed = written_elements(&applied);
-    let loose = changed.first().unwrap();
-    assert_eq!(loose.anchor(), stamped.anchor());
-    assert_eq!(loose.verified(), stamped.verified());
-}
-
 const COMMIT: &str = "0123456789abcdef0123456789abcdef01234567";
 
-/// The snapshot with `anchored`, anchored on `crates/anchored`, and
-/// `native`, without an anchor; both carry a stamp.
+/// The snapshot with `anchored`, anchored on `crates/anchored` and related
+/// to `ghost`, which has no file, and `native`, without an anchor; both
+/// carry a stamp.
 fn stamped_snapshot() -> Snapshot {
     let mut snapshot = snapshot();
-    for (id, anchor) in [("anchored", "anchor: crates/anchored\n"), ("native", "")] {
+    for (id, anchor, relations) in [
+        (
+            "anchored",
+            "anchor: crates/anchored\n",
+            "relations:\n  - {kind: uses, to: ghost}\n",
+        ),
+        ("native", "", ""),
+    ] {
         let element = Element::from_markdown(
             &element_id(id),
             &format!(
-                "---\nid: {id}\ntype: t\nname: N\n{anchor}verified: \"{COMMIT}\"\nverified_by: person\n---\n"
+                "---\nid: {id}\ntype: t\nname: N\n{anchor}verified: \"{COMMIT}\"\nverified_by: person\n{relations}---\n"
             ),
         )
         .unwrap();
@@ -1499,27 +1485,87 @@ fn creates_an_element_with_an_anchor_and_no_stamp() {
 }
 
 #[rstest]
-#[case::other_anchor("anchored", serde_json::json!("crates/other"), Some("crates/other"), false)]
-#[case::removed_anchor("anchored", serde_json::Value::Null, None, false)]
-#[case::other_case("anchored", serde_json::json!("Crates/anchored"), Some("Crates/anchored"), false)]
-#[case::same_anchor("anchored", serde_json::json!("crates/anchored"), Some("crates/anchored"), true)]
-#[case::first_anchor("native", serde_json::json!("docs"), Some("docs"), false)]
-#[case::no_anchor_removed("native", serde_json::Value::Null, None, true)]
-fn keeps_the_stamp_only_while_the_anchor_stays_the_same(
-    #[case] id: &str,
-    #[case] anchor: serde_json::Value,
-    #[case] expected: Option<&str>,
-    #[case] keeps_the_stamp: bool,
-) {
-    let json = serde_json::json!([
-        {"op": "update_element", "element": {"existing": id}, "anchor": anchor}
-    ]);
+#[case::name(r#""name": "M""#, Some("crates/anchored"))]
+#[case::same_name(r#""name": "N""#, Some("crates/anchored"))]
+#[case::type_ref(r#""type_ref": "c4/container""#, Some("crates/anchored"))]
+#[case::summary(r#""summary": "S""#, Some("crates/anchored"))]
+#[case::summary_removed(r#""summary": null"#, Some("crates/anchored"))]
+#[case::body(r#""body": "B""#, Some("crates/anchored"))]
+#[case::same_anchor(r#""anchor": "crates/anchored""#, Some("crates/anchored"))]
+#[case::other_anchor(r#""anchor": "crates/other""#, Some("crates/other"))]
+#[case::other_case(r#""anchor": "Crates/anchored""#, Some("Crates/anchored"))]
+#[case::removed_anchor(r#""anchor": null"#, None)]
+fn removes_the_stamp_on_every_update(#[case] fields: &str, #[case] anchor: Option<&str>) {
+    let json =
+        format!(r#"[{{"op": "update_element", "element": {{"existing": "anchored"}}, {fields}}}]"#);
 
-    let applied = apply(&stamped_snapshot(), &operations(&json.to_string())).unwrap();
+    let applied = apply(&stamped_snapshot(), &operations(&json)).unwrap();
 
-    let updated = written(&applied, id);
-    assert_eq!(updated.anchor().map(Anchor::as_str), expected);
-    assert_eq!(updated.verified().is_some(), keeps_the_stamp);
+    let updated = written(&applied, "anchored");
+    assert_eq!(updated.anchor().map(Anchor::as_str), anchor, "{fields}");
+    assert_eq!(updated.verified(), None, "{fields}");
+}
+
+#[rstest]
+#[case::first_anchor(r#""anchor": "docs""#)]
+#[case::no_anchor_removed(r#""anchor": null"#)]
+fn removes_the_stamp_of_an_element_without_an_anchor(#[case] fields: &str) {
+    let json =
+        format!(r#"[{{"op": "update_element", "element": {{"existing": "native"}}, {fields}}}]"#);
+
+    let applied = apply(&stamped_snapshot(), &operations(&json)).unwrap();
+
+    assert_eq!(written(&applied, "native").verified(), None, "{fields}");
+}
+
+#[rstest]
+#[case::created(
+    r#"[{"op": "create_relation", "from": {"existing": "anchored"}, "kind": "uses", "to": {"existing": "native"}}]"#
+)]
+#[case::deleted_to_an_element_without_a_file(
+    r#"[{"op": "delete_relation", "from": {"existing": "anchored"}, "kind": "uses", "to": {"existing": "ghost"}}]"#
+)]
+fn removes_the_stamp_of_the_source_of_a_changed_relation_only(#[case] json: &str) {
+    let snapshot = stamped_snapshot();
+
+    let applied = apply(&snapshot, &operations(json)).unwrap();
+
+    let written: Vec<&str> = written_elements(&applied)
+        .iter()
+        .map(|element| element.id().as_str())
+        .collect();
+    assert_eq!(written, ["anchored"]);
+    assert_eq!(written_elements(&applied).first().unwrap().verified(), None);
+}
+
+#[rstest]
+#[case::placed_and_moved(
+    r#"[{"op": "place_element", "element": {"existing": "anchored"}, "board": {"existing": "main"}},
+        {"op": "move_element", "element": {"existing": "anchored"}, "board": {"existing": "main"}, "x": 600, "y": 0}]"#
+)]
+#[case::other_element_deleted(r#"[{"op": "delete_element", "element": {"existing": "loose"}}]"#)]
+fn writes_no_stamped_element_that_the_request_does_not_change(#[case] json: &str) {
+    let applied = apply(&stamped_snapshot(), &operations(json)).unwrap();
+
+    assert_eq!(written_elements(&applied), Vec::<&Element>::new());
+}
+
+#[test]
+fn a_failing_relation_change_writes_nothing() {
+    let json = r#"[
+        {"op": "update_element", "element": {"existing": "native"}, "name": "M"},
+        {"op": "create_relation", "from": {"existing": "anchored"}, "kind": "uses", "to": {"existing": "native"}},
+        {"op": "create_relation", "from": {"existing": "anchored"}, "kind": "uses", "to": {"existing": "native"}}
+    ]"#;
+
+    assert_eq!(
+        problem(&stamped_snapshot(), json),
+        OperationProblem::RelationExists {
+            from: element_id("anchored"),
+            kind: RelationKind::Uses,
+            to: element_id("native"),
+        }
+    );
 }
 
 #[test]
@@ -1537,19 +1583,6 @@ fn drops_the_stamp_of_an_anchor_changed_and_changed_back_in_one_request() {
         Some("crates/anchored")
     );
     assert_eq!(updated.verified(), None);
-}
-
-#[test]
-fn keeps_the_anchor_and_the_stamp_when_other_fields_change() {
-    let json = r#"[{"op": "update_element", "element": {"existing": "anchored"}, "name": "M", "summary": "S", "body": "B"}]"#;
-    let snapshot = stamped_snapshot();
-
-    let applied = apply(&snapshot, &operations(json)).unwrap();
-
-    let before = snapshot.elements.get(&element_id("anchored")).unwrap();
-    let updated = written(&applied, "anchored");
-    assert_eq!(updated.anchor(), before.anchor());
-    assert_eq!(updated.verified(), before.verified());
 }
 
 #[rstest]

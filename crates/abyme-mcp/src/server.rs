@@ -142,8 +142,9 @@ impl AbymeServer {
             path relative to the project root that the element stands for, covering everything below it, \
             such as crates/payment-service: no leading or trailing /, no . or .. segment, no backslash or \
             colon, and nothing in abyme/, .abyme/, or a .git folder; Abyme does not check that the path \
-            exists. A changed, new, or removed anchor removes the element's verification stamp, which no \
-            request can set. Text is stored exactly as sent: send only the fields you change, since the \
+            exists. Every update_element, create_relation, and delete_relation removes the verification \
+            stamp of the element it changes, which no request can set. Text is stored exactly as sent: \
+            send only the fields you change, since the \
             escapes read_board and read_element show are not decoded; \
             delete_element takes element and removes its file, its placement on every board, and its own \
             relations, and is refused while other elements still relate to it (delete those relations \

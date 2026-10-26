@@ -741,6 +741,34 @@ async fn apply_sets_and_changes_anchors_and_a_changed_anchor_removes_the_stamp()
 }
 
 #[tokio::test]
+async fn apply_removes_the_stamp_when_the_content_of_an_element_changes() -> TestResult {
+    let directory = project_with_a_stamped_element()?;
+    let session = start(directory.path()).await?;
+
+    let renamed = call(
+        &session,
+        "apply",
+        json!({"operations": [
+            {"op": "update_element", "element": {"existing": "stamped"}, "name": "Renamed"}
+        ]}),
+    )
+    .await??;
+    assert_eq!(renamed.is_error, Some(false), "{renamed:?}");
+
+    let read = call(&session, "read_element", json!({"element": "stamped"})).await??;
+    assert!(
+        text(&read).contains("\nAnchor: crates/stamped\nVerified: none\n"),
+        "{}",
+        text(&read)
+    );
+    let file = fs::read_to_string(directory.path().join("abyme/elements/stamped.md"))?;
+    assert!(!file.contains("verified"), "{file}");
+
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+#[tokio::test]
 async fn apply_refuses_to_set_a_stamp_and_changes_no_file() -> TestResult {
     let directory = project_with_a_stamped_element()?;
     let session = start(directory.path()).await?;

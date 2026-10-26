@@ -1,5 +1,5 @@
 **Repository:** root
-**Status:** NotStarted
+**Status:** InProgress
 **Created:** 2026-10-26
 
 ## Goal
@@ -41,7 +41,7 @@ the AI can keep the boards honest from one session to the next.
 
 ## Steps
 
-- [ ] A content change removes the stamp
+- [x] A content change removes the stamp
 - [ ] One helper reads the project for the MCP read tools
 - [ ] Review flags of an element from Git, in `read_element`
 - [ ] Flags passed one hop along relations
@@ -60,17 +60,17 @@ stamp. This needs no Git.
 
 Review path: Security-Hybrid
 
-- [ ] An `update_element`, `create_relation`, or `delete_relation` that
+- [x] An `update_element`, `create_relation`, or `delete_relation` that
       changes an element with a stamp writes it without one, also when
       the update leaves every value as it was; `place_element` and
       `move_element` leave the element file untouched.
-- [ ] No element file that `apply` writes carries a stamp; the property
+- [x] No element file that `apply` writes carries a stamp; the property
       tests of `apply` check this for any request.
-- [ ] The `apply` tool description, the MCP README's Tools section, Data
+- [x] The `apply` tool description, the MCP README's Tools section, Data
       Model's operations, Checks' "Verification Stamp", and the decision on
       stamps in `docs/Decisions.md` say that a content change through
       `apply` removes the stamp.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
       and `cargo fmt --all --check` pass.
 
 ### Task 2: One helper reads the project for the MCP read tools

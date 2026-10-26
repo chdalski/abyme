@@ -80,7 +80,8 @@ pub enum Operation {
         y: i32,
     },
     /// Changes the fields it names of an element; the others stay as they
-    /// are. The element keeps its ID, also when its name changes.
+    /// are. The element keeps its ID, also when its name changes, and loses
+    /// its verification stamp.
     UpdateElement {
         /// The element to change.
         element: Ref<ElementId>,
@@ -117,8 +118,7 @@ pub enum Operation {
         #[cfg_attr(feature = "json-schema", schemars(with = "String"))]
         body: Option<String>,
         /// The new anchor, a path relative to the project root; `null`
-        /// removes it. A changed, new, or removed anchor removes the
-        /// element's verification stamp.
+        /// removes it.
         #[serde(
             default,
             deserialize_with = "present",
@@ -134,7 +134,8 @@ pub enum Operation {
         /// its file is missing.
         element: Ref<ElementId>,
     },
-    /// Adds a relation from one element to another.
+    /// Adds a relation from one element to another; the element it goes out
+    /// from loses its verification stamp.
     CreateRelation {
         /// The element the relation goes out from.
         from: Ref<ElementId>,
@@ -146,7 +147,8 @@ pub enum Operation {
         #[serde(default)]
         label: Option<String>,
     },
-    /// Removes a relation from the element it goes out from.
+    /// Removes a relation from the element it goes out from, which loses its
+    /// verification stamp.
     DeleteRelation {
         /// The element the relation goes out from.
         from: Ref<ElementId>,

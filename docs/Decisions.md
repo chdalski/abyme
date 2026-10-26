@@ -28,7 +28,7 @@ What is settled, briefly and with a reason. Details are in the linked note. A ch
 | Current and target lie as frames on one board, connected through correspondence links. The plan does not have to live in Abyme. | Looking at several boards in parallel is cumbersome. What matters is discussing current and target well. | [[Current and Target]] |
 | Changes in the repo are detected through anchors and `git diff`. Parsers are optional. | No code is needed for each individual source. | [[Reconciliation#Detecting Changes]] |
 | An anchor in the project is a path relative to the project root, such as `crates/payment-service`, and covers everything below it. It is rejected, never normalized, when it could name something other than it seems to. | A `file://` URI reads the first segment as a host; a trailing-slash convention would let a folder anchor silently miss changes. | [[Data Model#Rules]] |
-| Only `verify` sets a verification stamp, with the commit the server reads itself; a changed, new, or removed anchor removes it. | A request that could set a stamp could hide a change; a new anchor names something nobody has checked. | [[Checks#Verification Stamp]] |
+| Only `verify` sets a verification stamp, with the commit the server reads itself; every change of an element's content through `apply`, its anchor and relations included, removes it. | A request that could set a stamp could hide a change; a stamp must not vouch for content nobody verified. | [[Checks#Verification Stamp]] |
 
 ## AI
 

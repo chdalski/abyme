@@ -464,8 +464,8 @@ fn check_removals(
 }
 
 /// Checks every rule a successful result must keep. An existing element
-/// file changes only through an operation that names that element, and
-/// keeps its stamp only with the anchor the stamp was given for.
+/// file changes only through an operation that names that element, and no
+/// element file it writes carries a stamp.
 fn check(
     snapshot: &Snapshot,
     operations: &[Operation],
@@ -520,13 +520,12 @@ fn check(
                     Element::from_markdown(element.id(), &element.to_markdown()),
                     Ok(element.clone())
                 );
-                // No request sets a stamp, and one survives only with the
-                // anchor it was given for.
-                if let Some(stamp) = element.verified() {
-                    let before = snapshot.elements.get(element.id());
-                    prop_assert_eq!(before.and_then(Element::verified), Some(stamp));
-                    prop_assert_eq!(before.and_then(Element::anchor), element.anchor());
-                }
+                prop_assert_eq!(
+                    element.verified(),
+                    None,
+                    "{} is written with a stamp",
+                    element.id()
+                );
             }
             Write::Board(board) => {
                 seen_board = true;
