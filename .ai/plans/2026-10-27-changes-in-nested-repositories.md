@@ -1,5 +1,5 @@
 **Repository:** root
-**Status:** NotStarted
+**Status:** InProgress
 **Created:** 2026-10-27
 
 ## Goal
@@ -35,7 +35,7 @@ a nested repository's own configuration sets up.
 
 ## Steps
 
-- [ ] Review facts per repository
+- [x] Review facts per repository
 - [ ] Changes in nested repositories in the review
 - [ ] `verify` in nested repositories
 
@@ -49,33 +49,33 @@ delivers facts for the project repository only.
 
 Review path: Security-Hybrid
 
-- [ ] An element is judged by the facts of its repository: the deepest
+- [x] An element is judged by the facts of its repository: the deepest
       repository whose root is the element's anchor or lies above it; an
       element without an anchor belongs to the project repository. A
       change inside a nested repository never flags an element whose
       anchor merely contains that repository; only a change of that
       repository's root in the element's own repository does.
-- [ ] A passed-on flag is measured in the source's repository: the target
+- [x] A passed-on flag is measured in the source's repository: the target
       counts as changed when a changed path there lies under the target's
       anchor and the target belongs to the source's repository, or when
       the changed path is the root of a nested repository that the
       target's anchor lies in. A source inside a nested repository passes
       nothing on to a target outside it.
-- [ ] The reason line of a passed-on flag says that what the target's
+- [x] The reason line of a passed-on flag says that what the target's
       anchor stands for may have changed since this element's stamp, and no
       longer that files under its anchor changed; `read_element`'s
       description, the MCP README, MCP Server, Checks, Relations, and
       Reconciliation's step 3 describe what a relation passes on as
       delivered.
-- [ ] With the project repository alone, the review gives the same flags
+- [x] With the project repository alone, the review gives the same flags
       with the same priorities as before; the review unit tests,
       `crates/abyme-core/tests/review.rs`, the outline tests, and the MCP
       tests pass with only the passed-on reason text changed.
-- [ ] Unit tests with hand-built facts of nested repositories cover the
+- [x] Unit tests with hand-built facts of nested repositories cover the
       repository of an element, an anchor that contains a nested
       repository, and each rule for passed-on flags within and across
       repositories.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
       and `cargo fmt --all --check` pass.
 
 ### Task 2: Changes in nested repositories in the review

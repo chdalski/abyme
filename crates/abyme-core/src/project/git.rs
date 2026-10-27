@@ -17,7 +17,7 @@ use std::process::{Command, Output, Stdio};
 
 use abyme_model::CommitId;
 
-use crate::review::{GitFacts, HeadFacts, Since, Unavailable};
+use crate::review::{GitFacts, HeadFacts, RepositoryFacts, Since, Unavailable};
 
 /// The environment every Git command runs with, after every `GIT_`
 /// variable is removed: no index writes, no prompts, no fetches, and no
@@ -51,9 +51,12 @@ pub fn facts(root: &Path, stamps: &BTreeSet<&CommitId>) -> Result<GitFacts, Unav
         .map(|stamp| Ok(((*stamp).clone(), git.since(root, stamp, head.as_ref())?)))
         .collect::<Result<BTreeMap<_, _>, Unavailable>>()?;
     Ok(GitFacts {
-        known: tracked.into_iter().chain(untracked).collect(),
-        uncommitted,
-        since,
+        project: RepositoryFacts {
+            known: tracked.into_iter().chain(untracked).collect(),
+            uncommitted,
+            since,
+        },
+        nested: BTreeMap::new(),
     })
 }
 

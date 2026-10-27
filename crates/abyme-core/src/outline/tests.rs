@@ -9,7 +9,7 @@ use proptest::prelude::*;
 use rstest::rstest;
 
 use super::*;
-use crate::review::{GitFacts, Since, review};
+use crate::review::{GitFacts, RepositoryFacts, Since, review};
 
 /// The six characters or sequences that end a line somewhere.
 const LINE_BREAKS: [&str; 6] = ["\n", "\r", "\r\n", "\u{85}", "\u{2028}", "\u{2029}"];
@@ -1057,12 +1057,15 @@ fn stamped_snapshot() -> Snapshot {
 fn facts(known: &[&[u8]], since: &[&[u8]]) -> GitFacts {
     let paths = |values: &[&[u8]]| values.iter().map(|value| value.to_vec()).collect();
     GitFacts {
-        known: paths(known),
-        uncommitted: BTreeSet::new(),
-        since: BTreeMap::from([(
-            CommitId::try_from(STAMP.to_owned()).unwrap(),
-            Since::Changed(paths(since)),
-        )]),
+        project: RepositoryFacts {
+            known: paths(known),
+            uncommitted: BTreeSet::new(),
+            since: BTreeMap::from([(
+                CommitId::try_from(STAMP.to_owned()).unwrap(),
+                Since::Changed(paths(since)),
+            )]),
+        },
+        nested: BTreeMap::new(),
     }
 }
 

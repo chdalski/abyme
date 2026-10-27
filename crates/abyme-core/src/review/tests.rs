@@ -45,11 +45,16 @@ fn paths(values: &[&str]) -> BTreeSet<Vec<u8>> {
 /// Facts in which Git knows `crates/x/lib.rs` and `docs/a.md`, and the
 /// stamp `STAMP` is known with the given changes since.
 fn facts(since: &[&str], uncommitted: &[&str]) -> GitFacts {
-    GitFacts {
+    project_only(RepositoryFacts {
         known: paths(&["crates/x/lib.rs", "docs/a.md"]),
         uncommitted: paths(uncommitted),
         since: BTreeMap::from([(commit(STAMP), Since::Changed(paths(since)))]),
-    }
+    })
+}
+
+/// Facts of the project's repository alone.
+fn project_only(project: RepositoryFacts) -> GitFacts {
+    with_nested(project, Vec::new())
 }
 
 fn flags_of(element: Element, facts: &GitFacts) -> Vec<Flag> {
@@ -117,7 +122,7 @@ fn flags_an_anchored_element_without_a_stamp() {
 #[case::native(None)]
 fn flags_a_stamp_whose_commit_git_does_not_know(#[case] anchor: Option<&str>) {
     let mut facts = facts(&[], &[]);
-    facts.since.insert(commit(OTHER), Since::Unknown);
+    facts.project.since.insert(commit(OTHER), Since::Unknown);
 
     let flags = flags_of(element(anchor, Some(OTHER)), &facts);
 
@@ -229,11 +234,11 @@ fn upstream(kind: RelationKind, target: &str, priority: Priority) -> Flag {
 /// Facts in which `STAMP` is known and the index changed `crates/t/lib.rs`
 /// since; Git knows the files under every anchor these tests use.
 fn target_changed() -> GitFacts {
-    GitFacts {
+    project_only(RepositoryFacts {
         known: paths(&["crates/t/lib.rs", "crates/u/lib.rs", "crates/v/lib.rs"]),
         uncommitted: BTreeSet::new(),
         since: BTreeMap::from([(commit(STAMP), Since::Changed(paths(&["crates/t/lib.rs"])))]),
-    }
+    })
 }
 
 #[rstest]
@@ -275,7 +280,7 @@ fn passes_nothing_on_without_a_stamp_to_measure_or_a_changed_target_anchor(
         node("native", None, Some(STAMP), &[]),
     ]);
     let mut facts = target_changed();
-    facts.since.insert(commit(OTHER), Since::Unknown);
+    facts.project.since.insert(commit(OTHER), Since::Unknown);
 
     let review = review(&snapshot, &facts);
 
@@ -306,7 +311,7 @@ fn passes_on_a_change_in_the_working_tree() {
         node("u", Some("crates/u"), Some(STAMP), &[]),
     ]);
     let mut facts = target_changed();
-    facts.uncommitted = paths(&["crates/u/new.rs"]);
+    facts.project.uncommitted = paths(&["crates/u/new.rs"]);
 
     let review = review(&snapshot, &facts);
 
@@ -380,6 +385,226 @@ fn passes_on_one_flag_per_relation_and_rates_the_highest() {
         ]
     );
     assert_eq!(review.priority(&element_id("s")), Some(Priority::Task));
+}
+
+#[test]
+fn passes_nothing_on_for_a_changed_path_above_the_target_that_is_no_repository_root() {
+    let snapshot = snapshot_of(vec![
+        node("s", None, Some(STAMP), &[("depends_on", "t")]),
+        node("t", Some("a/b/c"), Some(STAMP), &[]),
+    ]);
+    let facts = project_only(repository(&["a/b/c"], &["a/b"]));
+
+    let review = review(&snapshot, &facts);
+
+    assert_eq!(review.flags(&element_id("s")), []);
+}
+
+/// The facts of one repository in which Git knows `known` and the stamp
+/// `STAMP` is known with `changed` since.
+fn repository(known: &[&str], changed: &[&str]) -> RepositoryFacts {
+    RepositoryFacts {
+        known: paths(known),
+        uncommitted: BTreeSet::new(),
+        since: BTreeMap::from([(commit(STAMP), Since::Changed(paths(changed)))]),
+    }
+}
+
+/// The facts of the project's repository and of the nested ones, by root.
+fn with_nested(project: RepositoryFacts, nested: Vec<(&str, RepositoryFacts)>) -> GitFacts {
+    GitFacts {
+        project,
+        nested: nested
+            .into_iter()
+            .map(|(root, facts)| (root.as_bytes().to_vec(), facts))
+            .collect(),
+    }
+}
+
+/// Facts with the nested repositories `sub`, `sub/inner`, and
+/// `vendor/lib`, each knowing `STAMP`. Since it, in the project the root
+/// `sub` moved, `crates/t/lib.rs` changed, and the file `a/b` was removed;
+/// in `sub` the root `sub/inner` moved and `sub/a.rs` changed; in
+/// `vendor/lib` the file `vendor/lib/x.rs` changed.
+fn changes_in_every_repository() -> GitFacts {
+    with_nested(
+        repository(
+            &["crates/t/lib.rs", "sub", "vendor/lib"],
+            &["sub", "crates/t/lib.rs", "a/b"],
+        ),
+        vec![
+            (
+                "sub",
+                repository(
+                    &["sub/a.rs", "sub/s.rs", "sub/inner"],
+                    &["sub/a.rs", "sub/inner"],
+                ),
+            ),
+            ("sub/inner", repository(&["sub/inner/c.rs"], &[])),
+            (
+                "vendor/lib",
+                repository(
+                    &["vendor/lib/s.rs", "vendor/lib/x.rs"],
+                    &["vendor/lib/x.rs"],
+                ),
+            ),
+        ],
+    )
+}
+
+#[rstest]
+#[case::the_deepest_root("sub/inner/c.rs", Some("sub/inner"))]
+#[case::a_root_itself("sub/inner", Some("sub/inner"))]
+#[case::the_outer_root("sub/a.rs", Some("sub"))]
+#[case::a_sibling_with_the_same_start("sub2/x", None)]
+#[case::an_anchor_that_contains_a_root("vendor", None)]
+#[case::outside_every_root("crates/t", None)]
+fn belongs_to_the_deepest_repository_its_anchor_lies_in(
+    #[case] anchor: &str,
+    #[case] root: Option<&str>,
+) {
+    let facts = changes_in_every_repository();
+    let anchor = Anchor::try_from(anchor.to_owned()).unwrap();
+
+    assert_eq!(facts.root_of(Some(&anchor)), root.map(str::as_bytes));
+}
+
+#[test]
+fn belongs_to_the_project_repository_without_an_anchor() {
+    assert_eq!(changes_in_every_repository().root_of(None), None);
+}
+
+#[test]
+fn belongs_to_no_repository_whose_root_is_empty_or_ends_with_a_slash() {
+    let facts = with_nested(
+        repository(&[], &[]),
+        vec![("", repository(&[], &[])), ("sub/", repository(&[], &[]))],
+    );
+    let anchor = Anchor::try_from("sub/x".to_owned()).unwrap();
+
+    assert_eq!(facts.root_of(Some(&anchor)), None);
+}
+
+#[test]
+fn judges_each_element_by_the_facts_of_its_own_repository() {
+    let snapshot = snapshot_of(vec![
+        node("in-sub", Some("sub"), Some(STAMP), &[]),
+        node("in-inner", Some("sub/inner"), Some(STAMP), &[]),
+        node("in-project", Some("crates/t"), Some(STAMP), &[]),
+        node("sibling", Some("sub2"), Some(STAMP), &[]),
+    ]);
+    let mut facts = changes_in_every_repository();
+    facts.project.known.insert(b"sub2/b.rs".to_vec());
+    facts.project.uncommitted.insert(b"sub2/b.rs".to_vec());
+
+    let review = review(&snapshot, &facts);
+
+    assert_eq!(
+        review.flags(&element_id("in-sub")),
+        [changed(&["sub/a.rs", "sub/inner"])]
+    );
+    assert_eq!(review.flags(&element_id("in-inner")), []);
+    assert_eq!(
+        review.flags(&element_id("in-project")),
+        [changed(&["crates/t/lib.rs"])]
+    );
+    assert_eq!(
+        review.flags(&element_id("sibling")),
+        [changed(&["sub2/b.rs"])]
+    );
+}
+
+#[rstest]
+#[case::nothing_changed_in_its_repository(&[], vec![])]
+#[case::the_nested_root_moved(&["vendor/lib"], vec![changed(&["vendor/lib"])])]
+fn judges_an_anchor_that_contains_a_nested_repository_only_by_its_root(
+    #[case] changed_in_project: &[&str],
+    #[case] expected: Vec<Flag>,
+) {
+    let snapshot = snapshot_of(vec![node("vendor", Some("vendor"), Some(STAMP), &[])]);
+    let facts = with_nested(
+        repository(&["vendor/README.md", "vendor/lib"], changed_in_project),
+        vec![(
+            "vendor/lib",
+            RepositoryFacts {
+                uncommitted: paths(&["vendor/lib/src/b.rs"]),
+                ..repository(&["vendor/lib/src/a.rs"], &["vendor/lib/src/a.rs"])
+            },
+        )],
+    );
+
+    let review = review(&snapshot, &facts);
+
+    assert_eq!(review.flags(&element_id("vendor")), expected.as_slice());
+}
+
+#[test]
+fn reads_a_stamp_only_in_the_elements_repository() {
+    let snapshot = snapshot_of(vec![
+        node("in-sub", Some("sub/a.rs"), Some(STAMP), &[]),
+        node("in-project", Some("docs/a.md"), Some(OTHER), &[]),
+    ]);
+    let facts = with_nested(
+        repository(&["docs/a.md", "sub"], &[]),
+        vec![(
+            "sub",
+            RepositoryFacts {
+                since: BTreeMap::from([(commit(OTHER), Since::Changed(BTreeSet::new()))]),
+                ..repository(&["sub/a.rs"], &[])
+            },
+        )],
+    );
+
+    let review = review(&snapshot, &facts);
+
+    assert_eq!(review.flags(&element_id("in-sub")), [Flag::UnknownStamp]);
+    assert_eq!(
+        review.flags(&element_id("in-project")),
+        [Flag::UnknownStamp]
+    );
+}
+
+#[rstest]
+#[case::within_the_project(None, "crates/t", true)]
+#[case::to_a_nested_repository_whose_root_moved(None, "sub/a.rs", true)]
+#[case::to_a_repository_nested_below_a_moved_root(None, "sub/inner/c.rs", true)]
+#[case::to_a_nested_repository_whose_root_did_not_move(None, "vendor/lib/x.rs", false)]
+#[case::to_a_path_below_a_removed_file(None, "a/b/c", false)]
+#[case::within_a_nested_repository(Some("vendor/lib/s.rs"), "vendor/lib/x.rs", true)]
+#[case::to_a_repository_nested_in_the_sources_whose_root_moved(
+    Some("sub/s.rs"),
+    "sub/inner/c.rs",
+    true
+)]
+#[case::from_a_nested_repository_to_a_target_outside(Some("vendor/lib/s.rs"), "crates/t", false)]
+#[case::from_a_nested_repository_to_a_target_whose_anchor_contains_it(
+    Some("vendor/lib/s.rs"),
+    "vendor",
+    false
+)]
+fn measures_a_passed_on_flag_in_the_sources_repository(
+    #[case] source: Option<&str>,
+    #[case] target: &str,
+    #[case] passes: bool,
+) {
+    let snapshot = snapshot_of(vec![
+        node("s", source, Some(STAMP), &[("depends_on", "t")]),
+        node("t", Some(target), Some(STAMP), &[]),
+    ]);
+
+    let review = review(&snapshot, &changes_in_every_repository());
+
+    let passed_on: Vec<Flag> = review
+        .flags(&element_id("s"))
+        .iter()
+        .filter(|flag| matches!(flag, Flag::Upstream { .. }))
+        .cloned()
+        .collect();
+    let expected: Vec<Flag> = passes
+        .then(|| upstream(RelationKind::DependsOn, "t", Priority::Task))
+        .into_iter()
+        .collect();
+    assert_eq!(passed_on, expected);
 }
 
 /// HEAD at `OTHER` with the given paths changed since.

@@ -31,7 +31,7 @@ Two things help against a flood of warnings:
 - Only certain relation types trigger checks.
 - There are priorities: a “concerns” is a hint, a “depends on” is a task.
 
-Flags travel **one hop**: an element whose relation points to an element with an anchor is flagged when files under that anchor changed since its own stamp. A flag passed on this way is not passed on further, and an element without a stamp has no point in time to measure from, so it gets none. [[Relations]] lists what each kind passes on.
+Flags travel **one hop**: an element whose relation points to an element with an anchor is flagged when what that anchor stands for may have changed since its own stamp; [[Reconciliation#Detecting Changes]] says when Git shows that. A flag passed on this way is not passed on further, and an element without a stamp has no point in time to measure from, so it gets none. [[Relations]] lists what each kind passes on.
 
 ## Verification Stamp
 

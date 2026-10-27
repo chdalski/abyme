@@ -167,3 +167,24 @@ fn covers_the_path_and_everything_below_it(
 
     assert_eq!(anchor.covers(path), covered);
 }
+
+#[rstest]
+#[case::the_directory_itself("sub", b"sub", true)]
+#[case::a_path_below("sub/x", b"sub", true)]
+#[case::two_levels_below("sub/inner/x", b"sub", true)]
+#[case::a_sibling_with_the_same_start("sub2", b"sub", false)]
+#[case::below_a_sibling_with_the_same_start("sub2/x", b"sub", false)]
+#[case::a_shorter_name("su", b"sub", false)]
+#[case::a_parent("sub", b"sub/x", false)]
+#[case::another_case("Sub/x", b"sub", false)]
+#[case::an_empty_directory("sub", b"", false)]
+#[case::a_directory_with_a_trailing_slash("sub/x", b"sub/", false)]
+fn lies_in_the_directory_or_below_it(
+    #[case] anchor: &str,
+    #[case] directory: &[u8],
+    #[case] lies_in: bool,
+) {
+    let anchor = Anchor::try_from(anchor.to_owned()).unwrap();
+
+    assert_eq!(anchor.lies_in(directory), lies_in);
+}

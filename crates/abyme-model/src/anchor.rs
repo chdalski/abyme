@@ -66,6 +66,17 @@ impl Anchor {
         path.strip_prefix(self.0.as_bytes())
             .is_some_and(|rest| rest.is_empty() || rest.starts_with(b"/"))
     }
+
+    /// Whether the anchor lies in `directory`, a path relative to the
+    /// project root: the anchor is the directory or lies below it, the
+    /// reverse of [`Anchor::covers`]. The comparison is byte for byte.
+    #[must_use]
+    pub fn lies_in(&self, directory: &[u8]) -> bool {
+        self.0
+            .as_bytes()
+            .strip_prefix(directory)
+            .is_some_and(|rest| rest.is_empty() || rest.starts_with(b"/"))
+    }
 }
 
 impl TryFrom<String> for Anchor {

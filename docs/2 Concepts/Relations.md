@@ -25,6 +25,6 @@ Relations are typed. Only certain types trigger [[Checks]]; otherwise every chan
 - **Arrows are relations.** A board shows the relations between the elements that lie on it. Arrows are not stored.
 - **“contains”** usually follows from the inner board: whatever has its home inside X is contained in X.
 - **Across board boundaries**, relations appear as stubs or implied relations, see [[Board Graph#Relations Across Boards]].
-- **What a relation passes on:** when files under the target's anchor changed since the source's own stamp, the source gets the flag the table names for the relation's kind, a task or a hint; only the next element is flagged (see [[Checks#Content (Flag, Then Review)]]).
+- **What a relation passes on:** when what the target's anchor stands for may have changed since the source's own stamp (see [[Reconciliation#Detecting Changes]]), the source gets the flag the table names for the relation's kind, a task or a hint; only the next element is flagged (see [[Checks#Content (Flag, Then Review)]]).
 
 How changes travel along these relations is shown by the relation chain in [[Reconciliation]].

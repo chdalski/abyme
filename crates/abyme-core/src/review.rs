@@ -27,15 +27,20 @@ pub enum Priority {
 pub enum Flag {
     /// The element has an anchor but no stamp.
     NeverVerified,
-    /// Git does not know the stamp's commit, or it is no ancestor of HEAD.
+    /// The element's repository does not know the stamp's commit, or it is
+    /// no ancestor of HEAD there.
     UnknownStamp,
     /// These files under the anchor differ from the stamp's commit or are
-    /// untracked: paths relative to the project root, sorted.
+    /// untracked in the element's repository: paths relative to the project
+    /// root, sorted.
     Changed(Vec<Vec<u8>>),
-    /// No file that Git tracks or lists as untracked lies under the anchor.
+    /// No file that the element's repository tracks or lists as untracked
+    /// lies under the anchor.
     AnchorMissing,
-    /// Files under the anchor of the element a relation of this kind points
-    /// to differ from this element's stamp commit or are untracked.
+    /// What the anchor of the element a relation of this kind points to
+    /// stands for may have changed since this element's stamp: in this
+    /// element's repository, files under that anchor changed, or the root of
+    /// the nested repository the anchor lies in.
     Upstream {
         /// The relation's kind, which decides the priority.
         kind: RelationKind,
@@ -65,16 +70,30 @@ pub enum Unavailable {
     GitFailed,
 }
 
-/// What Git reports about the project's files. Paths are bytes, relative
-/// to the project root, and lie inside the project.
+/// What Git reports about the project's repository and the repositories
+/// nested in it. An element is judged by the facts of its repository: the
+/// deepest nested repository whose root is its anchor or lies above it, or
+/// else the project's repository.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct GitFacts {
+    /// The facts of the project's repository.
+    pub project: RepositoryFacts,
+    /// The facts of each nested repository, by its root: a path relative to
+    /// the project root as Git writes it, not empty and without a trailing
+    /// `/`.
+    pub nested: BTreeMap<Vec<u8>, RepositoryFacts>,
+}
+
+/// What Git reports about the files of one repository. Paths are bytes,
+/// relative to the project root, and lie inside the project.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RepositoryFacts {
     /// The paths that Git tracks or lists as untracked and not ignored.
     pub known: BTreeSet<Vec<u8>>,
     /// The paths whose working tree differs from the index, that are
     /// unmerged, or that are untracked.
     pub uncommitted: BTreeSet<Vec<u8>>,
-    /// What each stamp commit of the project tells.
+    /// What each stamp commit of the repository's elements tells.
     pub since: BTreeMap<CommitId, Since>,
 }
 
@@ -165,6 +184,28 @@ impl Review {
     }
 }
 
+impl GitFacts {
+    /// The root of the repository an element with `anchor` belongs to: the
+    /// deepest nested repository whose root is the anchor or lies above it,
+    /// or `None` for the project's repository, which also holds an element
+    /// without an anchor.
+    fn root_of(&self, anchor: Option<&Anchor>) -> Option<&[u8]> {
+        let anchor = anchor?;
+        self.nested
+            .keys()
+            .filter(|root| anchor.lies_in(root))
+            .max_by_key(|root| root.len())
+            .map(Vec::as_slice)
+    }
+
+    /// The facts of the repository with the root `root`, as
+    /// [`GitFacts::root_of`] names it.
+    fn repository(&self, root: Option<&[u8]>) -> &RepositoryFacts {
+        root.and_then(|root| self.nested.get(root))
+            .unwrap_or(&self.project)
+    }
+}
+
 /// The flags of every element of `snapshot` from what Git reports.
 pub fn review(snapshot: &Snapshot, facts: &GitFacts) -> Review {
     Review(
@@ -172,9 +213,10 @@ pub fn review(snapshot: &Snapshot, facts: &GitFacts) -> Review {
             .elements
             .iter()
             .filter_map(|(id, element)| {
-                let flags: Vec<Flag> = own_flags(element, facts)
+                let root = facts.root_of(element.anchor());
+                let flags: Vec<Flag> = own_flags(element, facts.repository(root))
                     .into_iter()
-                    .chain(passed_on(element, snapshot, facts))
+                    .chain(passed_on(element, root, snapshot, facts))
                     .collect();
                 (!flags.is_empty()).then(|| (id.clone(), flags))
             })
@@ -183,8 +225,8 @@ pub fn review(snapshot: &Snapshot, facts: &GitFacts) -> Review {
 }
 
 /// The flags an element has because of what lies under its own anchor and
-/// of its own stamp.
-fn own_flags(element: &Element, facts: &GitFacts) -> Vec<Flag> {
+/// of its own stamp, from the facts of its repository.
+fn own_flags(element: &Element, facts: &RepositoryFacts) -> Vec<Flag> {
     let stamp = match (element.verified(), element.anchor()) {
         (Some(stamp), anchor) => match facts.since.get(&stamp.commit) {
             Some(Since::Changed(paths)) => {
@@ -255,13 +297,23 @@ pub fn stamped(
 }
 
 /// The flags the element's relations pass on, one hop: for each relation
-/// whose kind passes something on, whether files under the target's anchor
-/// changed since this element's own stamp. Only the target's anchor counts,
-/// never the target's flags, so nothing travels further.
-fn passed_on(element: &Element, snapshot: &Snapshot, facts: &GitFacts) -> Vec<Flag> {
+/// whose kind passes something on, whether what the target's anchor stands
+/// for may have changed since this element's own stamp, measured in this
+/// element's repository, the one with the root `root`. A changed path
+/// counts when it lies under the target's anchor and the target belongs to
+/// the same repository, or when it is the root of a nested repository the
+/// target's anchor lies in. Only the target's anchor counts, never the
+/// target's flags, so nothing travels further.
+fn passed_on(
+    element: &Element,
+    root: Option<&[u8]>,
+    snapshot: &Snapshot,
+    facts: &GitFacts,
+) -> Vec<Flag> {
+    let repository = facts.repository(root);
     let Some(Since::Changed(since)) = element
         .verified()
-        .and_then(|stamp| facts.since.get(&stamp.commit))
+        .and_then(|stamp| repository.since.get(&stamp.commit))
     else {
         return Vec::new();
     };
@@ -271,10 +323,14 @@ fn passed_on(element: &Element, snapshot: &Snapshot, facts: &GitFacts) -> Vec<Fl
         .filter_map(|(kind, target)| {
             let priority = passes_on(*kind)?;
             let anchor = snapshot.elements.get(target)?.anchor()?;
+            let same_repository = facts.root_of(Some(anchor)) == root;
             since
                 .iter()
-                .chain(&facts.uncommitted)
-                .any(|path| anchor.covers(path))
+                .chain(&repository.uncommitted)
+                .any(|path| {
+                    (same_repository && anchor.covers(path))
+                        || (facts.nested.contains_key(path) && anchor.lies_in(path))
+                })
                 .then(|| Flag::Upstream {
                     kind: *kind,
                     target: target.clone(),

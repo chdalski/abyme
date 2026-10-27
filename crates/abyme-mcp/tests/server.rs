@@ -972,11 +972,11 @@ async fn read_element_shows_flags_passed_on_along_relations() -> TestResult {
     let cases = [
         (
             "pay",
-            "Review: task\n  depends_on orders-db: files under its anchor changed since this element's stamp\n",
+            "Review: task\n  depends_on orders-db: what its anchor stands for may have changed since this element's stamp\n",
         ),
         (
             "note",
-            "Review: hint\n  uses orders-db: files under its anchor changed since this element's stamp\n",
+            "Review: hint\n  uses orders-db: what its anchor stands for may have changed since this element's stamp\n",
         ),
     ];
 
@@ -990,7 +990,7 @@ async fn read_element_shows_flags_passed_on_along_relations() -> TestResult {
         );
         let line = reply
             .lines()
-            .find(|line| line.contains("orders-db: files"))
+            .find(|line| line.contains("orders-db: what"))
             .ok_or("no passed-on flag")?;
         assert!(!line.contains("schema.sql"), "{line}");
         assert!(!line.contains("secret"), "{line}");
