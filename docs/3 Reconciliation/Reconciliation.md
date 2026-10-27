@@ -48,7 +48,7 @@ Changes in the repo are detected without source-specific code, through anchors a
 1. Every representation carries a [[Checks#Verification Stamp|verification stamp]], such as “verified against commit 3f2a9c1…”.
 2. Git lists the files that have changed since: those whose committed or staged state differs from the stamp's commit, those changed in the working tree, and new files Git does not track and does not ignore. A renamed file counts as removed at its old path and added at its new one.
 3. Abyme matches these paths against the anchors, byte for byte. If one lies under an anchor, the element gets a review flag, a task. So does an element with an anchor but no stamp, an element whose stamp names a commit the repository does not know or that is no ancestor of HEAD, and an element whose anchor matches no file Git tracks or lists as untracked. An element whose relation points to an element with an anchor is flagged too when what that anchor stands for may have changed since its own stamp, because files under it changed since then or, for a target in a [[#Nested Repositories|nested repository]], that repository's commit changed, one hop and by the relation's kind (see [[Relations]]).
-4. The AI rereads the affected places, updates the element, and calls `verify`, which stamps it with the commit HEAD names. `verify` refuses while files under the anchor are not committed, so the stamp names a commit that holds what was checked.
+4. The AI rereads the affected places, updates the element, and calls `verify`, which stamps it with the commit HEAD names in the repository the anchor lies in. `verify` refuses while files under the anchor are not committed, so the stamp names a commit that holds what was checked.
 
 **Example:** Someone changes `crates/payment-service/src/refund.rs`. The file lies under the anchor `crates/payment-service`, so “Payment Service” is flagged.
 
@@ -71,7 +71,7 @@ Changes in the repo are detected without source-specific code, through anchors a
 
 Repositories nested in the project, such as submodules and clones, belong to it (see [[Storage in Git#Project]]) but have their own history. Abyme reads one when an anchor lies in it, also several levels deep:
 
-- **Inside a nested repository**, an element is measured there: its stamp names a commit of that repository, and Git lists the changed files in it.
+- **Inside a nested repository**, an element is measured there: `verify` stamps it with that repository's HEAD, and Git lists the changed files in it. `verify` refuses an element whose anchor lies in a nested repository that Abyme cannot read.
 - **An anchor that contains a nested repository** is measured in its own repository. That repository sees a submodule or a clone it tracks as one path, which changes with the commit checked out in it, and does not see an untracked clone at all: changes inside never flag the anchor. Whoever wants the inside covered anchors the nested repository itself.
 - **Relations** are measured in the source's repository, so a target inside a submodule or a tracked clone counts as changed when that repository's commit changed. Nothing is passed on to a source from a target inside an untracked clone, or from a target outside the nested repository the source lies in.
 

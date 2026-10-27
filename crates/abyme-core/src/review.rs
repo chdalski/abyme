@@ -125,6 +125,12 @@ pub enum VerifyProblem {
         "element {0} cannot be verified: files under its anchor differ from HEAD or are untracked; they must be committed first"
     )]
     Uncommitted(ElementId),
+    /// The element's anchor lies in a nested repository that Git may not
+    /// run in, or in which Git fails.
+    #[error(
+        "element {0} cannot be verified: its anchor lies in a nested repository that Abyme cannot read"
+    )]
+    UnreadRepository(ElementId),
     /// Git cannot be asked.
     #[error("element {element} cannot be verified: {reason}")]
     Unavailable {

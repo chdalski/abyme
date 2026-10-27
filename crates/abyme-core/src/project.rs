@@ -13,7 +13,7 @@ use std::fmt;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use abyme_model::{BoardError, CommitId, ElementError, ElementId, Verifier, shown};
+use abyme_model::{BoardError, CommitId, Element, ElementError, ElementId, Verifier, shown};
 
 use crate::apply::{ApplyError, Created, Snapshot, Write};
 use crate::operation::{LocalKey, Operation};
@@ -246,23 +246,26 @@ impl Project {
     }
 
     /// Stamps the element `id` as verified by `by` against the commit HEAD
-    /// names, and returns that commit. Git is asked under the project's
-    /// lock, right before the element file is written, and only the stamp
-    /// changes.
+    /// names in the repository its anchor lies in, nested or the project's,
+    /// and returns that commit. Git is asked under the project's lock, right
+    /// before the element file is written, and only the stamp changes.
     ///
     /// # Errors
     ///
     /// Returns [`ProjectError::NotVerified`] when the element has no file,
     /// the repository has no commit, files under the element's anchor
-    /// differ from HEAD or are untracked, or Git cannot be asked; nothing
-    /// is written then. Other errors come from reading or writing the
-    /// files.
+    /// differ from HEAD or are untracked, its anchor lies in a nested
+    /// repository that Abyme cannot read, or Git cannot be asked; nothing is
+    /// written then. Other errors come from reading or writing the files.
     pub fn verify(&self, id: &ElementId, by: Verifier) -> Result<CommitId, ProjectError> {
         store::write_locked(&self.root, |snapshot| {
-            let head = git::head(&self.root).map_err(|reason| VerifyProblem::Unavailable {
-                element: id.clone(),
-                reason,
-            })?;
+            let anchor = snapshot.elements.get(id).and_then(Element::anchor);
+            let head = git::head(&self.root, anchor)
+                .map_err(|reason| VerifyProblem::Unavailable {
+                    element: id.clone(),
+                    reason,
+                })?
+                .ok_or_else(|| VerifyProblem::UnreadRepository(id.clone()))?;
             let (element, commit) = stamped(snapshot, id, &head, by)?;
             Ok((vec![Write::Element(element)], commit))
         })

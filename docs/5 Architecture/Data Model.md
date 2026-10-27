@@ -118,7 +118,7 @@ pub struct Relation {
 pub struct Anchor(String);                   // path relative to the project root, e.g. crates/payment-service
 
 pub struct Verification {
-    pub commit: CommitId,                    // full commit ID of the last check
+    pub commit: CommitId,                    // full commit ID of the last check, in the anchor's repository
     pub by: Verifier,                        // ai or person, a label, not a checked identity
 }
 
@@ -177,7 +177,7 @@ pub struct Rect { pub x: i32, pub y: i32, pub width: NonZeroU32, pub height: Non
 - **How a name becomes a slug:** ASCII letters become lowercase, ASCII letters and digits stay, every other run of characters becomes one hyphen, and hyphens at the ends are dropped; so `Payment Service` becomes `payment-service`, and `Überweisung` becomes `berweisung`. A name without letters or digits becomes `element` or `board`. If the slug is taken, or is a reserved device name, it gets the suffix `-2`, `-3`, and so on; a slug longer than 64 characters is shortened so that it fits together with its suffix, and a hyphen left at the cut is dropped. An element ID that a board still places counts as taken even when its file is missing. A sticky note's slug will come from its first words, or be `note` if it has no text.
 - **Representation or native:** An element is a representation if it has an `anchor` (see [[Elements]]).
 - **Anchors are paths in the project,** relative to its root, covering the path and everything below it. An anchor is kept as written, never normalized, and rejected when it is empty, starts or ends with `/`, has an empty, `.`, or `..` segment, holds a backslash, a colon, or a character a reader cannot see, is longer than 4096 bytes or has a segment longer than 255 bytes, or lies in `abyme` or `.abyme` at the project root or in a `.git` folder (case does not count for these names).
-- **A verification stamp** names a full commit ID (40 or 64 lowercase hex digits) and who verified, `ai` or `person`. An element without an anchor can carry one too.
+- **A verification stamp** names a full commit ID (40 or 64 lowercase hex digits) of the repository the element's anchor lies in, a nested one or the project's, and who verified, `ai` or `person`. An element without an anchor can carry one too, a commit of the project's repository.
 - **Home:** Every element has exactly one `Placement` with `is_reference = false`. All others are references (see [[Board Graph]]). An element without a home, for example freshly created by the AI, is allowed and reported as a hint.
 - **Arrows are not stored.** They follow from the relations. Deleting an arrow means deleting the relation.
 - **One relation per kind and target:** an element has at most one relation of a kind to a target, and none to itself. A relation to an element whose file is missing is read like any other (see [[Checks#Structural (Deterministic)|structural checks]]).

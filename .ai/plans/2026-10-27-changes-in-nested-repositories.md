@@ -37,7 +37,7 @@ a nested repository's own configuration sets up.
 
 - [x] Review facts per repository
 - [x] Changes in nested repositories in the review
-- [ ] `verify` in nested repositories
+- [x] `verify` in nested repositories
 
 ## Tasks
 
@@ -132,25 +132,25 @@ repository, so its flags can be resolved like any other.
 
 Review path: Security-Hybrid
 
-- [ ] `verify` stamps an element anchored in a nested repository with the
+- [x] `verify` stamps an element anchored in a nested repository with the
       commit that repository's HEAD names, and refuses while files under
       the anchor differ from it or are untracked there; Git runs there
       under the same conditions as in the review.
-- [ ] `verify` refuses an element anchored inside a nested repository that
+- [x] `verify` refuses an element anchored inside a nested repository that
       Git may not run in.
-- [ ] For an element of the outer repository whose anchor contains a
+- [x] For an element of the outer repository whose anchor contains a
       nested repository, `verify` refuses while a gitlink there differs
       from HEAD, and neither an untracked clone nor the dirty files of a
       submodule or an embedded clone make it refuse.
-- [ ] After `verify`, an element anchored in a nested repository has no
+- [x] After `verify`, an element anchored in a nested repository has no
       flag for changed files until a file under its anchor changes in its
       repository.
-- [ ] Integration tests in temporary repositories show the stamp, each
+- [x] Integration tests in temporary repositories show the stamp, each
       refusal, and the cleared flag. The `verify` description, the MCP
       README, MCP Server, Checks' "Verification Stamp", Reconciliation's
       step 4, Data Model, and Storage in Git say that the stamp names a
       commit of the repository the element's anchor lies in.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
       and `cargo fmt --all --check` pass.
 
 ## Decisions
@@ -185,6 +185,14 @@ Review path: Security-Hybrid
 - **Untracked repository roots are no uncommitted paths,** so from Task 2
   on, an untracked clone under an anchor no longer makes `verify` refuse
   that element.
+- **`verify` refuses an anchor on the root of a nested repository Abyme
+  cannot read,** while the review judges that anchor by the outer
+  repository: a stamp of the outer repository would turn into an unknown
+  stamp once the nested one became readable.
+- **`diff-index` ignores only dirty submodules,** so a gitlink that a
+  `.gitmodules` file says to ignore still counts as changed, in `verify`
+  and in the review's changes since a stamp; the security engineer
+  required it.
 
 ## Non-Goals
 

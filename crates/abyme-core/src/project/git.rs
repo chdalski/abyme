@@ -17,7 +17,8 @@
 //! outer repository's store of submodules; its own filters and hooks are
 //! turned off there, and every path it prints is checked. A nested
 //! repository in which a check or Git fails is left out with everything
-//! nested in it, so its anchors match no file.
+//! nested in it, so its anchors match no file, and `verify` refuses an
+//! anchor in it.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
@@ -80,7 +81,7 @@ struct Listing {
     /// the roots of nested repositories included.
     known: BTreeSet<Vec<u8>>,
     /// The paths whose working tree differs from the index, that are
-    /// unmerged, or that are untracked; never the root of a nested
+    /// unmerged, or that are untracked; never the root of an untracked
     /// repository.
     uncommitted: BTreeSet<Vec<u8>>,
     /// The roots of the nested repositories: gitlinks and untracked
@@ -101,7 +102,6 @@ struct Walk<'a> {
     git: &'a Git,
     /// The project root.
     root: &'a Path,
-    elements: &'a [AnchorAndStamp<'a>],
 }
 
 /// What Git reports about the files of the project at `root`, of the
@@ -117,12 +117,7 @@ pub fn facts(root: &Path, elements: &[AnchorAndStamp<'_>]) -> Result<GitFacts, U
         BTreeMap::new()
     } else {
         let store = git.store(&project)?;
-        Walk {
-            git: &git,
-            root,
-            elements,
-        }
-        .nested(&wanted, store.as_deref())
+        Walk { git: &git, root }.nested(&wanted, store.as_deref(), elements)
     };
     let stamps = stamps(None, &nested, elements);
     Ok(GitFacts {
@@ -131,41 +126,47 @@ pub fn facts(root: &Path, elements: &[AnchorAndStamp<'_>]) -> Result<GitFacts, U
     })
 }
 
-/// What `verify` needs to know of the repository of the project at `root`:
-/// the commit HEAD names, and the paths that differ from that commit in the
-/// index or the working tree, or are untracked; the root of an untracked
-/// repository is none of them.
-pub fn head(root: &Path) -> Result<HeadFacts, Unavailable> {
+/// What `verify` needs to know of the repository an element with `anchor`
+/// belongs to in the project at `root`: the deepest repository on the
+/// anchor's chain of nested repositories, or the project's. That is the
+/// commit its HEAD names, and the paths that differ from that commit in
+/// the index or the working tree, or are untracked; the root of an
+/// untracked repository is none of them. `None` when the anchor lies in a
+/// nested repository that Git may not run in, or in which Git fails: the
+/// project's repository never stands in for it.
+pub fn head(root: &Path, anchor: Option<&Anchor>) -> Result<Option<HeadFacts>, Unavailable> {
     let git = Git::find()?;
     let project = Place::project(root);
     let prefix = git.prefix(&project)?;
-    let Status { uncommitted, .. } = git.status(&project, &prefix)?;
-    let Some(commit) = git.commit(&project, "HEAD")? else {
-        return Ok(HeadFacts {
-            commit: None,
-            changed: uncommitted,
-        });
+    let Some(anchor) = anchor else {
+        let Status { uncommitted, .. } = git.status(&project, &prefix)?;
+        return git.head_facts(&project, uncommitted).map(Some);
     };
-    let staged = git.changed_in_index(&project, &commit)?;
-    Ok(HeadFacts {
-        commit: Some(commit),
-        changed: staged.into_iter().chain(uncommitted).collect(),
-    })
+    let listing = git.listing(&project, &prefix)?;
+    if repository_root(&listing.repositories, Some(anchor)).is_none() {
+        return git.head_facts(&project, listing.uncommitted).map(Some);
+    }
+    let store = git.store(&project)?;
+    Ok(Walk { git: &git, root }
+        .deepest(project, listing, store.as_deref(), anchor)
+        .and_then(|(place, listing)| git.head_facts(&place, listing.uncommitted).ok()))
 }
 
 impl Walk<'_> {
     /// The facts of the nested repositories at `roots` and of those nested
-    /// in them, by root. `store` is where their outer repository keeps the
-    /// Git directories of its submodules. A repository that Git may not run
-    /// in, or in which Git fails, is left out with everything nested in it.
+    /// in them in which an anchor of the `elements` lies, by root. `store` is
+    /// where their outer repository keeps the Git directories of its
+    /// submodules. A repository that Git may not run in, or in which Git
+    /// fails, is left out with everything nested in it.
     fn nested(
         &self,
         roots: &[&Vec<u8>],
         store: Option<&Path>,
+        elements: &[AnchorAndStamp<'_>],
     ) -> BTreeMap<Vec<u8>, RepositoryFacts> {
         roots
             .iter()
-            .filter_map(|root| self.repository(root, store))
+            .filter_map(|root| self.repository(root, store, elements))
             .flatten()
             .collect()
     }
@@ -176,15 +177,36 @@ impl Walk<'_> {
         &self,
         root: &[u8],
         store: Option<&Path>,
+        elements: &[AnchorAndStamp<'_>],
     ) -> Option<BTreeMap<Vec<u8>, RepositoryFacts>> {
         let (place, own_store) = self.enter(root, store)?;
         let listing = self.git.listing(&place, b"").ok()?;
-        let wanted = wanted(&listing.repositories, self.elements);
-        let mut nested = self.nested(&wanted, own_store.as_deref());
-        let stamps = stamps(Some(root), &nested, self.elements);
+        let wanted = wanted(&listing.repositories, elements);
+        let mut nested = self.nested(&wanted, own_store.as_deref(), elements);
+        let stamps = stamps(Some(root), &nested, elements);
         let facts = self.git.repository_facts(&place, listing, &stamps).ok()?;
         nested.insert(root.to_vec(), facts);
         Some(nested)
+    }
+
+    /// The deepest repository on the chain of nested repositories that
+    /// `anchor` lies in, starting at the one at `place` with its `listing`
+    /// and its `store` of submodules, with that repository's listing; `None`
+    /// when a repository on the chain is one Git may not run in, or in
+    /// which Git fails.
+    fn deepest(
+        &self,
+        place: Place,
+        listing: Listing,
+        store: Option<&Path>,
+        anchor: &Anchor,
+    ) -> Option<(Place, Listing)> {
+        let Some(root) = repository_root(&listing.repositories, Some(anchor)) else {
+            return Some((place, listing));
+        };
+        let (nested, own_store) = self.enter(root, store)?;
+        let nested_listing = self.git.listing(&nested, b"").ok()?;
+        self.deepest(nested, nested_listing, own_store.as_deref(), anchor)
     }
 
     /// The place to run Git in the nested repository at `root`, and where
@@ -421,6 +443,27 @@ impl Git {
         })
     }
 
+    /// What `verify` needs to know of the repository at `place`, whose
+    /// working tree differs from its index in `uncommitted`: the commit HEAD
+    /// names, and the paths that differ from that commit.
+    fn head_facts(
+        &self,
+        place: &Place,
+        uncommitted: BTreeSet<Vec<u8>>,
+    ) -> Result<HeadFacts, Unavailable> {
+        let Some(commit) = self.commit(place, "HEAD")? else {
+            return Ok(HeadFacts {
+                commit: None,
+                changed: uncommitted,
+            });
+        };
+        let staged = self.changed_in_index(place, &commit)?;
+        Ok(HeadFacts {
+            commit: Some(commit),
+            changed: staged.into_iter().chain(uncommitted).collect(),
+        })
+    }
+
     /// The facts of the repository at `place` from its `listing`, with what
     /// each of `stamps` tells there.
     fn repository_facts(
@@ -480,7 +523,8 @@ impl Git {
         Ok(Since::Changed(self.changed_in_index(place, stamp)?))
     }
 
-    /// The paths in which the index differs from `commit`.
+    /// The paths in which the index differs from `commit`, gitlinks
+    /// included whatever a `.gitmodules` file says to ignore.
     fn changed_in_index(
         &self,
         place: &Place,
@@ -494,6 +538,7 @@ impl Git {
                 "--name-only",
                 "-z",
                 "--no-renames",
+                "--ignore-submodules=dirty",
                 "--relative",
                 commit.as_str(),
                 "--",

@@ -60,9 +60,9 @@ const INSTRUCTIONS: &str = "Abyme keeps project knowledge on boards stored in th
     to create, change, and delete elements, create boards, place elements on boards, move them, \
     and create and delete relations between elements. Elements marked ⚠ task or ⚠ hint may no \
     longer match the code: read them and what changed, update them with apply, and only then call \
-    verify with the element's ID to stamp it as checked against the commit HEAD names. verify \
-    refuses while files under the element's anchor are not committed; ask the user to commit them \
-    first.";
+    verify with the element's ID to stamp it as checked against the commit HEAD names in the \
+    repository its anchor lies in. verify refuses while files under the element's anchor are not \
+    committed; ask the user to commit them first.";
 
 /// The arguments of `apply`.
 #[derive(Deserialize, schemars::JsonSchema)]
@@ -359,12 +359,14 @@ impl AbymeServer {
 
     #[tool(
         description = "Stamps one element of the Abyme project as verified by ai against the commit HEAD \
-            names, after you have checked the element against the code and updated it: its review flags \
-            for changed files go away until files under its anchor change again, and flags its relations \
-            pass on are measured from the new stamp. Only the stamp changes. It refuses an element \
-            without a file, a repository without a commit, and an element with files under its anchor \
-            that differ from HEAD or are untracked; those must be committed first. It also refuses when \
-            Git cannot be asked. Returns the commit.",
+            names in the repository its anchor lies in, a repository nested in the project such as a \
+            submodule or the project's own, after you have checked the element against the code and \
+            updated it: its review flags for changed files go away until files under its anchor change \
+            again, and flags its relations pass on are measured from the new stamp. Only the stamp \
+            changes. It refuses an element without a file, a repository without a commit, and an element \
+            with files under its anchor that differ from HEAD or are untracked; those must be committed \
+            first. It also refuses an element whose anchor lies in a nested repository that Abyme cannot \
+            read, and any element when Git cannot be asked. Returns the commit.",
         input_schema = schema_for_type::<VerifyArguments>()
     )]
     async fn verify(

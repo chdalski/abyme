@@ -1223,15 +1223,19 @@ fn runs_nothing_that_a_nested_repository_s_own_configuration_sets_up(
     Ok(())
 }
 
-#[test]
-fn fetches_nothing_for_a_partial_clone() -> TestResult {
-    let sources = tempfile::tempdir()?;
-    let source = sources.path().join("source");
+/// Clones a partial clone without trees of a two-commit repository to
+/// `vendor/lib` of `repository`, whose remote is an SSH URL with a command
+/// that leaves `marker` behind; returns its first commit and its HEAD.
+fn partial_clone(
+    repository: &Repository,
+    sources: &Path,
+    marker: &Path,
+) -> TestResult<(String, String)> {
+    let source = sources.join("source");
     let first = library(&source)?;
     fs::write(source.join("a.rs"), "fn a() { b() }\n")?;
     commit_in(&source)?;
     git(&source, &["config", "uploadpack.allowFilter", "true"])?;
-    let repository = Repository::new()?;
     git(
         repository.top(),
         &[
@@ -1243,7 +1247,6 @@ fn fetches_nothing_for_a_partial_clone() -> TestResult {
         ],
     )?;
     let nested = repository.project.join("vendor/lib");
-    let marker = sources.path().join("marker");
     git(
         &nested,
         &["remote", "set-url", "origin", "ssh://example.invalid/lib"],
@@ -1257,12 +1260,37 @@ fn fetches_nothing_for_a_partial_clone() -> TestResult {
         ],
     )?;
     git(&nested, &["config", "protocol.ssh.allow", "always"])?;
+    let head = git(&nested, &["rev-parse", "HEAD"])?;
+    Ok((first, head))
+}
+
+#[test]
+fn fetches_nothing_for_a_partial_clone() -> TestResult {
+    let sources = tempfile::tempdir()?;
+    let repository = Repository::new()?;
+    let marker = sources.path().join("marker");
+    let (first, _) = partial_clone(&repository, sources.path(), &marker)?;
     repository.element(Some("vendor/lib/a.rs"), Some(&first))?;
 
     let flags = repository.flags()?;
 
     assert!(!marker.exists());
     assert_eq!(flags, [Flag::UnknownStamp, Flag::AnchorMissing]);
+    Ok(())
+}
+
+#[test]
+fn verify_fetches_nothing_for_a_partial_clone() -> TestResult {
+    let sources = tempfile::tempdir()?;
+    let repository = Repository::new()?;
+    let marker = sources.path().join("marker");
+    let (_, head) = partial_clone(&repository, sources.path(), &marker)?;
+    repository.element(Some("vendor/lib"), None)?;
+
+    let verified = repository.verify("x")?;
+
+    assert!(!marker.exists());
+    assert_eq!(verified, Ok(head));
     Ok(())
 }
 
@@ -1355,5 +1383,375 @@ fn leaves_out_a_nested_repository_whose_index_it_refuses(#[case] case: BrokenInd
     let flags = repository.flags()?;
 
     assert_eq!(flags, [Flag::UnknownStamp, Flag::AnchorMissing]);
+    Ok(())
+}
+
+/// The refusal for an element `x` whose anchor lies in a nested repository
+/// that Abyme cannot read.
+fn unread() -> Result<String, String> {
+    Err(
+        "element x cannot be verified: its anchor lies in a nested repository \
+         that Abyme cannot read"
+            .to_owned(),
+    )
+}
+
+#[rstest]
+#[case::submodule(Nesting::Submodule)]
+#[case::embedded_clone(Nesting::Embedded)]
+#[case::untracked_clone(Nesting::Untracked)]
+fn verify_stamps_the_head_of_the_nested_repository_and_the_review_reads_it_there(
+    #[case] nesting: Nesting,
+) -> TestResult {
+    let sources = tempfile::tempdir()?;
+    library(&sources.path().join("lib"))?;
+    let repository = Repository::new()?;
+    let nested = repository.nest(&sources.path().join("lib"), "vendor/lib", nesting)?;
+    fs::write(nested.join("c.rs"), "fn c() {}\n")?;
+    commit_in(&nested)?;
+    let head = git(&nested, &["rev-parse", "HEAD"])?;
+    repository.element(Some("vendor/lib"), None)?;
+
+    let verified = repository.verify("x")?;
+
+    assert_eq!(verified, Ok(head));
+    assert_eq!(repository.flags()?, []);
+    fs::write(nested.join("a.rs"), "fn a() { b() }\n")?;
+    assert_eq!(repository.flags()?, [changed(&[b"vendor/lib/a.rs"])]);
+    Ok(())
+}
+
+/// A change under an anchor in a nested repository.
+#[derive(Debug, Clone, Copy)]
+enum NestedChange {
+    InTheWorkingTree,
+    Staged,
+    Untracked,
+}
+
+#[rstest]
+#[case::in_the_working_tree(NestedChange::InTheWorkingTree)]
+#[case::staged(NestedChange::Staged)]
+#[case::untracked(NestedChange::Untracked)]
+fn verify_refuses_a_change_under_the_anchor_in_the_nested_repository(
+    #[case] change: NestedChange,
+) -> TestResult {
+    let sources = tempfile::tempdir()?;
+    library(&sources.path().join("lib"))?;
+    let repository = Repository::new()?;
+    let nested = repository.nest(
+        &sources.path().join("lib"),
+        "vendor/lib",
+        Nesting::Submodule,
+    )?;
+    repository.element(Some("vendor/lib"), None)?;
+    match change {
+        NestedChange::InTheWorkingTree => fs::write(nested.join("a.rs"), "fn a() { b() }\n")?,
+        NestedChange::Staged => {
+            fs::write(nested.join("a.rs"), "fn a() { b() }\n")?;
+            git(&nested, &["add", "a.rs"])?;
+        }
+        NestedChange::Untracked => fs::write(nested.join("new.rs"), "fn n() {}\n")?,
+    }
+
+    assert_eq!(repository.verify("x")?, uncommitted());
+    Ok(())
+}
+
+#[rstest]
+#[case::uninitialized_submodule(Elsewhere::UninitializedSubmodule)]
+#[case::gitlink_without_git(Elsewhere::GitlinkWithoutGit)]
+#[case::git_file_outside(Elsewhere::GitFileOutside)]
+#[case::common_directory_outside(Elsewhere::CommonDirectoryOutside)]
+#[case::git_symlink(Elsewhere::GitSymlink)]
+#[case::work_tree_above(Elsewhere::WorkTreeAbove)]
+#[case::work_tree_outside(Elsewhere::WorkTreeOutside)]
+#[case::linked_work_tree(Elsewhere::LinkedWorkTree)]
+#[case::symlinked_repository(Elsewhere::SymlinkedRepository)]
+#[case::symlinked_parent(Elsewhere::SymlinkedParent)]
+#[case::second_level_outside(Elsewhere::SecondLevelOutside)]
+fn verify_refuses_an_anchor_in_a_nested_repository_that_abyme_cannot_read(
+    #[case] case: Elsewhere,
+) -> TestResult {
+    let sources = tempfile::tempdir()?;
+    let lib = sources.path().join("lib");
+    library(&lib)?;
+    let outside_repository = sources.path().join("outside");
+    outside(&outside_repository)?;
+    let repository = Repository::new()?;
+    let anchor = nest_elsewhere(&repository, &lib, &outside_repository, case)?;
+    repository.element(Some(anchor), None)?;
+    let before = repository.element_file("x")?;
+
+    let verified = repository.verify("x")?;
+
+    assert_eq!(verified, unread());
+    assert_eq!(repository.element_file("x")?, before);
+    Ok(())
+}
+
+#[rstest]
+#[case::uninitialized_submodule(Elsewhere::UninitializedSubmodule)]
+#[case::work_tree_outside(Elsewhere::WorkTreeOutside)]
+fn verify_refuses_an_anchor_on_the_root_of_a_nested_repository_that_abyme_cannot_read(
+    #[case] case: Elsewhere,
+) -> TestResult {
+    let sources = tempfile::tempdir()?;
+    let lib = sources.path().join("lib");
+    library(&lib)?;
+    let outside_repository = sources.path().join("outside");
+    outside(&outside_repository)?;
+    let repository = Repository::new()?;
+    nest_elsewhere(&repository, &lib, &outside_repository, case)?;
+    repository.element(Some("vendor/lib"), None)?;
+
+    assert_eq!(repository.verify("x")?, unread());
+    Ok(())
+}
+
+#[rstest]
+#[case::clean_filter(Hostile::Clean)]
+#[case::process_filter(Hostile::Process)]
+#[case::odd_driver_name(Hostile::OddDriverName)]
+#[case::included_filter(Hostile::Included)]
+#[case::work_tree_configuration(Hostile::WorkTreeConfig)]
+#[case::required_filter(Hostile::Required)]
+#[case::info_attributes(Hostile::InfoAttributes)]
+#[case::file_system_monitor(Hostile::Fsmonitor)]
+#[case::index_hook(Hostile::Hook)]
+fn verify_runs_nothing_that_a_nested_repository_s_own_configuration_sets_up(
+    #[case] case: Hostile,
+) -> TestResult {
+    let sources = tempfile::tempdir()?;
+    library(&sources.path().join("lib"))?;
+    let repository = Repository::new()?;
+    let nested = repository.nest(&sources.path().join("lib"), "vendor/lib", Nesting::Embedded)?;
+    let marker = sources.path().join("marker");
+    make_hostile(&nested, case, &marker, sources.path())?;
+    let head = git(&nested, &["rev-parse", "HEAD"])?;
+    repository.element(Some("vendor/lib"), None)?;
+
+    let verified = repository.verify("x")?;
+
+    assert!(!marker.exists());
+    assert_eq!(verified, Ok(head));
+    Ok(())
+}
+
+#[rstest]
+#[case::paths_to_the_parent(BrokenIndex::ParentPaths)]
+#[case::a_gitlink_outside(BrokenIndex::GitlinkOutside)]
+#[case::a_corrupt_index(BrokenIndex::Corrupt)]
+fn verify_refuses_an_anchor_in_a_nested_repository_whose_index_it_refuses(
+    #[case] case: BrokenIndex,
+) -> TestResult {
+    let sources = tempfile::tempdir()?;
+    library(&sources.path().join("lib"))?;
+    let repository = Repository::new()?;
+    let nested = repository.nest(
+        &sources.path().join("lib"),
+        "vendor/lib",
+        Nesting::Untracked,
+    )?;
+    break_index(&nested, case)?;
+    repository.element(Some("vendor/lib/a.rs"), None)?;
+    let before = repository.element_file("x")?;
+
+    let verified = repository.verify("x")?;
+
+    assert_eq!(verified, unread());
+    assert_eq!(repository.element_file("x")?, before);
+    Ok(())
+}
+
+/// What happens in the nested repository under an anchor of the outer
+/// repository that contains it.
+#[derive(Debug, Clone, Copy)]
+enum OuterCase {
+    /// Files of a submodule change.
+    DirtySubmodule,
+    /// Files of an embedded clone change.
+    DirtyEmbeddedClone,
+    /// A submodule gets a new commit, so its gitlink differs from HEAD.
+    MovedSubmodule,
+    /// An embedded clone gets a new commit that the outer index stages.
+    StagedEmbeddedClone,
+}
+
+#[rstest]
+#[case::dirty_submodule(OuterCase::DirtySubmodule, false)]
+#[case::dirty_embedded_clone(OuterCase::DirtyEmbeddedClone, false)]
+#[case::moved_submodule(OuterCase::MovedSubmodule, true)]
+#[case::staged_embedded_clone(OuterCase::StagedEmbeddedClone, true)]
+fn verify_of_an_anchor_that_contains_a_nested_repository_refuses_only_a_moved_root(
+    #[case] case: OuterCase,
+    #[case] refused: bool,
+) -> TestResult {
+    let sources = tempfile::tempdir()?;
+    library(&sources.path().join("lib"))?;
+    let repository = Repository::new()?;
+    let nesting = match case {
+        OuterCase::DirtySubmodule | OuterCase::MovedSubmodule => Nesting::Submodule,
+        OuterCase::DirtyEmbeddedClone | OuterCase::StagedEmbeddedClone => Nesting::Embedded,
+    };
+    let nested = repository.nest(&sources.path().join("lib"), "vendor/lib", nesting)?;
+    repository.write(b"vendor/README.md", "Vendored code.\n")?;
+    repository.element(Some("vendor"), None)?;
+    let head = repository.commit()?;
+    fs::write(nested.join("a.rs"), "fn a() { b() }\n")?;
+    match case {
+        OuterCase::DirtySubmodule | OuterCase::DirtyEmbeddedClone => {}
+        OuterCase::MovedSubmodule => commit_in(&nested)?,
+        OuterCase::StagedEmbeddedClone => {
+            commit_in(&nested)?;
+            git(repository.top(), &["add", "vendor/lib"])?;
+        }
+    }
+
+    let verified = repository.verify("x")?;
+
+    assert_eq!(verified, if refused { uncommitted() } else { Ok(head) });
+    Ok(())
+}
+
+#[test]
+fn verify_stamps_a_repository_nested_two_levels_deep() -> TestResult {
+    let sources = tempfile::tempdir()?;
+    let inner = sources.path().join("inner");
+    let stamp = library(&inner)?;
+    let middle = sources.path().join("middle");
+    library(&middle)?;
+    git(
+        &middle,
+        &[
+            "-c",
+            "protocol.file.allow=always",
+            "submodule",
+            "add",
+            "-q",
+            inner.to_str().ok_or("not UTF-8")?,
+            "inner",
+        ],
+    )?;
+    git(&middle, &["commit", "-q", "-m", "inner"])?;
+    let repository = Repository::new()?;
+    repository.nest(&middle, "vendor/lib", Nesting::Submodule)?;
+    git(
+        repository.top(),
+        &[
+            "-c",
+            "protocol.file.allow=always",
+            "submodule",
+            "update",
+            "-q",
+            "--init",
+            "--recursive",
+        ],
+    )?;
+    repository.element(Some("vendor/lib/inner/a.rs"), None)?;
+
+    assert_eq!(repository.verify("x")?, Ok(stamp));
+    Ok(())
+}
+
+/// Adds a submodule at `path` of the repository at `outer`, cloned from
+/// `source`, that the committed `.gitmodules` tells Git to ignore; then
+/// gives the submodule a new commit and stages its moved gitlink. Returns
+/// the commit that added the submodule.
+fn ignored_submodule(outer: &Path, source: &Path, path: &str) -> TestResult<String> {
+    git(
+        outer,
+        &[
+            "-c",
+            "protocol.file.allow=always",
+            "submodule",
+            "add",
+            "-q",
+            source.to_str().ok_or("not UTF-8")?,
+            path,
+        ],
+    )?;
+    git(
+        outer,
+        &[
+            "config",
+            "-f",
+            ".gitmodules",
+            &format!("submodule.{path}.ignore"),
+            "all",
+        ],
+    )?;
+    commit_in(outer)?;
+    let added = git(outer, &["rev-parse", "HEAD"])?;
+    let submodule = outer.join(path);
+    fs::write(submodule.join("a.rs"), "fn a() { b() }\n")?;
+    commit_in(&submodule)?;
+    git(outer, &["add", "--force", path])?;
+    let staged = git(
+        outer,
+        &[
+            "diff",
+            "--cached",
+            "--name-only",
+            "--ignore-submodules=none",
+        ],
+    )?;
+    if staged != path {
+        return Err(format!("the moved gitlink is not staged: {staged:?}").into());
+    }
+    Ok(added)
+}
+
+#[test]
+fn sees_a_moved_gitlink_that_gitmodules_says_to_ignore() -> TestResult {
+    let sources = tempfile::tempdir()?;
+    library(&sources.path().join("lib"))?;
+    let repository = Repository::new()?;
+    let stamp = ignored_submodule(repository.top(), &sources.path().join("lib"), "vendor/lib")?;
+    repository.element(Some("vendor"), Some(&stamp))?;
+
+    let verified = repository.verify("x")?;
+    git(repository.top(), &["commit", "-q", "-m", "move"])?;
+    let flags = repository.flags()?;
+
+    assert_eq!(verified, uncommitted());
+    assert_eq!(flags, [changed(&[b"vendor/lib"])]);
+    Ok(())
+}
+
+#[test]
+fn sees_a_moved_gitlink_that_a_nested_repository_s_gitmodules_says_to_ignore() -> TestResult {
+    let sources = tempfile::tempdir()?;
+    let inner = sources.path().join("inner");
+    library(&inner)?;
+    let middle = sources.path().join("middle");
+    library(&middle)?;
+    let repository = Repository::new()?;
+    let nested = repository.nest(&middle, "vendor/lib", Nesting::Untracked)?;
+    let stamp = ignored_submodule(&nested, &inner, "inner")?;
+    repository.element(Some("vendor/lib"), Some(&stamp))?;
+
+    let verified = repository.verify("x")?;
+    git(&nested, &["commit", "-q", "-m", "move"])?;
+    let flags = repository.flags()?;
+
+    assert_eq!(verified, uncommitted());
+    assert_eq!(flags, [changed(&[b"vendor/lib/inner"])]);
+    Ok(())
+}
+
+#[test]
+fn verify_refuses_an_anchor_in_a_nested_repository_without_a_commit() -> TestResult {
+    let repository = Repository::new()?;
+    let nested = repository.project.join("vendor/lib");
+    fs::create_dir_all(&nested)?;
+    git(&nested, &["init", "-q"])?;
+    fs::write(nested.join("a.rs"), "fn a() {}\n")?;
+    repository.element(Some("vendor/lib/a.rs"), None)?;
+
+    assert_eq!(
+        repository.verify("x")?,
+        Err("element x cannot be verified: the repository has no commit yet".to_owned())
+    );
     Ok(())
 }
