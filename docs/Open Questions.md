@@ -9,7 +9,6 @@ Only what is still open, with a link to the note where the question lives. Once 
 ## Before the MVP
 
 - **Measuring the results:** How are the MVP's results measured, for example the share of justified review flags in the replay? See [[First Slice]].
-- **Git access:** the git CLI or a Rust Git library? See [[Reconciliation#Detecting Changes]].
 - **Nested repositories:** How are changes inside repositories nested in the project detected? See [[Reconciliation#Detecting Changes]].
 - **Canvas:** Which library for text layout? How are arrows routed? See [[Canvas]].
 

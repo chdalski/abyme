@@ -21,7 +21,7 @@ aliases:
 
 The [[Hourglass]] shows what flows, the hexagon who depends on whom. The MCP server is an input there and a driving adapter here.
 
-A port gets its own trait only once a second implementation needs it. Until then, the core holds the file access and, later, the Git queries itself, and the MCP server uses the search index directly.
+A port gets its own trait only once a second implementation needs it. Until then, the core holds the file access and the Git queries itself, and the MCP server uses the search index directly.
 
 ## Core API
 
@@ -65,7 +65,7 @@ flowchart TB
 
     remote["<b>abyme-remote</b><br>abyme serve + client<br>later"]
     index["<b>abyme-index</b><br>LanceDB, fastembed"]
-    core["<b>abyme-core</b><br>operations · file access · layout"]
+    core["<b>abyme-core</b><br>operations · file access · Git · review flags · layout"]
     model["<b>abyme-model</b><br>the format: types, reading, writing"]
     layout["<b>abyme-layout</b><br>later"]
     render["<b>abyme-render</b><br>scene, SVG/PNG<br>later"]
@@ -89,7 +89,7 @@ flowchart TB
 | Crate | Job |
 |---|---|
 | `abyme-model` | the format: types, reading, writing (see [[Data Model]]) |
-| `abyme-core` | operations, file access with lock and atomic writes, layout; later reconciliation, checks, and current/target |
+| `abyme-core` | operations, file access with lock and atomic writes, Git queries and review flags (see [[Reconciliation#Detecting Changes]]), layout; later the other checks and current/target |
 | `abyme-index` | search index with LanceDB and embeddings with fastembed (see [[Search and Index]]); a crate of its own, so that building the canvas never builds LanceDB |
 | `abyme-mcp` | MCP server |
 | `abyme-canvas` | Tauri app with React Flow (see [[Canvas]]) |
@@ -111,7 +111,7 @@ The MCP server is started by the client per AI session, so “embedded” is the
 
 ## Security Baseline
 
-- **The core reads and writes only inside `abyme/` and `.abyme/`.**
+- **The core writes only inside `abyme/` and `.abyme/`.** Outside them it reads only through Git, with fixed arguments and with Git commands that leave the repository and its index as they are. It never opens a path built from an anchor, and no anchor reaches Git's command line: whether something changed or exists under an anchor is answered by matching the paths Git reports. Git never uses a bare repository it finds on its own, since a clone can bring the files of one whose configuration runs commands; older versions of Git than 2.38 ignore this setting.
 - **Search keeps its index and model files only in Abyme's directory of the user's cache (`~/.cache/abyme/`),** never in the repository. The paths there are built only from a hash of the project root and from built-in model names, never from repository content (see [[Search and Index#Where Search Keeps Its Files]]).
 - **Search downloads only the model files of a revision fixed in Abyme's source.** Every file the model loads, the tokenizer files included, is checked against a size and a SHA-256 built into Abyme, after the download and before every load. The download sends no project content and no credentials.
 - **The build downloads the ONNX Runtime library,** checked against the SHA-256 that the pinned `ort-sys` crate carries.
@@ -121,7 +121,8 @@ The MCP server is started by the client per AI session, so “embedded” is the
 **Accepted risks:**
 
 - Content in Abyme can carry a stored prompt injection that later AI sessions read as project knowledge. Only Git and pull-request review catch it.
-- The local Git configuration and hooks are trusted.
+- The repository's Git configuration, hooks, and filters are trusted, and so is the `git` that `PATH` names.
+- File names that Git reports reach the AI in review flags, escaped onto one line; like other content, they can carry a prompt injection.
 - The AI client's own shell access is outside Abyme's scope.
 - Once their hashes match, the prebuilt ONNX Runtime and the pinned model files are trusted: a hash proves only that they are the files pinned when it was written. Native ONNX Runtime code parses the model.
 - The user's cache is trusted like the rest of the user's home. Abyme checks the model files there before every load, but not the index, so any process of the same user can change the ranking; `search` shows only the current files.

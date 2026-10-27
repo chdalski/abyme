@@ -44,6 +44,10 @@ const MAX_REPLY_BYTES: usize = 1024 * 1024;
 /// How many elements `search` returns at most.
 const SEARCH_RESULTS: usize = 10;
 
+/// How a reply begins when the review flags are unavailable; the reason
+/// follows.
+const UNAVAILABLE: &str = "Review flags unavailable: ";
+
 /// What `search` answers when no element matches.
 const NO_MATCH: &str = "No element matches the query.";
 
@@ -214,11 +218,14 @@ impl AbymeServer {
     #[tool(
         description = "Returns one element of the Abyme project in detail: its ID and name, type, anchor \
             (or none), verification stamp as the commit it was last verified against and by ai or person \
-            (or none), summary, the boards that place it, its outgoing relations (a target without a \
+            (or none), then Review: with task, hint, or none and one indented line per review flag, such \
+            as files changed under the anchor since the stamp (at most 10 named), summary, the boards that \
+            place it, its outgoing relations (a target without a \
             file is marked ⚠ missing), the relations of other elements to it, and last its description. \
             The single-line values are escaped onto one line as in read_board. The description keeps its \
             line breaks and tabs; other control and invisible characters in it appear as \\u{...} \
-            escapes.",
+            escapes. When Git cannot be asked, the reply starts with a line Review flags unavailable: and \
+            the reason, and has no Review: lines.",
         input_schema = schema_for_type::<ReadElementArguments>()
     )]
     async fn read_element(
@@ -231,9 +238,14 @@ impl AbymeServer {
         };
         let start = self.start.clone();
         on_core(move || {
-            let (_, snapshot) = read_project(&start)?;
-            let text =
-                element_detail(&snapshot, &arguments.element).map_err(|error| error.to_string())?;
+            let (project, snapshot) = read_project(&start)?;
+            let review = project.review(&snapshot);
+            let detail = element_detail(&snapshot, &arguments.element, review.as_ref().ok())
+                .map_err(|error| error.to_string())?;
+            let text = match review {
+                Ok(_) => detail,
+                Err(reason) => format!("{UNAVAILABLE}{reason}\n{detail}"),
+            };
             bounded(
                 &format!("the detail of element {}", arguments.element),
                 text,

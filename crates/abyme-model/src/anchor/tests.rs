@@ -149,3 +149,21 @@ fn shows_a_rejected_anchor_escaped_and_shortened() {
     assert!(!message.contains('\u{202e}'), "{message:?}");
     assert!(message.len() < 1024, "{}", message.len());
 }
+
+#[rstest]
+#[case::the_path_itself("src", b"src", true)]
+#[case::a_file_below("src", b"src/lib.rs", true)]
+#[case::a_folder_below("crates/x", b"crates/x/src/", true)]
+#[case::a_sibling_with_the_same_start("src", b"srcx/a", false)]
+#[case::a_parent("crates/x", b"crates", false)]
+#[case::another_case("src", b"Src/lib.rs", false)]
+#[case::bytes_that_are_no_text("src", b"src/\xff", true)]
+fn covers_the_path_and_everything_below_it(
+    #[case] anchor: &str,
+    #[case] path: &[u8],
+    #[case] covered: bool,
+) {
+    let anchor = Anchor::try_from(anchor.to_owned()).unwrap();
+
+    assert_eq!(anchor.covers(path), covered);
+}

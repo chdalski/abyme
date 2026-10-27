@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU32;
 
 use abyme_model::{
@@ -9,6 +9,7 @@ use proptest::prelude::*;
 use rstest::rstest;
 
 use super::*;
+use crate::review::{GitFacts, Since, review};
 
 /// The six characters or sequences that end a line somewhere.
 const LINE_BREAKS: [&str; 6] = ["\n", "\r", "\r\n", "\u{85}", "\u{2028}", "\u{2029}"];
@@ -719,7 +720,7 @@ fn keeps_a_label_that_imitates_other_lines_on_its_own_line(#[case] label: &str) 
 }
 
 fn detail_of(snapshot: &Snapshot, id: &str) -> String {
-    element_detail(snapshot, &id.parse().unwrap()).unwrap()
+    element_detail(snapshot, &id.parse().unwrap(), None).unwrap()
 }
 
 /// `element` with the given description.
@@ -908,7 +909,7 @@ fn lists_incoming_relations_by_source_then_kind() {
 fn names_an_element_without_a_file(#[case] id: &str) {
     let snapshot = snapshot("Board", Vec::new(), &["ghost"]);
 
-    let error = element_detail(&snapshot, &id.parse().unwrap()).unwrap_err();
+    let error = element_detail(&snapshot, &id.parse().unwrap(), None).unwrap_err();
 
     assert_eq!(error.to_string(), format!("no element has the ID {id}"));
 }
@@ -1026,5 +1027,119 @@ fn keeps_a_label_reading_missing_in_the_label_column() {
         detail_of(&snapshot, "x").contains("Outgoing relations:\nx → y  uses  ⚠ missing\n"),
         "{}",
         detail_of(&snapshot, "x")
+    );
+}
+
+const STAMP: &str = "0123456789abcdef0123456789abcdef01234567";
+
+/// The snapshot with only the element `x`, anchored on `crates/x` and
+/// stamped with `STAMP`.
+fn stamped_snapshot() -> Snapshot {
+    let mut snapshot = snapshot("Board", Vec::new(), &[]);
+    let element = anchored(
+        element("x", "t", "X", None),
+        "crates/x",
+        Some((STAMP, Verifier::Person)),
+    );
+    snapshot.elements.insert(element.id().clone(), element);
+    snapshot
+}
+
+/// Facts in which the stamp `STAMP` is known and the index changed
+/// `since` it.
+fn facts(known: &[&[u8]], since: &[&[u8]]) -> GitFacts {
+    let paths = |values: &[&[u8]]| values.iter().map(|value| value.to_vec()).collect();
+    GitFacts {
+        known: paths(known),
+        uncommitted: BTreeSet::new(),
+        since: BTreeMap::from([(
+            CommitId::try_from(STAMP.to_owned()).unwrap(),
+            Since::Changed(paths(since)),
+        )]),
+    }
+}
+
+fn reviewed_detail(snapshot: &Snapshot, facts: &GitFacts) -> String {
+    let review = review(snapshot, facts);
+    element_detail(snapshot, &"x".parse().unwrap(), Some(&review)).unwrap()
+}
+
+#[test]
+fn renders_review_none_for_an_element_without_flags() {
+    let snapshot = stamped_snapshot();
+
+    let detail = reviewed_detail(&snapshot, &facts(&[b"crates/x/lib.rs"], &[]));
+
+    assert!(
+        detail.contains(&format!(
+            "\nVerified: {STAMP} by person\nReview: none\nBoards: none\n"
+        )),
+        "{detail}"
+    );
+}
+
+#[test]
+fn renders_each_flag_on_its_own_line_after_the_highest_priority() {
+    let mut snapshot = snapshot("Board", Vec::new(), &[]);
+    let element = anchored(element("x", "t", "X", Some("S")), "crates/gone", None);
+    snapshot.elements.insert(element.id().clone(), element);
+
+    let detail = reviewed_detail(&snapshot, &facts(&[], &[]));
+
+    assert!(
+        detail.contains(
+            "\nVerified: none\n\
+             Review: task\n  \
+             never verified\n  \
+             no file that Git knows lies under the anchor\n\
+             Summary: S\n"
+        ),
+        "{detail}"
+    );
+}
+
+#[test]
+fn names_at_most_ten_changed_files_escaped_and_counts_the_rest() {
+    let snapshot = stamped_snapshot();
+    let mut since: Vec<Vec<u8>> = (0..11)
+        .map(|index| format!("crates/x/{index:02}.rs").into_bytes())
+        .collect();
+    since.extend([
+        b"crates/x/a\nb".to_vec(),
+        b"crates/x/\xe2\x80\xaeevil".to_vec(),
+        b"crates/x/\xff".to_vec(),
+    ]);
+    let since: Vec<&[u8]> = since.iter().map(Vec::as_slice).collect();
+
+    let detail = reviewed_detail(&snapshot, &facts(&[b"crates/x/00.rs"], &since));
+
+    let line = detail
+        .lines()
+        .find(|line| line.starts_with("  changed since the stamp: "))
+        .unwrap();
+    assert_eq!(
+        line,
+        "  changed since the stamp: crates/x/00.rs, crates/x/01.rs, crates/x/02.rs, \
+         crates/x/03.rs, crates/x/04.rs, crates/x/05.rs, crates/x/06.rs, crates/x/07.rs, \
+         crates/x/08.rs, crates/x/09.rs and 4 more"
+    );
+}
+
+#[test]
+fn escapes_hostile_file_names_in_a_review() {
+    let snapshot = stamped_snapshot();
+    let since: [&[u8]; 3] = [
+        b"crates/x/a\nb",
+        b"crates/x/\xe2\x80\xaeevil",
+        b"crates/x/\xff",
+    ];
+
+    let detail = reviewed_detail(&snapshot, &facts(&[b"crates/x/a\nb"], &since));
+
+    assert!(
+        detail.contains(
+            "  changed since the stamp: crates/x/a\\nb, crates/x/\\u{202e}evil, crates/x/\u{fffd}\n"
+        ),
+        "{detail}"
     );
 }

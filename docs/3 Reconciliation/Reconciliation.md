@@ -45,9 +45,9 @@ Changes in the repo are detected without source-specific code, through anchors a
 
 **Steps:**
 
-1. Every representation carries a [[Checks#Verification Stamp|verification stamp]], such as “verified against commit 3f2a9c1”.
-2. `git diff --name-status 3f2a9c1` lists the files that have changed since. `git status` adds new files that Git does not know yet.
-3. Abyme matches the paths against the anchors. If a changed file lies under an anchor, the element gets a review flag. Through the relation chain, dependent elements are flagged too.
+1. Every representation carries a [[Checks#Verification Stamp|verification stamp]], such as “verified against commit 3f2a9c1…”.
+2. Git lists the files that have changed since: those whose committed or staged state differs from the stamp's commit, those changed in the working tree, and new files Git does not track and does not ignore. A renamed file counts as removed at its old path and added at its new one.
+3. Abyme matches these paths against the anchors, byte for byte. If one lies under an anchor, the element gets a review flag, a task. So does an element with an anchor but no stamp, an element whose stamp names a commit the repository does not know or that is no ancestor of HEAD, and an element whose anchor matches no file Git tracks or lists as untracked.
 4. The AI rereads the affected places, updates the element, and sets a new verification stamp.
 
 **Example:** Someone changes `crates/payment-service/src/refund.rs`. The file lies under the anchor `crates/payment-service`, so “Payment Service” is flagged.
@@ -56,19 +56,18 @@ Changes in the repo are detected without source-specific code, through anchors a
 
 - New files under `crates/` that no anchor covers produce a hint: “new crate, not on the board”.
 - If the path of an anchor no longer exists, the representation is orphaned. In a mirrored zone it disappears; otherwise it gets a review flag.
-- Git detects renames. The anchor follows along.
+- A renamed file counts as removed and added, so the anchor of its old path is flagged, and once nothing is left there, as matching no file.
 
 **Limits:**
 
 - Folder anchors are coarse, because every change in the folder flags the element. File anchors are finer, for example only on `Cargo.toml` and `src/lib.rs`. Anchors on functions or lines would break with every refactoring. Another way is described in [[#Finer Review Flags]].
-- If the commit of the verification stamp is missing, for example after a rebase, the element is checked again from scratch.
+- If the commit of the verification stamp is missing or no ancestor of HEAD, for example after a rebase, nothing tells what changed since: the element is checked again from scratch.
 - Git does not see changes outside the repo. For those there will later be [[Extensions#Fetchers|fetchers]].
 
 **Parsers** are optional. Some things can be read exactly without the AI, such as crates and their dependencies from `Cargo.toml` (see [[Extensions#Parsers]]).
 
 > [!todo] Open
-> - **Git access:** the git CLI or a Rust Git library?
-> - **Nested repositories:** Repositories nested in a project, such as clones and submodules, belong to it (see [[Storage in Git#Project]]), but each has its own history. `git diff` and `git status` of the project's repository report at most that a nested repository changed, not which files inside it changed, so those changes are not detected yet.
+> - **Nested repositories:** Repositories nested in a project, such as clones and submodules, belong to it (see [[Storage in Git#Project]]), but each has its own history. The project's repository reports at most that a nested repository changed, not which files inside it changed, so those changes are not detected yet, and an anchor below the top of a nested repository matches no file.
 
 ### Finer Review Flags
 

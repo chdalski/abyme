@@ -10,6 +10,7 @@
 use abyme_model::{Board, BoardId, Element, ElementId, Rect, RelationKind, hides_or_breaks_text};
 
 use crate::apply::Snapshot;
+use crate::review::{Flag, Priority, Review};
 
 /// The widest a column is padded to, in characters. A longer value runs past
 /// its column, so one long name cannot pad every other line.
@@ -17,6 +18,9 @@ const MAX_COLUMN_WIDTH: usize = 40;
 
 /// What the outline shows for a placement whose element file is missing.
 const MISSING_MARKER: &str = "⚠ missing";
+
+/// How many changed files a review flag names at most.
+const SHOWN_CHANGED_FILES: usize = 10;
 
 /// Whether an outline shows where each element lies on its board.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -116,8 +120,10 @@ pub fn element_list<'a>(
 ///
 /// - `Element:` with its ID and name, `Type:`, `Anchor:` with its anchor or
 ///   `none`, `Verified:` with the stamp's commit and `by ai` or
-///   `by person`, or `none`, `Summary:` if it has one, and `Boards:` with
-///   every board that places it, by ID, or `none`;
+///   `by person`, or `none`, given a `review`, `Review:` with the highest
+///   priority of the element's flags or `none` and one indented line per
+///   flag, `Summary:` if it has one, and `Boards:` with every board that
+///   places it, by ID, or `none`;
 /// - after a blank line, `Outgoing relations:` with one line per relation
 ///   as in the outline, a target without a file marked `⚠ missing`, or
 ///   `none`;
@@ -134,7 +140,11 @@ pub fn element_list<'a>(
 ///
 /// Returns [`UnknownElement`] when the snapshot has no element file with
 /// this ID, also when a board places the ID.
-pub fn element_detail(snapshot: &Snapshot, id: &ElementId) -> Result<String, UnknownElement> {
+pub fn element_detail(
+    snapshot: &Snapshot,
+    id: &ElementId,
+    review: Option<&Review>,
+) -> Result<String, UnknownElement> {
     let element = snapshot
         .elements
         .get(id)
@@ -187,15 +197,59 @@ pub fn element_detail(snapshot: &Snapshot, id: &ElementId) -> Result<String, Unk
         boards.join(", ")
     };
     Ok(format!(
-        "Element: {id} · {}\nType: {}\nAnchor: {anchor}\nVerified: {verified}\n\
+        "Element: {id} · {}\nType: {}\nAnchor: {anchor}\nVerified: {verified}\n{}\
          {summary}Boards: {boards}\n\n\
          Outgoing relations:\n{}\nIncoming relations:\n{}\nDescription:\n{}",
         one_line(element.name()),
         one_line(element.type_ref().as_str()),
+        review
+            .map(|review| review_lines(review, id))
+            .unwrap_or_default(),
         relation_lines(&outgoing),
         relation_lines(&incoming),
         multi_line(element.body()),
     ))
+}
+
+/// The `Review:` line with the highest priority of the element's flags, or
+/// `none`, and one indented line per flag.
+fn review_lines(review: &Review, id: &ElementId) -> String {
+    let priority = match review.priority(id) {
+        Some(Priority::Task) => "task",
+        Some(Priority::Hint) => "hint",
+        None => "none",
+    };
+    let reasons: Vec<String> = review
+        .flags(id)
+        .iter()
+        .map(|flag| format!("  {}\n", reason(flag)))
+        .collect();
+    format!("Review: {priority}\n{}", reasons.concat())
+}
+
+/// What a flag says, on one line; file names are escaped.
+fn reason(flag: &Flag) -> String {
+    match flag {
+        Flag::NeverVerified => "never verified".to_owned(),
+        Flag::UnknownStamp => {
+            "the stamp's commit is unknown to the repository or no ancestor of HEAD".to_owned()
+        }
+        Flag::Changed(paths) => {
+            let shown: Vec<String> = paths
+                .iter()
+                .take(SHOWN_CHANGED_FILES)
+                .map(|path| one_line(&String::from_utf8_lossy(path)))
+                .collect();
+            let more = paths.len().saturating_sub(SHOWN_CHANGED_FILES);
+            let rest = if more > 0 {
+                format!(" and {more} more")
+            } else {
+                String::new()
+            };
+            format!("changed since the stamp: {}{rest}", shown.join(", "))
+        }
+        Flag::AnchorMissing => "no file that Git knows lies under the anchor".to_owned(),
+    }
 }
 
 /// The relation rows as aligned lines, or the line `none`.

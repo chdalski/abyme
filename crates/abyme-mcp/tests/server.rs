@@ -552,7 +552,8 @@ async fn read_element_shows_an_element_with_its_relations_and_description() -> T
     assert_eq!(read.is_error, Some(false), "{read:?}");
     assert_eq!(
         text(&read),
-        "Element: payment-service · Payment Service\n\
+        "Review flags unavailable: the project lies in no Git repository\n\
+         Element: payment-service · Payment Service\n\
          Type: c4/container\n\
          Anchor: none\n\
          Verified: none\n\
@@ -599,7 +600,8 @@ async fn apply_updates_an_element_and_read_element_shows_it() -> TestResult {
     .await??;
     assert_eq!(
         text(&read),
-        "Element: payment-service · Payments\n\
+        "Review flags unavailable: the project lies in no Git repository\n\
+         Element: payment-service · Payments\n\
          Type: c4/container\n\
          Anchor: none\n\
          Verified: none\n\
@@ -692,7 +694,8 @@ async fn apply_sets_and_changes_anchors_and_a_changed_anchor_removes_the_stamp()
     let read = call(&session, "read_element", json!({"element": "docs-page"})).await??;
     assert!(
         text(&read).starts_with(
-            "Element: docs-page · Docs Page\n\
+            "Review flags unavailable: the project lies in no Git repository\n\
+             Element: docs-page · Docs Page\n\
              Type: doc\n\
              Anchor: docs/a \"b\" #c\n\
              Verified: none\n"
@@ -765,6 +768,234 @@ async fn apply_removes_the_stamp_when_the_content_of_an_element_changes() -> Tes
     assert!(!file.contains("verified"), "{file}");
 
     assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+/// Runs `git` in `directory` without the user's or the system's
+/// configuration, and returns what it prints.
+fn git(directory: &Path, arguments: &[&str]) -> TestResult<String> {
+    let output = Command::new("git")
+        .current_dir(directory)
+        .args([
+            "-c",
+            "user.name=Abyme Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "-c",
+            "init.defaultBranch=main",
+            "-c",
+            "commit.gpgSign=false",
+        ])
+        .args(arguments)
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .output()?;
+    if !output.status.success() {
+        return Err(format!("git {arguments:?} failed: {output:?}").into());
+    }
+    Ok(String::from_utf8(output.stdout)?.trim_end().to_owned())
+}
+
+/// A project at the top of a Git repository whose element `x` is anchored
+/// on `crates/x` and stamped with the commit that added `crates/x/lib.rs`,
+/// which has changed since.
+fn repository_with_a_changed_anchor() -> TestResult<tempfile::TempDir> {
+    let directory = project()?;
+    git(directory.path(), &["init", "-q"])?;
+    fs::create_dir_all(directory.path().join("crates/x"))?;
+    fs::write(directory.path().join("crates/x/lib.rs"), "fn a() {}\n")?;
+    git(directory.path(), &["add", "-A"])?;
+    git(directory.path(), &["commit", "-q", "-m", "add x"])?;
+    let stamp = git(directory.path(), &["rev-parse", "HEAD"])?;
+    fs::create_dir_all(directory.path().join("abyme/elements"))?;
+    fs::write(
+        directory.path().join("abyme/elements/x.md"),
+        format!(
+            "---\nid: x\ntype: t\nname: X\nanchor: crates/x\n\
+             verified: \"{stamp}\"\nverified_by: person\n---\n"
+        ),
+    )?;
+    fs::write(directory.path().join("crates/x/lib.rs"), "fn a() { b() }\n")?;
+    Ok(directory)
+}
+
+/// What `read_element` shows of the element `x` between `Verified:` and
+/// `Boards:` when `crates/x/lib.rs` changed.
+const CHANGED_ANCHOR_REVIEW: &str =
+    "\nReview: task\n  changed since the stamp: crates/x/lib.rs\nBoards: none\n";
+
+#[tokio::test]
+async fn read_element_shows_the_review_flags_git_reports() -> TestResult {
+    let directory = repository_with_a_changed_anchor()?;
+    let config = tempfile::tempdir()?;
+    let session = start_with(
+        directory.path(),
+        &[("XDG_CONFIG_HOME", config.path().as_os_str())],
+    )
+    .await?;
+
+    let read = call(&session, "read_element", json!({"element": "x"})).await??;
+
+    assert_eq!(read.is_error, Some(false), "{read:?}");
+    assert!(
+        text(&read).starts_with("Element: x · X\n"),
+        "{}",
+        text(&read)
+    );
+    assert!(
+        text(&read).contains(CHANGED_ANCHOR_REVIEW),
+        "{}",
+        text(&read)
+    );
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+/// Writes the element `id` with the given anchor and stamp into the
+/// project at `directory`.
+fn write_element(
+    directory: &Path,
+    id: &str,
+    anchor: Option<&str>,
+    stamp: Option<&str>,
+) -> TestResult {
+    let anchor = anchor.map_or(String::new(), |anchor| format!("anchor: {anchor}\n"));
+    let stamp = stamp.map_or(String::new(), |stamp| {
+        format!("verified: \"{stamp}\"\nverified_by: person\n")
+    });
+    fs::create_dir_all(directory.join("abyme/elements"))?;
+    fs::write(
+        directory.join(format!("abyme/elements/{id}.md")),
+        format!("---\nid: {id}\ntype: t\nname: N\n{anchor}{stamp}---\n"),
+    )?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn read_element_shows_each_kind_of_review_flag() -> TestResult {
+    let directory = project()?;
+    let root = directory.path();
+    git(root, &["init", "-q"])?;
+    for file in ["crates/c/lib.rs", "crates/u/lib.rs"] {
+        fs::create_dir_all(root.join(file).parent().ok_or("no parent")?)?;
+        fs::write(root.join(file), "fn a() {}\n")?;
+    }
+    git(root, &["add", "-A"])?;
+    git(root, &["commit", "-q", "-m", "add"])?;
+    let stamp = git(root, &["rev-parse", "HEAD"])?;
+    let unknown = "0123456789abcdef0123456789abcdef01234567";
+    write_element(root, "committed", Some("crates/c"), Some(&stamp))?;
+    write_element(root, "untracked", Some("crates/u"), Some(&stamp))?;
+    write_element(root, "unknown", Some("crates/c"), Some(unknown))?;
+    write_element(root, "missing", Some("crates/gone"), Some(&stamp))?;
+    write_element(root, "unstamped", Some("crates/c"), None)?;
+    write_element(root, "native", None, None)?;
+    fs::write(root.join("crates/c/lib.rs"), "fn a() { b() }\n")?;
+    git(root, &["add", "-A"])?;
+    git(root, &["commit", "-q", "-m", "change"])?;
+    fs::write(root.join("crates/u/new.rs"), "fn n() {}\n")?;
+    let config = tempfile::tempdir()?;
+    let session = start_with(root, &[("XDG_CONFIG_HOME", config.path().as_os_str())]).await?;
+    let cases = [
+        (
+            "committed",
+            "Review: task\n  changed since the stamp: crates/c/lib.rs\n",
+        ),
+        (
+            "untracked",
+            "Review: task\n  changed since the stamp: crates/u/new.rs\n",
+        ),
+        (
+            "unknown",
+            "Review: task\n  the stamp's commit is unknown to the repository or no ancestor of HEAD\n",
+        ),
+        (
+            "missing",
+            "Review: task\n  no file that Git knows lies under the anchor\n",
+        ),
+        ("unstamped", "Review: task\n  never verified\n"),
+        ("native", "Review: none\n"),
+    ];
+
+    for (id, review) in cases {
+        let read = call(&session, "read_element", json!({"element": id})).await??;
+
+        assert_eq!(read.is_error, Some(false), "{read:?}");
+        assert!(
+            text(&read).contains(&format!("\n{review}Boards: none\n")),
+            "{id}: {}",
+            text(&read)
+        );
+    }
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+#[tokio::test]
+async fn read_element_asks_the_project_repository_whatever_git_variables_say() -> TestResult {
+    let directory = repository_with_a_changed_anchor()?;
+    let other = tempfile::tempdir()?;
+    git(other.path(), &["init", "-q"])?;
+    let config = tempfile::tempdir()?;
+    let session = start_with(
+        directory.path(),
+        &[
+            ("XDG_CONFIG_HOME", config.path().as_os_str()),
+            ("GIT_DIR", other.path().join(".git").as_os_str()),
+            ("GIT_WORK_TREE", other.path().as_os_str()),
+            ("GIT_INDEX_FILE", other.path().join("no-index").as_os_str()),
+        ],
+    )
+    .await?;
+
+    let read = call(&session, "read_element", json!({"element": "x"})).await??;
+
+    assert!(
+        text(&read).contains(CHANGED_ANCHOR_REVIEW),
+        "{}",
+        text(&read)
+    );
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+#[tokio::test]
+async fn read_element_names_why_review_flags_are_unavailable() -> TestResult {
+    let without_git = repository_with_a_changed_anchor()?;
+    let empty_path = tempfile::tempdir()?;
+    let broken = repository_with_a_changed_anchor()?;
+    fs::write(broken.path().join(".git/index"), "not an index")?;
+    let cases = [
+        (
+            without_git.path(),
+            Some(empty_path.path()),
+            "git could not be run",
+        ),
+        (broken.path(), None, "git failed"),
+    ];
+
+    for (directory, path, reason) in cases {
+        let variables: Vec<(&str, &OsStr)> = path
+            .map(|path| ("PATH", path.as_os_str()))
+            .into_iter()
+            .collect();
+        let session = start_with(directory, &variables).await?;
+
+        let read = call(&session, "read_element", json!({"element": "x"})).await??;
+
+        let reply = text(&read);
+        assert!(
+            reply.starts_with(&format!(
+                "Review flags unavailable: {reason}\nElement: x · X\n"
+            )),
+            "{reply}"
+        );
+        assert!(!reply.contains("Review:"), "{reply}");
+        assert!(!reply.contains("fatal"), "{reply}");
+        assert!(!reply.contains("error:"), "{reply}");
+        assert!(!reply.contains(&directory.display().to_string()), "{reply}");
+        assert_only_protocol_messages(&finish(session).await?);
+    }
     Ok(())
 }
 

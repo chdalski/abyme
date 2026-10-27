@@ -44,7 +44,7 @@ Abyme gives the AI three detail levels in a compact text format instead of JSON:
 |---|---|---|
 | **Overview** | all boards with a one-line summary, zone preset, and open checks | a few hundred tokens, the entry point of every session |
 | **Board outline** | elements and relations as lines, inner boards as links, notes shortened | depends on the board size |
-| **Element detail** | name, type, anchor, verification stamp, summary, the boards that place it, outgoing and incoming relations, and the full description; references come with their slice | per element |
+| **Element detail** | name, type, anchor, verification stamp, review flags, summary, the boards that place it, outgoing and incoming relations, and the full description; references come with their slice | per element |
 
 Example of a board outline:
 
@@ -81,6 +81,8 @@ Element: payment-service · Payment Service
 Type: c4/container
 Anchor: crates/payment-service
 Verified: 4fc3a1e0b8d27c95e61f0a3d8b7c2e19f5a6d403 by ai
+Review: task
+  changed since the stamp: crates/payment-service/src/refund.rs
 Summary: Stripe payments
 Boards: container-level
 
@@ -98,6 +100,7 @@ through the refund-worker.
 
 - **Fixed order:** the sections always come in this order, with `none` where there is nothing; only a missing summary leaves out its line. The description comes last.
 - **Anchor and stamp:** `Anchor:` shows the element's [[Elements#Anchors|anchor]], `Verified:` the full commit ID of its [[Checks#Verification Stamp|verification stamp]] and whether the AI or a person verified it.
+- **Review flags:** `Review:` shows the highest priority of the element's [[Checks|review flags]], `task`, `hint`, or `none`, and one indented line per flag; a flag for changed files names at most 10 of them and how many more there are. When the project lies in no Git repository, `git` cannot be run, or Git fails, the answer starts with `Review flags unavailable:` and the reason instead.
 - **The description keeps its lines and tabs.** Other control and invisible characters in it are written as escapes such as `\u{202e}`, so it can hide or reorder nothing; a carriage return before a line break is left out. Every other value is escaped onto its line as in the board outline.
 - **Missing targets:** a relation whose target has no element file shows the target with `⚠ missing`.
 

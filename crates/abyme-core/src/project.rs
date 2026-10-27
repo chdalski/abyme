@@ -9,17 +9,20 @@
 //! ignored, every read is limited in size, and a project is used only when
 //! it belongs to the user running Abyme.
 
+use std::collections::BTreeSet;
 use std::fmt;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use abyme_model::{BoardError, ElementError, shown};
+use abyme_model::{BoardError, CommitId, Element, ElementError, shown};
 
 use crate::apply::{ApplyError, Created, Snapshot};
 use crate::operation::{LocalKey, Operation};
+use crate::review::{Review, Unavailable, review};
 
 mod discovery;
 mod files;
+mod git;
 mod location;
 mod store;
 
@@ -217,6 +220,25 @@ impl Project {
         operations: &[Operation],
     ) -> Result<Vec<(LocalKey, Created)>, ProjectError> {
         store::apply_operations(&self.root, operations)
+    }
+
+    /// The review flags of the elements of `snapshot`, from what the
+    /// project's Git repository reports. Git only reads; no anchor reaches
+    /// its command line.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`Unavailable`] when the project lies in no Git
+    /// repository, `git` cannot be run, or Git fails.
+    pub fn review(&self, snapshot: &Snapshot) -> Result<Review, Unavailable> {
+        let stamps: BTreeSet<&CommitId> = snapshot
+            .elements
+            .values()
+            .filter_map(Element::verified)
+            .map(|stamp| &stamp.commit)
+            .collect();
+        let facts = git::facts(&self.root, &stamps)?;
+        Ok(review(snapshot, &facts))
     }
 }
 

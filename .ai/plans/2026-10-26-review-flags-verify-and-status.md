@@ -43,7 +43,7 @@ the AI can keep the boards honest from one session to the next.
 
 - [x] A content change removes the stamp
 - [x] One helper reads the project for the MCP read tools
-- [ ] Review flags of an element from Git, in `read_element`
+- [x] Review flags of an element from Git, in `read_element`
 - [ ] Flags passed one hop along relations
 - [ ] Markers in `read_board` and `search`
 - [ ] One locked write path in the store
@@ -103,45 +103,45 @@ paths outside the project are left out.
 
 Review path: Security-Hybrid
 
-- [ ] An element with an anchor gets a task flag when it has no stamp,
+- [x] An element with an anchor gets a task flag when it has no stamp,
       when a file under its anchor differs from its stamp commit
       (committed, staged, or not) or is untracked and not ignored, or when
       no file that Git tracks or lists as untracked lies under its anchor.
       A file lies under an anchor when its path equals the anchor or
       starts with the anchor and `/`, compared byte for byte; a renamed
       file counts as removed and added.
-- [ ] Every element with a stamp, with or without an anchor, gets a task
+- [x] Every element with a stamp, with or without an anchor, gets a task
       flag when its stamp commit is unknown to the repository or not an
       ancestor of HEAD.
-- [ ] `read_element` shows, after `Verified:`, the line `Review: task`,
+- [x] `read_element` shows, after `Verified:`, the line `Review: task`,
       `Review: hint`, or `Review: none` with the element's highest
       priority, followed by one indented line per flag that names its
       reason; a flag for changed files names at most 10 of them, escaped
       like every other value, and how many more there are.
-- [ ] When the project lies in no Git repository, `git` cannot be run, or
+- [x] When the project lies in no Git repository, `git` cannot be run, or
       Git fails, `read_element` answers as before with the first line
       `Review flags unavailable: ` and the reason, and without the
       `Review:` lines.
-- [ ] The `read_element` description, the MCP README, and MCP Server's
+- [x] The `read_element` description, the MCP README, and MCP Server's
       element detail describe the `Review:` lines and the line for
       unavailable flags.
-- [ ] The pure review function is tested with hand-built facts for every
+- [x] The pure review function is tested with hand-built facts for every
       flag; an MCP test in a temporary Git repository shows the flags for
       a committed, an uncommitted, and an untracked change, an unknown
       stamp, a missing anchor, and an element without a stamp.
-- [ ] The security baseline in Hexagonal Architecture and
+- [x] The security baseline in Hexagonal Architecture and
       `docs/Decisions.md` says that the core writes only inside `abyme/`
       and `.abyme/`, reads outside them only through Git with fixed
       arguments, and never opens a path built from an anchor; its accepted
       risks name the repository's Git configuration, hooks, and filters,
       `git` from `PATH`, and file names the AI reads.
-- [ ] Reconciliation's "Detecting Changes" describes the steps as
+- [x] Reconciliation's "Detecting Changes" describes the steps as
       delivered, renames included; the open point on Git access is gone
       from it and from `docs/Open Questions.md`. Hexagonal Architecture
       and the `abyme-core` row of the Components table in the root
       `CLAUDE.md` describe the core as holding the Git queries and the
       review flags.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
       and `cargo fmt --all --check` pass.
 
 ### Task 4: Flags passed one hop along relations

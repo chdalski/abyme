@@ -4,7 +4,8 @@
 //! [`apply`] turns the operations of a request into the files to write,
 //! without touching the file system, so every decision can be tested on its
 //! own. [`Project`] finds the project a directory lies in, reads its files,
-//! and writes a request's changes safely. [`outline`] renders a board as the
+//! writes a request's changes safely, and asks Git what changed, from which
+//! [`Review`] holds the review flags. [`outline`] renders a board as the
 //! compact text the AI reads, and [`element_detail`] one element in detail.
 
 // A project is used only when it belongs to the user running Abyme, and the
@@ -17,6 +18,7 @@ mod layout;
 mod operation;
 mod outline;
 mod project;
+mod review;
 mod slug;
 
 pub use apply::{
@@ -31,3 +33,4 @@ pub use project::{
     EmbeddingModel, EntryKind, Init, MAX_FILE_BYTES, MAX_PROJECT_FILE_BYTES, PROJECT_FORMAT,
     Project, ProjectError,
 };
+pub use review::{Flag, Priority, Review, Unavailable};
