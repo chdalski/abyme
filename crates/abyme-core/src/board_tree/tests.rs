@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 
 use abyme_model::Rect;
+use rstest::rstest;
 
 use super::*;
 
@@ -129,6 +130,49 @@ fn ends_a_walk_in_a_cycle_that_does_not_hold_the_board_it_looks_for() {
     assert!(tree.lies_inside(&board_id("a"), &board_id("b")));
     assert!(!tree.lies_inside(&board_id("a"), &board_id("c")));
     assert!(!tree.lies_inside(&board_id("a"), &board_id("d")));
+}
+
+/// `a` is the inside of `x`, which lies on `b`, the inside of `y`, which lies
+/// on `c`, the inside of `z`, which lies on `a`: a cycle of three. `s` lies
+/// on `self`, its own inside. `below` is the inside of `w`, which lies on
+/// `a`; `chain` is the inside of `v`, which lies on `top`; `loose` is the
+/// inside of an element no board places.
+fn cycles() -> BoardTree {
+    tree(&[
+        board("a", Some("x"), &["w", "z"]),
+        board("b", Some("y"), &["x"]),
+        board("c", Some("z"), &["y"]),
+        board("self", Some("s"), &["s"]),
+        board("below", Some("w"), &[]),
+        board("top", None, &["v"]),
+        board("chain", Some("v"), &[]),
+        board("loose", Some("nowhere"), &[]),
+    ])
+}
+
+#[rstest]
+#[case::a_board_whose_owner_lies_on_it("self", true)]
+#[case::each_board_of_a_cycle_of_three("a", true)]
+#[case::the_last_board_of_a_cycle_of_three("c", true)]
+#[case::a_board_below_a_cycle("below", false)]
+#[case::a_board_below_a_top_level_board("chain", false)]
+#[case::a_board_without_an_owner("top", false)]
+#[case::a_board_whose_owner_has_no_home("loose", false)]
+fn tells_whether_a_board_lies_inside_itself(#[case] board: &str, #[case] expected: bool) {
+    assert_eq!(cycles().lies_inside_itself(&board_id(board)), expected);
+}
+
+#[test]
+fn finds_a_cycle_of_two_boards_from_either_side() {
+    // `left` is the inside of `r`, which lies on `right`, the inside of `l`,
+    // which lies on `left`.
+    let tree = tree(&[
+        board("left", Some("r"), &["l"]),
+        board("right", Some("l"), &["r"]),
+    ]);
+
+    assert!(tree.lies_inside_itself(&board_id("left")));
+    assert!(tree.lies_inside_itself(&board_id("right")));
 }
 
 #[test]

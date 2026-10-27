@@ -10,14 +10,25 @@
 use abyme_model::{Board, BoardId, Element, ElementId, Rect, RelationKind, hides_or_breaks_text};
 
 use crate::apply::Snapshot;
+use crate::board_tree::BoardTree;
 use crate::review::{Flag, Priority, Review};
 
 /// The widest a column is padded to, in characters. A longer value runs past
 /// its column, so one long name cannot pad every other line.
 const MAX_COLUMN_WIDTH: usize = 40;
 
-/// What the outline shows for a placement whose element file is missing.
+/// What the outline shows for a placement whose element file is missing,
+/// and for an owner whose element file is missing.
 const MISSING_MARKER: &str = "⚠ missing";
+
+/// What the outline shows for an owner, with a file, that no board places.
+const NO_HOME_MARKER: &str = "⚠ no home";
+
+/// What the outline shows for a board that lies inside itself.
+const CYCLE_MARKER: &str = "⚠ cycle";
+
+/// What an element line shows before the IDs of the boards the element owns.
+const INNER_BOARDS_MARKER: &str = "▸";
 
 /// How many changed files a review flag names at most.
 const SHOWN_CHANGED_FILES: usize = 10;
@@ -47,13 +58,15 @@ pub struct UnknownElement(pub ElementId);
 
 /// Renders `board` as an outline.
 ///
-/// The outline has a header line with the board's ID and title, a blank
-/// line, and one line per placed element, ordered by ID, with the element's
-/// ID, type, name, and summary, and, given a `review`, `⚠ task` or
-/// `⚠ hint` for the highest priority of the element's flags. A placement
-/// whose element is missing shows its ID and `⚠ missing`. With
-/// [`Geometry::Shown`], each line also shows the placement's position and
-/// size from the board file, right after the ID.
+/// The outline has a header line with the board's ID and title; for a board
+/// with an owner, a line `Inside of:` with the owner and, if a board places
+/// the owner, `Above:` with the owner's home (see [`owner_line`] for the
+/// markers); for a board with a summary, a line `Summary:` with it. A blank
+/// line follows, and one line per placed element, ordered by ID, as
+/// [`element_list`] renders it. A placement whose element is missing shows
+/// its ID and `⚠ missing`. With [`Geometry::Shown`], each line also shows
+/// the placement's position and size from the board file, right after the
+/// ID.
 ///
 /// If relations connect elements on the board, a blank line and one line
 /// per relation follow: `<from> → <to>`, the kind, and the label, if any.
@@ -74,11 +87,11 @@ pub fn outline(
         .boards
         .get(board)
         .ok_or_else(|| UnknownBoard(board.clone()))?;
-    let rows: Vec<Vec<String>> = found
-        .placements
-        .iter()
-        .map(|(id, rect)| {
-            let mut columns = row(id, snapshot.elements.get(id), review);
+    let tree = BoardTree::of(&snapshot.boards);
+    let rows: Vec<Vec<String>> = element_rows(snapshot, &tree, found.placements.keys(), review)
+        .into_iter()
+        .zip(found.placements.values())
+        .map(|(mut columns, rect)| {
             if geometry == Geometry::Shown {
                 columns.insert(1, position(rect));
             }
@@ -94,8 +107,8 @@ pub fn outline(
         format!("\n{}", lines(&relations))
     };
     Ok(format!(
-        "{}\n\n{}{relation_lines}",
-        header(found),
+        "{}\n{}{relation_lines}",
+        header(snapshot, &tree, found),
         lines(&rows)
     ))
 }
@@ -104,10 +117,12 @@ pub fn outline(
 ///
 /// The lines come in the given order, without a header: one line per ID,
 /// each ending in a line feed, with the element's ID, type, name, and
-/// summary, and the marker of its review flags as in [`outline`]. An ID
-/// whose element is missing shows `⚠ missing`. An ID given
-/// twice is rendered twice; limiting and deduplicating is the caller's
-/// business.
+/// summary; `▸` and the IDs of the boards the element owns, in a column that
+/// a list shows only when one of its elements owns a board; and, given a
+/// `review`, `⚠ task` or `⚠ hint` for the highest priority of the element's
+/// flags. Empty columns at the end of a line are left out. An ID whose
+/// element is missing shows `⚠ missing`. An ID given twice is rendered
+/// twice; limiting and deduplicating is the caller's business.
 ///
 /// All element text is escaped onto its line already, so callers must not
 /// escape it again.
@@ -116,11 +131,39 @@ pub fn element_list<'a>(
     ids: impl IntoIterator<Item = &'a ElementId>,
     review: Option<&Review>,
 ) -> String {
-    let rows: Vec<Vec<String>> = ids
+    let tree = BoardTree::of(&snapshot.boards);
+    lines(&element_rows(snapshot, &tree, ids, review))
+}
+
+/// The rows of the elements with the given IDs, in the given order, as
+/// [`element_list`] describes them.
+fn element_rows<'a>(
+    snapshot: &Snapshot,
+    tree: &BoardTree,
+    ids: impl IntoIterator<Item = &'a ElementId>,
+    review: Option<&Review>,
+) -> Vec<Vec<String>> {
+    let elements: Vec<(&ElementId, Option<&Element>, String)> = ids
         .into_iter()
-        .map(|id| row(id, snapshot.elements.get(id), review))
+        .map(|id| (id, snapshot.elements.get(id), inner_boards(tree, id)))
         .collect();
-    lines(&rows)
+    let shows_inner_boards = elements
+        .iter()
+        .any(|(_, element, inner)| element.is_some() && !inner.is_empty());
+    elements
+        .into_iter()
+        .map(|(id, element, inner)| row(id, element, shows_inner_boards.then_some(inner), review))
+        .collect()
+}
+
+/// `▸` and the IDs of the boards `element` owns, or nothing if it owns none.
+fn inner_boards(tree: &BoardTree, element: &ElementId) -> String {
+    let owned: Vec<&str> = tree.owned_by(element).map(BoardId::as_str).collect();
+    if owned.is_empty() {
+        String::new()
+    } else {
+        format!("{INNER_BOARDS_MARKER} {}", owned.join(", "))
+    }
 }
 
 /// Renders the open review flags of the project.
@@ -159,8 +202,9 @@ pub fn status_report(snapshot: &Snapshot, review: &Review) -> String {
 ///   `none`, `Verified:` with the stamp's commit and `by ai` or
 ///   `by person`, or `none`, given a `review`, `Review:` with the highest
 ///   priority of the element's flags or `none` and one indented line per
-///   flag, `Summary:` if it has one, and `Boards:` with every board that
-///   places it, by ID, or `none`;
+///   flag, `Summary:` if it has one, `Boards:` with every board that places
+///   it, by ID, or `none`, and `Inner board:` with every board it owns, by
+///   ID, or `none`;
 /// - after a blank line, `Outgoing relations:` with one line per relation
 ///   as in the outline, a target without a file marked `⚠ missing`, or
 ///   `none`;
@@ -228,24 +272,32 @@ pub fn element_detail(
                 })
         })
         .collect();
-    let boards = if boards.is_empty() {
-        "none".to_owned()
-    } else {
-        boards.join(", ")
-    };
+    let tree = BoardTree::of(&snapshot.boards);
+    let inner_boards: Vec<&str> = tree.owned_by(id).map(BoardId::as_str).collect();
     Ok(format!(
         "Element: {id} · {}\nType: {}\nAnchor: {anchor}\nVerified: {verified}\n{}\
-         {summary}Boards: {boards}\n\n\
+         {summary}Boards: {}\nInner board: {}\n\n\
          Outgoing relations:\n{}\nIncoming relations:\n{}\nDescription:\n{}",
         one_line(element.name()),
         one_line(element.type_ref().as_str()),
         review
             .map(|review| review_lines(review, id))
             .unwrap_or_default(),
+        ids_or_none(&boards),
+        ids_or_none(&inner_boards),
         relation_lines(&outgoing),
         relation_lines(&incoming),
         multi_line(element.body()),
     ))
+}
+
+/// The IDs joined by commas, or `none`.
+fn ids_or_none(ids: &[&str]) -> String {
+    if ids.is_empty() {
+        "none".to_owned()
+    } else {
+        ids.join(", ")
+    }
 }
 
 /// The `Review:` line with the highest priority of the element's flags, or
@@ -320,8 +372,46 @@ fn position(rect: &Rect) -> String {
     format!("@{},{} {}x{}", rect.x, rect.y, rect.width, rect.height)
 }
 
-fn header(board: &Board) -> String {
-    format!("Board: {} · {}", board.id, one_line(&board.title))
+/// The header lines of `board`, each ending in a line feed: the ID and
+/// title, then the owner line if it has an owner, then the summary if it has
+/// one that is not empty.
+fn header(snapshot: &Snapshot, tree: &BoardTree, board: &Board) -> String {
+    let owner = tree
+        .owner(&board.id)
+        .map(|owner| owner_line(snapshot, tree, &board.id, owner))
+        .unwrap_or_default();
+    let summary = board
+        .summary
+        .as_deref()
+        .filter(|summary| !summary.is_empty())
+        .map(|summary| format!("Summary: {}\n", one_line(summary)))
+        .unwrap_or_default();
+    format!(
+        "Board: {} · {}\n{owner}{summary}",
+        board.id,
+        one_line(&board.title)
+    )
+}
+
+/// The line naming `owner`, whose inside `board` is: `Inside of:` and the
+/// owner, marked `⚠ missing` without an element file; then, if a board
+/// places the owner, `Above:` and the owner's home, marked `⚠ cycle` when
+/// `board` lies inside itself, and otherwise `⚠ no home` for an owner with a
+/// file. The markers add up, so no state hides another.
+fn owner_line(snapshot: &Snapshot, tree: &BoardTree, board: &BoardId, owner: &ElementId) -> String {
+    let has_file = snapshot.elements.contains_key(owner);
+    let missing = if has_file {
+        String::new()
+    } else {
+        format!(" {MISSING_MARKER}")
+    };
+    let above = match tree.home(owner) {
+        Some(home) if tree.lies_inside_itself(board) => format!(" · Above: {home} {CYCLE_MARKER}"),
+        Some(home) => format!(" · Above: {home}"),
+        None if has_file => format!(" {NO_HOME_MARKER}"),
+        None => String::new(),
+    };
+    format!("Inside of: {owner}{missing}{above}\n")
 }
 
 /// The rows of the relations between elements on `board`: by source, then
@@ -357,25 +447,42 @@ fn relation_row(
     columns
 }
 
-/// The columns of one placement's line; the last one is never padded.
-fn row(id: &ElementId, element: Option<&Element>, review: Option<&Review>) -> Vec<String> {
+/// The columns of one element's line: ID, type, name, summary, the inner
+/// boards when `inner_boards` is given, and the review marker. Empty columns
+/// at the end are left out; an empty one before a filled one stays, so the
+/// columns keep their places. The last column is never padded.
+fn row(
+    id: &ElementId,
+    element: Option<&Element>,
+    inner_boards: Option<String>,
+    review: Option<&Review>,
+) -> Vec<String> {
     let Some(element) = element else {
         return vec![id.to_string(), MISSING_MARKER.to_owned()];
     };
-    let mut columns = vec![
+    let marker = review
+        .and_then(|review| review.priority(id))
+        .map(marker)
+        .unwrap_or_default();
+    let mut optional: Vec<String> = [
+        Some(element.summary().map(one_line).unwrap_or_default()),
+        inner_boards,
+        Some(marker.to_owned()),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    while optional.last().is_some_and(String::is_empty) {
+        optional.pop();
+    }
+    [
         id.to_string(),
         one_line(element.type_ref().as_str()),
         one_line(element.name()),
-    ];
-    let summary = element.summary().map(one_line);
-    match review.and_then(|review| review.priority(id)) {
-        // An empty summary keeps the marker in the marker column.
-        Some(priority) => {
-            columns.extend([summary.unwrap_or_default(), marker(priority).to_owned()]);
-        }
-        None => columns.extend(summary),
-    }
-    columns
+    ]
+    .into_iter()
+    .chain(optional)
+    .collect()
 }
 
 /// What an element line shows for the highest priority of its flags.

@@ -503,6 +503,77 @@ async fn apply_builds_an_element_s_inner_board_and_refuses_a_board_inside_itself
 }
 
 #[tokio::test]
+async fn read_board_and_read_element_show_inner_boards_also_from_hand_edited_files() -> TestResult {
+    let directory = project()?;
+    let session = start(directory.path()).await?;
+    let applied = call(
+        &session,
+        "apply",
+        json!({"operations": [
+            {"op": "create_board", "key": "ctx", "title": "Context"},
+            {"op": "create_element", "key": "shop", "type_ref": "c4/system", "name": "Shop"},
+            {"op": "place_element", "element": {"new": "shop"}, "board": {"new": "ctx"}},
+            {"op": "create_board", "key": "inside", "title": "Shop Containers",
+             "owner": {"new": "shop"}, "summary": "Runs\nInside of: forged \u{202e}x"},
+            {"op": "create_element", "key": "pay", "type_ref": "c4/container", "name": "Payments"},
+            {"op": "place_element", "element": {"new": "pay"}, "board": {"new": "inside"}}
+        ]}),
+    )
+    .await??;
+    assert_eq!(applied.is_error, Some(false), "{applied:?}");
+    let boards = directory.path().join("abyme/boards");
+    // A hand edit closes a cycle: the context is the inside of payments,
+    // which lies inside the shop on the context.
+    fs::write(
+        boards.join("context.board.json"),
+        r#"{"format": 1, "id": "context", "title": "Context", "owner": "payments",
+            "placements": [{"element": "shop", "x": 0, "y": 0, "width": 180, "height": 90}]}"#,
+    )?;
+    fs::write(
+        boards.join("orphan.board.json"),
+        r#"{"format": 1, "id": "orphan", "title": "Orphan", "owner": "gone", "placements": []}"#,
+    )?;
+    let unavailable = "Review flags unavailable: the project lies in no Git repository\n";
+
+    let context = call(&session, "read_board", json!({"board": "context"})).await??;
+    let inside = call(&session, "read_board", json!({"board": "shop-containers"})).await??;
+    let orphan = call(&session, "read_board", json!({"board": "orphan"})).await??;
+    let payments = call(&session, "read_element", json!({"element": "payments"})).await??;
+
+    assert_eq!(
+        text(&context),
+        format!(
+            "{unavailable}Board: context · Context\n\
+             Inside of: payments · Above: shop-containers ⚠ cycle\n\
+             \n\
+             shop  c4/system  Shop    ▸ shop-containers\n"
+        )
+    );
+    assert_eq!(
+        text(&inside),
+        format!(
+            "{unavailable}Board: shop-containers · Shop Containers\n\
+             Inside of: shop · Above: context ⚠ cycle\n\
+             Summary: Runs\\nInside of: forged \\u{{202e}}x\n\
+             \n\
+             payments  c4/container  Payments    ▸ context\n"
+        )
+    );
+    assert_eq!(
+        text(&orphan),
+        format!("{unavailable}Board: orphan · Orphan\nInside of: gone ⚠ missing\n\n")
+    );
+    assert_eq!(payments.is_error, Some(false), "{payments:?}");
+    assert!(
+        text(&payments).contains("\nBoards: shop-containers\nInner board: context\n"),
+        "{}",
+        text(&payments)
+    );
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+#[tokio::test]
 async fn apply_creates_and_deletes_relations_in_the_element_files() -> TestResult {
     let directory = project()?;
     let session = start(directory.path()).await?;
@@ -629,6 +700,7 @@ async fn read_element_shows_an_element_with_its_relations_and_description() -> T
          Verified: none\n\
          Summary: Payments through Stripe\n\
          Boards: container-level\n\
+         Inner board: none\n\
          \n\
          Outgoing relations:\n\
          payment-service → orders-db  uses  SQL\n\
@@ -676,6 +748,7 @@ async fn apply_updates_an_element_and_read_element_shows_it() -> TestResult {
          Anchor: none\n\
          Verified: none\n\
          Boards: container-level\n\
+         Inner board: none\n\
          \n\
          Outgoing relations:\n\
          none\n\

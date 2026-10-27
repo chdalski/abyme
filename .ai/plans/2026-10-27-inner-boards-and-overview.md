@@ -34,8 +34,8 @@ summaries and open review flags.
 ## Steps
 
 - [x] One view of the boards as a request stands
-- [ ] Inner boards and board summaries in the files and in `apply`
-- [ ] Inner boards in the board outline and the element detail
+- [x] Inner boards and board summaries in the files and in `apply`
+- [x] Inner boards in the board outline and the element detail
 - [ ] The `overview` tool
 
 ## Tasks
@@ -111,10 +111,10 @@ inner board, and `read_element` names an element's inner boards.
 
 Review path: Security-Hybrid
 
-- [ ] The outline's first line keeps its form; a board with an owner gets a
+- [x] The outline's first line keeps its form; a board with an owner gets a
       second line, `Inside of:` with the owner and `Above:` with the board
       the owner lies on, and a board with a summary then a line with it.
-- [ ] Element lines have the columns ID, type, name, summary, inner boards,
+- [x] Element lines have the columns ID, type, name, summary, inner boards,
       and review marker, and drop empty trailing columns: an element that
       owns boards shows `▸` and their IDs in the inner boards column, in
       `read_board`, `search`, and `status` alike, and an element whose
@@ -125,23 +125,23 @@ Review path: Security-Hybrid
       `crates/abyme-mcp/tests/server.rs`, and
       `crates/abyme-mcp/src/server/tests.rs` pass with their assertions
       unchanged.
-- [ ] `read_element` shows `Inner board:` after `Boards:`, with every board
+- [x] `read_element` shows `Inner board:` after `Boards:`, with every board
       the element owns, or `none`.
-- [ ] Reading never loops, and the line naming a board's owner marks an
+- [x] Reading never loops, and the line naming a board's owner marks an
       owner whose file is missing, an owner without a home, and a board
       that lies inside itself; two boards with one owner both appear on the
       owner's element line and in its detail. A test covers each.
-- [ ] The outline and `read_element` take the hierarchy from the board tree
+- [x] The outline and `read_element` take the hierarchy from the board tree
       of Task 2.
-- [ ] Board titles and summaries are escaped onto their line as element
+- [x] Board titles and summaries are escaped onto their line as element
       text is.
-- [ ] The read tools' descriptions, the MCP README, and MCP Server (outline
+- [x] The read tools' descriptions, the MCP README, and MCP Server (outline
       example, element detail, and how board summaries come about) describe
       the lines as delivered. Relations, the Decisions row on relation
       kinds, the Glossary, and Data Model no longer say that `contains`
       comes with inner boards; they say it is not stored and passes no
       review flags, and the kinds table claims no check for it.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
       and `cargo fmt --all --check` pass.
 
 ### Task 4: The `overview` tool

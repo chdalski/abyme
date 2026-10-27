@@ -89,6 +89,13 @@ impl BoardTree {
         }
         false
     }
+
+    /// Whether `board` lies inside itself: going up from the board above it
+    /// comes back to it.
+    pub fn lies_inside_itself(&self, board: &BoardId) -> bool {
+        self.parent(board)
+            .is_some_and(|parent| self.lies_inside(parent, board))
+    }
 }
 
 #[cfg(test)]

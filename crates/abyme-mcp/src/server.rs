@@ -208,8 +208,13 @@ impl AbymeServer {
 
     #[tool(
         description = "Returns a board of the Abyme project as an outline: a header with the board's ID and \
-            title, then one line per element with its ID, type, name, and summary, and last ⚠ task or \
-            ⚠ hint when the element has review flags (read_element names them), then, after a blank line, \
+            title; for a board that is an element's inner board, a line Inside of: with that element and \
+            Above: with the board it lies on, marked ⚠ missing for an element without a file, ⚠ no home for \
+            one no board places, and ⚠ cycle for a board that lies inside itself; and for a board with a \
+            summary, a line Summary: with it. Then, after a blank line, one line per element with its ID, \
+            type, name, summary, ▸ and the IDs of the boards it owns (its inner boards, which read_board \
+            opens), and last ⚠ task or ⚠ hint when the element has review flags (read_element names \
+            them), then, after a blank line, \
             one line per relation between two elements on the board, as source → target, kind, and label. \
             Text from the repository, relation labels included, is escaped onto one line. With coordinates \
             true, each element line also shows the element's position and size right after its ID, as \
@@ -250,7 +255,8 @@ impl AbymeServer {
             (or none), then Review: with task, hint, or none and one indented line per review flag, such \
             as files changed under the anchor since the stamp (at most 10 named), or a relation of kind \
             depends_on or describes (a task) or uses or concerns (a hint) where what the target's anchor \
-            stands for may have changed since the element's stamp, summary, the boards that place it, its outgoing relations (a \
+            stands for may have changed since the element's stamp, summary, the boards that place it, \
+            Inner board: with the boards it owns (or none), its outgoing relations (a \
             target without a file is marked ⚠ missing), the relations of other elements to it, and last its description. \
             The single-line values are escaped onto one line as in read_board. The description keeps its \
             line breaks and tabs; other control and invisible characters in it appear as \\u{...} \
@@ -284,7 +290,8 @@ impl AbymeServer {
     #[tool(
         description = "Searches the elements of the Abyme project by the words they contain and by what \
             they are about, and returns the 10 that match the query best, best first: one line per element \
-            with its ID, type, name, and summary, and the ⚠ task or ⚠ hint marker, as in a board outline. \
+            with its ID, type, name, summary, ▸ and its inner boards, and the ⚠ task or ⚠ hint marker, as \
+            in a board outline. \
             Text from the repository is escaped onto one line. When Git cannot be asked, the reply starts \
             with a line Review flags unavailable: and the reason, and no line is marked. The first search \
             after the server starts, and the first after the project file names another embedding model, \

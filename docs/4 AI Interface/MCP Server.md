@@ -44,28 +44,29 @@ Abyme gives the AI three detail levels in a compact text format instead of JSON:
 |---|---|---|
 | **Overview** | all boards with a one-line summary, zone preset, and open checks | a few hundred tokens, the entry point of every session |
 | **Board outline** | elements and relations as lines, inner boards as links, notes shortened | depends on the board size |
-| **Element detail** | name, type, anchor, verification stamp, review flags, summary, the boards that place it, outgoing and incoming relations, and the full description; references come with their slice | per element |
+| **Element detail** | name, type, anchor, verification stamp, review flags, summary, the boards that place it, its inner boards, outgoing and incoming relations, and the full description; references come with their slice | per element |
 
 Example of a board outline:
 
 ```
-Board: container-level · Container Level (current, verified @ abc123)
-Above: context · Below: payment-components ▸, checkout-components ▸
+Board: container-level · Container Level
+Inside of: web-shop-system · Above: context
+Summary: The containers of the web shop and how they talk
 
-web-shop          container  React     storefront
-checkout-service  container  Kotlin    order completion
-payment-service   container  Go        Stripe payments   ⚠ task
-orders-db         datastore  Postgres
+checkout-service  c4/container  Checkout Service  order completion
+orders-db         c4/datastore  Orders DB
+payment-service   c4/container  Payment Service   Stripe payments  ▸ payment-components  ⚠ task
+web-shop          c4/container  Web Shop          storefront
 
 checkout-service → orders-db        uses  writes orders
 checkout-service → payment-service  uses  REST, synchronous
 web-shop → checkout-service         uses  REST
-
-Notes: "Bottleneck on Black Friday" (at payment-service)
 ```
 
 As a rough estimate, this takes 5 to 10 times fewer tokens than the same board as JSON with geometry. A prototype still has to confirm this.
 
+- **Header:** The first line names the board's ID and title. A board that is an element's [[Board Graph|inner board]] names that element in a second line, `Inside of:`, and with `Above:` the board the element lies on. Merges and hand edits can break the hierarchy, so the line marks an element without a file `⚠ missing`, one that no board places `⚠ no home`, and a board that lies inside itself `⚠ cycle`. A board with a summary shows it in a line `Summary:`.
+- **Inner boards:** An element line shows `▸` and the IDs of the boards the element owns, which `read_board` opens; `search` and `status` show them the same way.
 - **Real IDs:** The outline shows the element IDs themselves, which are short, readable slugs (see [[Data Model#Rules]]). The server needs no state between calls, and an ID from an older response never points to the wrong element.
 - **One line per element:** Text from boards and elements, relation labels included, stays on its line. Backslashes, line breaks, control characters, and invisible format characters are written as escapes such as `\\`, `\n`, and `\u{202e}`, so content can neither break the outline nor hide text from a reader.
 - **Relations as arrows:** After the elements and a blank line, one line per relation between two elements on the board: source → target, kind, and label. They come by source, then by kind and target. Relations to elements on other boards are left out.
@@ -73,7 +74,7 @@ As a rough estimate, this takes 5 to 10 times fewer tokens than the same board a
 - **Markers:** An element line ends with `⚠ task` or `⚠ hint` when the element has [[Checks|review flags]], for their highest priority; `read_element` names them, and `search` marks its lines the same way. When the project lies in no Git repository, `git` cannot be run, or Git fails, the answer starts with `Review flags unavailable:` and the reason, and no line is marked.
 - **Coordinates** only on request, when the AI wants to arrange elements: `read_board` with `"coordinates": true` shows each element's position and size right after its ID, such as `@400,200 180x90`.
 - **Geometry is translated into relations.** “Lies in frame X” is reliable and important. “Lies near Y” is only a hint.
-- **Summaries** of boards are maintained automatically. When the content below them changes, they get a review flag themselves.
+- **Board summaries** come from the AI, which writes them with `create_board` and `update_board`; nothing updates or flags them when the boards below change.
 
 Example of an element detail, as `read_element` returns it:
 
@@ -86,6 +87,7 @@ Review: task
   changed since the stamp: crates/payment-service/src/refund.rs
 Summary: Stripe payments
 Boards: container-level
+Inner board: payment-components
 
 Outgoing relations:
 payment-service → stripe ⚠ missing  depends_on
@@ -102,6 +104,7 @@ through the refund-worker.
 - **Fixed order:** the sections always come in this order, with `none` where there is nothing; only a missing summary leaves out its line. The description comes last.
 - **Anchor and stamp:** `Anchor:` shows the element's [[Elements#Anchors|anchor]], `Verified:` the full commit ID of its [[Checks#Verification Stamp|verification stamp]] and whether the AI or a person verified it.
 - **Review flags:** `Review:` shows the highest priority of the element's [[Checks|review flags]], `task`, `hint`, or `none`, and one indented line per flag; a flag for changed files names at most 10 of them and how many more there are, and a flag passed on along a relation names the relation's kind and target and says that what the target's anchor stands for may have changed since the element's stamp. When the project lies in no Git repository, `git` cannot be run, or Git fails, the answer starts with `Review flags unavailable:` and the reason instead.
+- **Boards:** `Boards:` names every board that places the element, `Inner board:` every board that is its inside.
 - **The description keeps its lines and tabs.** Other control and invisible characters in it are written as escapes such as `\u{202e}`, so it can hide or reorder nothing; a carriage return before a line break is left out. Every other value is escaped onto its line as in the board outline.
 - **Missing targets:** a relation whose target has no element file shows the target with `⚠ missing`.
 

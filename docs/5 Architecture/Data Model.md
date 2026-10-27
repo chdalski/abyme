@@ -108,7 +108,7 @@ pub struct Element {
 }
 
 pub struct Relation {
-    pub kind: RelationKind,                  // concerns, depends_on, describes, see_also, uses; later contains, corresponds_to, replaces
+    pub kind: RelationKind,                  // concerns, depends_on, describes, see_also, uses; later corresponds_to, replaces; contains is not stored and passes no review flags
     pub to: ElementId,
     pub label: Option<String>,               // e.g. "REST, synchronous"
 }

@@ -11,7 +11,7 @@ Relations are typed. Only certain types trigger [[Checks]]; otherwise every chan
 
 | Type | Name in files and requests | Meaning | Triggers a check |
 |---|---|---|---|
-| contains | `contains` | hierarchy, e.g. system → container | yes |
+| contains | `contains` | hierarchy, e.g. system → container; not stored, the inner board shows it | no |
 | depends on | `depends_on` | A works only with B | yes, a task |
 | uses | `uses` | runtime relation, e.g. a call | yes, a hint |
 | describes | `describes` | a document describes an element, e.g. in the [[First Slice#MVP\|docs map]] | yes, a task |
@@ -20,7 +20,7 @@ Relations are typed. Only certain types trigger [[Checks]]; otherwise every chan
 | concerns | `concerns` | a note, idea, or question refers to an element | yes, a hint |
 | see also | `see_also` | loose reference | no |
 
-- **Stored today:** `concerns`, `depends_on`, `describes`, `see_also`, and `uses`. Element files and requests know no other kind. `contains` comes with inner boards, which it usually follows from; `corresponds_to` and `replaces` come with [[Current and Target|current and target]].
+- **Stored today:** `concerns`, `depends_on`, `describes`, `see_also`, and `uses`. Element files and requests know no other kind. `contains` is not stored and passes no review flags: an element's inner board shows what it contains; `corresponds_to` and `replaces` come with [[Current and Target|current and target]].
 - **A relation goes out from an element** and has a kind, a target, and an optional label, such as “REST”. An element has at most one relation of a kind to a target, and none to itself. How relations are stored is described in [[Storage in Git#Element File]].
 - **Arrows are relations.** A board shows the relations between the elements that lie on it. Arrows are not stored.
 - **“contains”** usually follows from the inner board: whatever has its home inside X is contained in X.
