@@ -48,7 +48,7 @@ the AI can keep the boards honest from one session to the next.
 - [x] Markers in `read_board` and `search`
 - [x] One locked write path in the store
 - [x] The `verify` tool
-- [ ] The `status` tool
+- [x] The `status` tool
 
 ## Tasks
 
@@ -254,22 +254,22 @@ whole project.
 
 Review path: Security-Hybrid
 
-- [ ] The MCP tool `status` takes no argument and answers with a line
+- [x] The MCP tool `status` takes no argument and answers with a line
       counting the elements by their highest priority, task or hint, then
       one line per flagged element as in search results, tasks first, each
       group by ID; at most 50 such lines, followed by how many more there are.
       Without flags it answers `No open review flags.`
-- [ ] When the flags are unavailable, `status` answers with a tool error
+- [x] When the flags are unavailable, `status` answers with a tool error
       that names the reason.
-- [ ] An MCP test in a temporary Git repository shows both groups, and
+- [x] An MCP test in a temporary Git repository shows both groups, and
       the test that checks every tool's parameters names `status` with
       none.
-- [ ] The server's instructions, the `status` description, the MCP
+- [x] The server's instructions, the `status` description, the MCP
       README, MCP Server's tools, and Checks' "Reports" describe `status`;
       the `abyme-mcp` row of the Components table in the root `CLAUDE.md`
       and the server's module documentation name every tool the server
       offers.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
       and `cargo fmt --all --check` pass.
 
 ## Decisions

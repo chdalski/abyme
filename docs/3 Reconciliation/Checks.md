@@ -42,7 +42,7 @@ Every representation carries “last verified against commit X, by the AI or a p
 Abyme does not contact the AI on its own, because MCP works on request. That is enough, because Abyme is used often as docs and memory. Reports come in two ways:
 
 - **In every tool response** that concerns something, e.g.: “This change affects 3 dependent elements: …”
-- **Through a status call** at the start of a session, e.g.: “3 open checks, 2 pending changes, target ‘Notifications’ 60 % reached.”
+- **Through a status call** at the start of a session, e.g.: “3 open checks, 2 pending changes, target ‘Notifications’ 60 % reached.” `status` reports the review flags so far: how many elements have a task or only a hint, and their lines, tasks first; pending changes and targets come with their slices.
 
 > [!todo] Open
 > Do the structural checks belong to the format or to the core? That decides what the canvas alone can already check.

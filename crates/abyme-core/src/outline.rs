@@ -22,6 +22,9 @@ const MISSING_MARKER: &str = "⚠ missing";
 /// How many changed files a review flag names at most.
 const SHOWN_CHANGED_FILES: usize = 10;
 
+/// How many elements [`status_report`] lists at most.
+const STATUS_LINES: usize = 50;
+
 /// Whether an outline shows where each element lies on its board.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Geometry {
@@ -118,6 +121,36 @@ pub fn element_list<'a>(
         .map(|id| row(id, snapshot.elements.get(id), review))
         .collect();
     lines(&rows)
+}
+
+/// Renders the open review flags of the project.
+///
+/// A line counts the elements by their highest priority; their lines
+/// follow as in [`element_list`], those with a task first, each group by
+/// ID, at most [`STATUS_LINES`] of them and then how many more there are.
+/// Without flags the report is `No open review flags.` `review` must have
+/// been computed from `snapshot`.
+#[must_use]
+pub fn status_report(snapshot: &Snapshot, review: &Review) -> String {
+    let (tasks, hints): (Vec<&ElementId>, Vec<&ElementId>) = review
+        .flagged()
+        .partition(|id| review.priority(id) == Some(Priority::Task));
+    if tasks.is_empty() && hints.is_empty() {
+        return "No open review flags.".to_owned();
+    }
+    let more = (tasks.len() + hints.len()).saturating_sub(STATUS_LINES);
+    let rest = if more > 0 {
+        format!("… and {more} more\n")
+    } else {
+        String::new()
+    };
+    let shown = tasks.iter().chain(&hints).take(STATUS_LINES).copied();
+    format!(
+        "Elements to review: {} with a task, {} with only a hint.\n{}{rest}",
+        tasks.len(),
+        hints.len(),
+        element_list(snapshot, shown, Some(review))
+    )
 }
 
 /// Renders the element `id` in detail, in this order:

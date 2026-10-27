@@ -1238,3 +1238,89 @@ fn keeps_the_marker_last_when_lines_show_coordinates() {
     let line = outline.lines().find(|line| line.starts_with("a ")).unwrap();
     assert_eq!(line, "a  @0,0 1x1  t  A     ⚠ task");
 }
+
+#[test]
+fn reports_no_open_review_flags() {
+    let snapshot = snapshot("Board", vec![element("c", "t", "C", None)], &[]);
+    let review = review(&snapshot, &facts(&[], &[]));
+
+    assert_eq!(status_report(&snapshot, &review), "No open review flags.");
+}
+
+#[test]
+fn reports_tasks_before_hints_after_a_count() {
+    let (snapshot, review) = marked();
+
+    assert_eq!(
+        status_report(&snapshot, &review),
+        "Elements to review: 1 with a task, 1 with only a hint.\n\
+         a  t  A     ⚠ task\n\
+         b  t  B  S  ⚠ hint\n"
+    );
+}
+
+#[test]
+fn reports_hostile_names_on_one_line_each() {
+    let mut snapshot = snapshot("Board", Vec::new(), &[]);
+    let hostile = anchored(
+        element("x", "t", "a\nb\tc", Some("c\rd\u{202e}")),
+        "crates/x",
+        None,
+    );
+    snapshot.elements.insert(hostile.id().clone(), hostile);
+    let review = review(&snapshot, &facts(&[b"crates/x/lib.rs"], &[]));
+
+    let report = status_report(&snapshot, &review);
+
+    assert_eq!(report.lines().count(), 2, "{report:?}");
+    assert!(
+        report.ends_with("x  t  a\\nb\\tc  c\\rd\\u{202e}  ⚠ task\n"),
+        "{report:?}"
+    );
+}
+
+#[test]
+fn reports_at_most_fifty_elements_and_counts_all() {
+    let tasks = (0..55).map(|number| {
+        anchored(
+            element(&format!("e{number:02}"), "t", "E", None),
+            &format!("crates/e{number:02}"),
+            None,
+        )
+    });
+    let hints = (0..10).map(|number| {
+        anchored(
+            related(
+                element(&format!("h{number}"), "t", "H", None),
+                &[(RelationKind::Uses, "e00", None)],
+            ),
+            &format!("docs/h{number}"),
+            Some((STAMP, Verifier::Ai)),
+        )
+    });
+    let snapshot = snapshot("Board", tasks.chain(hints).collect(), &[]);
+    let known: Vec<Vec<u8>> = (0..55)
+        .map(|number| format!("crates/e{number:02}/lib.rs").into_bytes())
+        .chain((0..10).map(|number| format!("docs/h{number}/a.md").into_bytes()))
+        .collect();
+    let known: Vec<&[u8]> = known.iter().map(Vec::as_slice).collect();
+    let review = review(&snapshot, &facts(&known, &[b"crates/e00/lib.rs"]));
+
+    let report = status_report(&snapshot, &review);
+
+    let lines: Vec<&str> = report.lines().collect();
+    assert_eq!(
+        lines.first(),
+        Some(&"Elements to review: 55 with a task, 10 with only a hint.")
+    );
+    assert_eq!(lines.len(), 1 + 50 + 1, "{report}");
+    assert!(
+        lines.get(1).is_some_and(|line| line.starts_with("e00 ")),
+        "{report}"
+    );
+    assert!(
+        lines.get(50).is_some_and(|line| line.starts_with("e49 ")),
+        "{report}"
+    );
+    assert_eq!(lines.last(), Some(&"… and 15 more"));
+}

@@ -153,6 +153,11 @@ impl Review {
         self.0.get(id).map_or(&[], Vec::as_slice)
     }
 
+    /// The elements that have flags, by ID.
+    pub fn flagged(&self) -> impl Iterator<Item = &ElementId> {
+        self.0.keys()
+    }
+
     /// The highest priority among the flags of the element `id`.
     #[must_use]
     pub fn priority(&self, id: &ElementId) -> Option<Priority> {

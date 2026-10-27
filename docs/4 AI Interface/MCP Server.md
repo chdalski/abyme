@@ -32,7 +32,7 @@ The AI describes *what* it wants, and Abyme decides *where* it goes. Instead of 
 | `checks` / `resolve_check` | fetch review flags and change requests, resolve change requests |
 | `verify` | resolve a review flag and set a new verification stamp |
 
-The server offers `apply`, `read_board`, `read_element`, `search`, and `verify` so far; the other tools come with the slices that need them. `verify` takes an element ID and stamps the element as verified by the AI against the commit HEAD names; it refuses while files under the element's anchor differ from HEAD or are untracked, so the AI asks for a commit first.
+The server offers `apply`, `read_board`, `read_element`, `search`, `status`, and `verify` so far; the other tools come with the slices that need them. `status` counts the elements to review by their highest priority and lists them as in `search`, those with a task first, at most 50; when Git cannot be asked, it answers with an error that names the reason. `verify` takes an element ID and stamps the element as verified by the AI against the commit HEAD names; it refuses while files under the element's anchor differ from HEAD or are untracked, so the AI asks for a commit first.
 
 Every writing response contains the consequences of the change, that is affected elements and new review flags (see [[Checks#Reports]]). For visual collaboration, tools like `get_selection` and `focus` would be added, see [[Ideas#Visual Collaboration with the AI]].
 

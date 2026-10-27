@@ -289,7 +289,14 @@ async fn applies_operations_and_reads_the_board_back() -> TestResult {
     names.sort_unstable();
     assert_eq!(
         names,
-        ["apply", "read_board", "read_element", "search", "verify"]
+        [
+            "apply",
+            "read_board",
+            "read_element",
+            "search",
+            "status",
+            "verify"
+        ]
     );
 
     let applied = call(&session, "apply", create_board_with_element()).await??;
@@ -1183,6 +1190,51 @@ async fn verify_refuses_in_a_repository_without_a_commit() -> TestResult {
 }
 
 #[tokio::test]
+async fn status_lists_the_elements_to_review_without_file_names() -> TestResult {
+    let directory = repository_with_marked_elements()?;
+    let config = tempfile::tempdir()?;
+    let session = start_with(
+        directory.path(),
+        &[("XDG_CONFIG_HOME", config.path().as_os_str())],
+    )
+    .await?;
+
+    let status = call(&session, "status", json!({})).await??;
+
+    assert_eq!(status.is_error, Some(false), "{status:?}");
+    assert_eq!(
+        text(&status),
+        "Elements to review: 1 with a task, 1 with only a hint.\n\
+         changed  t  N    ⚠ task\n\
+         hinted   t  N    ⚠ hint\n"
+    );
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+#[tokio::test]
+async fn status_names_why_review_flags_are_unavailable_and_takes_no_argument() -> TestResult {
+    let directory = project()?;
+    let session = start(directory.path()).await?;
+
+    let unavailable = call(&session, "status", json!({})).await??;
+    let with_argument = call(&session, "status", json!({"x": 1})).await??;
+
+    assert_eq!(unavailable.is_error, Some(true), "{unavailable:?}");
+    assert_eq!(
+        text(&unavailable),
+        "Review flags unavailable: the project lies in no Git repository"
+    );
+    assert_eq!(with_argument.is_error, Some(true), "{with_argument:?}");
+    assert!(
+        text(&with_argument).starts_with("invalid arguments: "),
+        "{with_argument:?}"
+    );
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+#[tokio::test]
 async fn read_element_asks_the_project_repository_whatever_git_variables_say() -> TestResult {
     let directory = repository_with_a_changed_anchor()?;
     let other = tempfile::tempdir()?;
@@ -1579,8 +1631,9 @@ async fn without_a_project_every_tool_asks_for_init_and_writes_nothing() -> Test
     let applied = call(&session, "apply", create_board_with_element()).await??;
     let read = call(&session, "read_board", json!({"board": "main"})).await??;
     let searched = call(&session, "search", json!({"query": "payments"})).await??;
+    let status = call(&session, "status", json!({})).await??;
 
-    for result in [applied, read, searched] {
+    for result in [applied, read, searched, status] {
         assert_eq!(result.is_error, Some(true), "{result:?}");
         assert!(text(&result).contains("abyme-mcp init"), "{result:?}");
     }
@@ -1700,6 +1753,7 @@ async fn no_tool_takes_a_path() -> TestResult {
             "read_board" => &["board", "coordinates"],
             "read_element" | "verify" => &["element"],
             "search" => &["query"],
+            "status" => &[],
             other => return Err(format!("unexpected tool {other}").into()),
         };
         assert_eq!(properties, expected, "{}", tool.name);

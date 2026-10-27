@@ -1,5 +1,5 @@
-//! The MCP tools `apply`, `read_board`, `read_element`, `search`, and
-//! `verify`, on the project that the server's working directory lies in.
+//! The MCP tools `apply`, `read_board`, `read_element`, `search`, `status`,
+//! and `verify`, on the project that the server's working directory lies in.
 //!
 //! Arguments come from an AI, so each tool takes them as a raw JSON object
 //! and reads them itself: a request that does not fit becomes a tool error
@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use abyme_core::{
     Created, Geometry, LocalKey, Operations, Project, Review, Snapshot, Unavailable,
-    element_detail, element_list, outline,
+    element_detail, element_list, outline, status_report,
 };
 use abyme_index::{Index, MAX_QUERY_CHARS, spec};
 use abyme_model::{BoardId, ElementId, Verifier, shown};
@@ -36,8 +36,8 @@ mod tests;
 /// error shows.
 const SHOWN_LIMIT: usize = 300;
 
-/// The largest reply `read_board`, `read_element`, or `search` returns, in
-/// bytes. A larger one is an error rather than cut, so the AI never acts on
+/// The largest reply `read_board`, `read_element`, `search`, or `status`
+/// returns, in bytes. A larger one is an error rather than cut, so the AI never acts on
 /// part of it.
 const MAX_REPLY_BYTES: usize = 1024 * 1024;
 
@@ -53,6 +53,7 @@ const NO_MATCH: &str = "No element matches the query.";
 
 /// What the server tells the AI about itself when a session starts.
 const INSTRUCTIONS: &str = "Abyme keeps project knowledge on boards stored in this repository. \
+    Call status at the start of a session to see which elements may no longer match the code. \
     Call search with a query to find elements by the words they contain or by what they are \
     about, read_board with a board ID to read the board as an outline, read_element with an \
     element ID to read one element in detail with its relations and description, and apply \
@@ -98,6 +99,11 @@ struct VerifyArguments {
     /// The ID of the element you checked against the code.
     element: ElementId,
 }
+
+/// The arguments of `status`: none.
+#[derive(Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct StatusArguments {}
 
 /// The arguments of `search`.
 #[derive(Deserialize, schemars::JsonSchema)]
@@ -321,6 +327,32 @@ impl AbymeServer {
                     element_list(&snapshot, &found, review.as_ref().ok())
                 ),
             )
+        })
+        .await
+    }
+
+    #[tool(
+        description = "Returns the open review flags of the Abyme project: a line counting the elements \
+            to review by their highest priority, then one line per element as in search, marked ⚠ task or \
+            ⚠ hint, those with a task first, at most 50 followed by how many more there are; or No open \
+            review flags. read_element names each element's flags. When Git cannot be asked, it answers \
+            with an error that starts with Review flags unavailable: and names the reason.",
+        input_schema = schema_for_type::<StatusArguments>()
+    )]
+    async fn status(
+        &self,
+        Parameters(arguments): Parameters<JsonObject>,
+    ) -> Result<CallToolResult, ErrorData> {
+        if let Err(result) = parsed::<StatusArguments>(arguments) {
+            return Ok(result);
+        }
+        let start = self.start.clone();
+        on_core(move || {
+            let (project, snapshot) = read_project(&start)?;
+            let review = project
+                .review(&snapshot)
+                .map_err(|reason| format!("{UNAVAILABLE}{reason}"))?;
+            bounded("the status", status_report(&snapshot, &review))
         })
         .await
     }
