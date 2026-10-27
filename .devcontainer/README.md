@@ -54,7 +54,8 @@ Settings:
 |-----|---------|---------|
 | `CLAUDE_AUTH` | `proxy` | Auth mode (see [Authentication Modes](#authentication-modes)) |
 | `DEVCONTAINER_CPUS` | no limit | CPU cap (`.env` only, see [Resource limits](#resource-limits)) |
-| `DEVCONTAINER_MEMORY` | no limit | Memory cap (`.env` only) |
+| `DEVCONTAINER_MEMORY` | no limit | Memory cap, swap included (`.env` only) |
+| `CARGO_BUILD_JOBS` | one per CPU | Cargo's parallel jobs; set it with a memory cap (see [Resource limits](#resource-limits)) |
 
 Example `.env`:
 
@@ -62,6 +63,7 @@ Example `.env`:
 CLAUDE_AUTH=oauth
 DEVCONTAINER_CPUS=4
 DEVCONTAINER_MEMORY=8g
+CARGO_BUILD_JOBS=3
 ```
 
 ### Resource limits
@@ -71,6 +73,13 @@ DEVCONTAINER_MEMORY=8g
 substitutes them into `docker-compose.yml` from that file, not from
 `.env.defaults`. For a team-wide default, change the fallback in
 `docker-compose.yml` (e.g. `${DEVCONTAINER_CPUS:-4}`).
+
+`DEVCONTAINER_MEMORY` caps memory and swap together, so the container has no
+swap to fall back on. Cargo starts one job per CPU by default, and linking
+several of this workspace's test binaries at once can exceed the cap, which
+restarts the container. Set `CARGO_BUILD_JOBS` in `.devcontainer/.env`
+together with the cap: with `DEVCONTAINER_MEMORY=8g`, `CARGO_BUILD_JOBS=3`
+keeps this workspace's builds and tests within it.
 
 ## Authentication Modes
 

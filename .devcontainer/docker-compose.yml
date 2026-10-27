@@ -14,9 +14,10 @@ services:
       # updates.
       pull: true
     # Personal limits, set in .devcontainer/.env, e.g. DEVCONTAINER_CPUS=4 and
-    # DEVCONTAINER_MEMORY=8g; 0 means no limit. Compose substitutes ${...}
-    # from .devcontainer/.env only — the env_file entries below do not feed
-    # substitution, so a team default belongs in the fallback here.
+    # DEVCONTAINER_MEMORY=8g; 0 means no limit. The memory cap includes swap.
+    # Compose substitutes ${...} from .devcontainer/.env only — the env_file
+    # entries below do not feed substitution, so a team default belongs in
+    # the fallback here.
     cpus: ${DEVCONTAINER_CPUS:-0}
     mem_limit: ${DEVCONTAINER_MEMORY:-0}
     memswap_limit: ${DEVCONTAINER_MEMORY:-0}

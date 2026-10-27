@@ -21,7 +21,7 @@ once instead of passing `-j` to every run.
 
 ## Steps
 
-- [ ] Document the cargo job limit for a devcontainer with a memory limit
+- [x] Document the cargo job limit for a devcontainer with a memory limit
 
 ## Tasks
 
@@ -31,7 +31,7 @@ Keep cargo within the container's memory cap, which allows no swap.
 
 Review path: Reviewer-only
 
-- [ ] A developer who sets `DEVCONTAINER_MEMORY` learns from the
+- [x] A developer who sets `DEVCONTAINER_MEMORY` learns from the
       devcontainer README that the cap includes swap and that cargo then
       needs `CARGO_BUILD_JOBS` in `.devcontainer/.env`. The README's
       settings list and example `.env` show `CARGO_BUILD_JOBS=3` next to
@@ -39,7 +39,7 @@ Review path: Reviewer-only
       and tests within 8 GiB, and give no rule for other caps. The comment
       on the limits in `docker-compose.yml` says the memory cap includes
       swap.
-- [ ] The root `CLAUDE.md` Conventions tell an agent that in a container
+- [x] The root `CLAUDE.md` Conventions tell an agent that in a container
       with a memory limit, cargo takes its job limit from `CARGO_BUILD_JOBS`
       in `.devcontainer/.env`, and that an agent which finds it unset passes
       `-j 3` to its cargo runs and asks the user to set it.
