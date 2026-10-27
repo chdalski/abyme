@@ -7,11 +7,11 @@ use std::fs;
 use std::os::unix::ffi::OsStrExt as _;
 use std::os::unix::fs::{PermissionsExt as _, symlink};
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::time::{Duration, SystemTime};
 
 use abyme_core::{Flag, Priority, Project, Review, Unavailable};
 use abyme_model::{ElementId, RelationKind, Verifier};
+use abyme_test_support::{commit_all, git};
 use rstest::rstest;
 use tempfile::TempDir;
 
@@ -19,33 +19,6 @@ type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 
 /// A stamp no repository of these tests holds.
 const UNKNOWN: &str = "0123456789abcdef0123456789abcdef01234567";
-
-/// Runs `git` in `directory` without the user's or the system's
-/// configuration, and returns what it prints.
-fn git(directory: &Path, arguments: &[&str]) -> TestResult<String> {
-    let output = Command::new("git")
-        .current_dir(directory)
-        .args([
-            "-c",
-            "user.name=Abyme Test",
-            "-c",
-            "user.email=test@example.invalid",
-            "-c",
-            "init.defaultBranch=main",
-            "-c",
-            "commit.gpgSign=false",
-            "-c",
-            "tag.gpgSign=false",
-        ])
-        .args(arguments)
-        .env("GIT_CONFIG_GLOBAL", "/dev/null")
-        .env("GIT_CONFIG_NOSYSTEM", "1")
-        .output()?;
-    if !output.status.success() {
-        return Err(format!("git {arguments:?} failed: {output:?}").into());
-    }
-    Ok(String::from_utf8(output.stdout)?.trim_end().to_owned())
-}
 
 /// An Abyme project at the top of a new Git repository, or in the
 /// subdirectory `project` of it.
@@ -89,12 +62,7 @@ impl Repository {
 
     /// Commits everything and returns the new HEAD.
     fn commit(&self) -> TestResult<String> {
-        git(self.top(), &["add", "-A"])?;
-        git(
-            self.top(),
-            &["commit", "-q", "--allow-empty", "-m", "change"],
-        )?;
-        git(self.top(), &["rev-parse", "HEAD"])
+        commit_all(self.top())
     }
 
     /// Writes the element `x` with the given anchor and stamp.
@@ -428,8 +396,7 @@ fn embedded_bare_repository(directory: &Path, marker: &Path, project: &Path) -> 
     Project::init(&project)?;
     fs::write(directory.join(".gitattributes"), "* filter=x\n")?;
     fs::write(directory.join("file.txt"), "content\n")?;
-    git(directory, &["add", ".gitattributes", "file.txt", "."])?;
-    git(directory, &["commit", "-q", "-m", "files"])?;
+    commit_all(directory)?;
     let filter = format!("sh -c 'touch {}; cat'", marker.display());
     git(directory, &["config", "filter.x.clean", &filter])?;
     fs::File::options()
@@ -677,16 +644,7 @@ fn library(directory: &Path) -> TestResult<String> {
     git(directory, &["init", "-q"])?;
     fs::write(directory.join("a.rs"), "fn a() {}\n")?;
     fs::write(directory.join("b.rs"), "fn b() {}\n")?;
-    git(directory, &["add", "a.rs", "b.rs"])?;
-    git(directory, &["commit", "-q", "-m", "library"])?;
-    git(directory, &["rev-parse", "HEAD"])
-}
-
-/// Commits everything in the repository at `directory`.
-fn commit_in(directory: &Path) -> TestResult {
-    git(directory, &["add", "-A"])?;
-    git(directory, &["commit", "-q", "-m", "change"])?;
-    Ok(())
+    commit_all(directory)
 }
 
 impl Repository {
@@ -716,11 +674,7 @@ impl Repository {
             }
         };
         if !matches!(nesting, Nesting::Untracked) {
-            git(
-                self.top(),
-                &["-c", "advice.addEmbeddedRepo=false", "add", "-A"],
-            )?;
-            git(self.top(), &["commit", "-q", "-m", "nest"])?;
+            commit_all(self.top())?;
         }
         Ok(self.top().join(path))
     }
@@ -742,7 +696,7 @@ fn flags_a_change_inside_a_nested_repository_measured_there(
     fs::write(nested.join("a.rs"), "fn a() { b() }\n")?;
     fs::write(nested.join("new.rs"), "fn n() {}\n")?;
     let in_the_working_tree = repository.flags()?;
-    commit_in(&nested)?;
+    commit_all(&nested)?;
 
     let committed = repository.flags()?;
 
@@ -785,7 +739,7 @@ fn judges_an_anchor_that_contains_a_nested_repository_by_the_nested_root(
     fs::write(nested.join("a.rs"), "fn a() { b() }\n")?;
     fs::write(nested.join("new.rs"), "fn n() {}\n")?;
     let with_dirty_files = repository.flags()?;
-    commit_in(&nested)?;
+    commit_all(&nested)?;
 
     let with_a_moved_root = repository.flags()?;
 
@@ -918,7 +872,7 @@ fn passes_flags_on_within_a_nested_repository_and_across_repositories() -> TestR
     repository.node("inside", Some("vendor/lib/b.rs"), Some(&stamp), &["t"])?;
     repository.node("outside", None, Some(&outer), &["t"])?;
     fs::write(nested.join("a.rs"), "fn a() { b() }\n")?;
-    commit_in(&nested)?;
+    commit_all(&nested)?;
 
     let review = repository.review()??;
 
@@ -991,7 +945,7 @@ enum Elsewhere {
 fn outside(directory: &Path) -> TestResult {
     library(directory)?;
     fs::write(directory.join("outside-secret.rs"), "fn s() {}\n")?;
-    commit_in(directory)?;
+    commit_all(directory)?;
     fs::write(directory.join("outside-untracked.rs"), "fn u() {}\n")?;
     Ok(())
 }
@@ -1155,7 +1109,7 @@ fn make_hostile(nested: &Path, case: Hostile, marker: &Path, scripts: &Path) -> 
         fs::write(nested.join(".git/info/attributes"), &attributes)?;
     } else {
         fs::write(nested.join(".gitattributes"), &attributes)?;
-        commit_in(nested)?;
+        commit_all(nested)?;
     }
     let config = |arguments: &[&str]| git(nested, &[&["config"], arguments].concat()).map(drop);
     match case {
@@ -1234,7 +1188,7 @@ fn partial_clone(
     let source = sources.join("source");
     let first = library(&source)?;
     fs::write(source.join("a.rs"), "fn a() { b() }\n")?;
-    commit_in(&source)?;
+    commit_all(&source)?;
     git(&source, &["config", "uploadpack.allowFilter", "true"])?;
     git(
         repository.top(),
@@ -1408,8 +1362,7 @@ fn verify_stamps_the_head_of_the_nested_repository_and_the_review_reads_it_there
     let repository = Repository::new()?;
     let nested = repository.nest(&sources.path().join("lib"), "vendor/lib", nesting)?;
     fs::write(nested.join("c.rs"), "fn c() {}\n")?;
-    commit_in(&nested)?;
-    let head = git(&nested, &["rev-parse", "HEAD"])?;
+    let head = commit_all(&nested)?;
     repository.element(Some("vendor/lib"), None)?;
 
     let verified = repository.verify("x")?;
@@ -1601,9 +1554,11 @@ fn verify_of_an_anchor_that_contains_a_nested_repository_refuses_only_a_moved_ro
     fs::write(nested.join("a.rs"), "fn a() { b() }\n")?;
     match case {
         OuterCase::DirtySubmodule | OuterCase::DirtyEmbeddedClone => {}
-        OuterCase::MovedSubmodule => commit_in(&nested)?,
+        OuterCase::MovedSubmodule => {
+            commit_all(&nested)?;
+        }
         OuterCase::StagedEmbeddedClone => {
-            commit_in(&nested)?;
+            commit_all(&nested)?;
             git(repository.top(), &["add", "vendor/lib"])?;
         }
     }
@@ -1681,11 +1636,10 @@ fn ignored_submodule(outer: &Path, source: &Path, path: &str) -> TestResult<Stri
             "all",
         ],
     )?;
-    commit_in(outer)?;
-    let added = git(outer, &["rev-parse", "HEAD"])?;
+    let added = commit_all(outer)?;
     let submodule = outer.join(path);
     fs::write(submodule.join("a.rs"), "fn a() { b() }\n")?;
-    commit_in(&submodule)?;
+    commit_all(&submodule)?;
     git(outer, &["add", "--force", path])?;
     let staged = git(
         outer,

@@ -16,6 +16,7 @@ use std::process::{Command, Output, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use abyme_test_support::{commit_all, git};
 use rmcp::model::{CallToolRequestParams, CallToolResult, ErrorCode, JsonObject};
 use rmcp::service::RunningService;
 use rmcp::{RoleClient, ServiceError, ServiceExt as _};
@@ -786,31 +787,6 @@ async fn apply_removes_the_stamp_when_the_content_of_an_element_changes() -> Tes
     Ok(())
 }
 
-/// Runs `git` in `directory` without the user's or the system's
-/// configuration, and returns what it prints.
-fn git(directory: &Path, arguments: &[&str]) -> TestResult<String> {
-    let output = Command::new("git")
-        .current_dir(directory)
-        .args([
-            "-c",
-            "user.name=Abyme Test",
-            "-c",
-            "user.email=test@example.invalid",
-            "-c",
-            "init.defaultBranch=main",
-            "-c",
-            "commit.gpgSign=false",
-        ])
-        .args(arguments)
-        .env("GIT_CONFIG_GLOBAL", "/dev/null")
-        .env("GIT_CONFIG_NOSYSTEM", "1")
-        .output()?;
-    if !output.status.success() {
-        return Err(format!("git {arguments:?} failed: {output:?}").into());
-    }
-    Ok(String::from_utf8(output.stdout)?.trim_end().to_owned())
-}
-
 /// A project at the top of a Git repository whose element `x` is anchored
 /// on `crates/x` and stamped with the commit that added `crates/x/lib.rs`,
 /// which has changed since.
@@ -819,9 +795,7 @@ fn repository_with_a_changed_anchor() -> TestResult<tempfile::TempDir> {
     git(directory.path(), &["init", "-q"])?;
     fs::create_dir_all(directory.path().join("crates/x"))?;
     fs::write(directory.path().join("crates/x/lib.rs"), "fn a() {}\n")?;
-    git(directory.path(), &["add", "-A"])?;
-    git(directory.path(), &["commit", "-q", "-m", "add x"])?;
-    let stamp = git(directory.path(), &["rev-parse", "HEAD"])?;
+    let stamp = commit_all(directory.path())?;
     fs::create_dir_all(directory.path().join("abyme/elements"))?;
     fs::write(
         directory.path().join("abyme/elements/x.md"),
@@ -895,9 +869,7 @@ async fn read_element_shows_each_kind_of_review_flag() -> TestResult {
         fs::create_dir_all(root.join(file).parent().ok_or("no parent")?)?;
         fs::write(root.join(file), "fn a() {}\n")?;
     }
-    git(root, &["add", "-A"])?;
-    git(root, &["commit", "-q", "-m", "add"])?;
-    let stamp = git(root, &["rev-parse", "HEAD"])?;
+    let stamp = commit_all(root)?;
     let unknown = "0123456789abcdef0123456789abcdef01234567";
     write_element(root, "committed", Some("crates/c"), Some(&stamp))?;
     write_element(root, "untracked", Some("crates/u"), Some(&stamp))?;
@@ -906,8 +878,7 @@ async fn read_element_shows_each_kind_of_review_flag() -> TestResult {
     write_element(root, "unstamped", Some("crates/c"), None)?;
     write_element(root, "native", None, None)?;
     fs::write(root.join("crates/c/lib.rs"), "fn a() { b() }\n")?;
-    git(root, &["add", "-A"])?;
-    git(root, &["commit", "-q", "-m", "change"])?;
+    commit_all(root)?;
     fs::write(root.join("crates/u/new.rs"), "fn n() {}\n")?;
     let config = tempfile::tempdir()?;
     let session = start_with(root, &[("XDG_CONFIG_HOME", config.path().as_os_str())]).await?;
@@ -953,9 +924,7 @@ async fn read_element_shows_flags_passed_on_along_relations() -> TestResult {
     git(root, &["init", "-q"])?;
     fs::create_dir_all(root.join("crates/db"))?;
     fs::write(root.join("crates/db/schema.sql"), "create table a;\n")?;
-    git(root, &["add", "-A"])?;
-    git(root, &["commit", "-q", "-m", "add"])?;
-    let stamp = git(root, &["rev-parse", "HEAD"])?;
+    let stamp = commit_all(root)?;
     write_element(root, "orders-db", Some("crates/db"), Some(&stamp))?;
     for (id, kind) in [("pay", "depends_on"), ("note", "uses")] {
         fs::write(
@@ -1012,9 +981,7 @@ fn repository_with_marked_elements() -> TestResult<tempfile::TempDir> {
         fs::create_dir_all(root.join(file).parent().ok_or("no parent")?)?;
         fs::write(root.join(file), "a\n")?;
     }
-    git(root, &["add", "-A"])?;
-    git(root, &["commit", "-q", "-m", "add"])?;
-    let stamp = git(root, &["rev-parse", "HEAD"])?;
+    let stamp = commit_all(root)?;
     write_element(root, "changed", Some("crates/c"), Some(&stamp))?;
     write_element(root, "clean", Some("crates/k"), Some(&stamp))?;
     write_element(root, "calm", None, None)?;
@@ -1084,9 +1051,7 @@ async fn read_board_marks_the_elements_to_review() -> TestResult {
 #[tokio::test]
 async fn verify_stamps_a_checked_element_and_clears_its_flag() -> TestResult {
     let directory = repository_with_a_changed_anchor()?;
-    git(directory.path(), &["add", "-A"])?;
-    git(directory.path(), &["commit", "-q", "-m", "change x"])?;
-    let head = git(directory.path(), &["rev-parse", "HEAD"])?;
+    let head = commit_all(directory.path())?;
     let config = tempfile::tempdir()?;
     let session = start_with(
         directory.path(),

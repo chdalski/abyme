@@ -1,5 +1,5 @@
 **Repository:** root
-**Status:** NotStarted
+**Status:** InProgress
 **Created:** 2026-10-27
 
 ## Goal
@@ -23,7 +23,7 @@ tests, without changing what any test checks.
 
 ## Steps
 
-- [ ] Shared Git helpers in a test-support crate
+- [x] Shared Git helpers in a test-support crate
 - [ ] Local helpers for the submodule setup of the core review tests
 
 ## Tasks
@@ -40,25 +40,27 @@ the two `gpgSign` options, which only guard against signing.
 
 Review path: Reviewer-only
 
-- [ ] A crate `crates/abyme-test-support`, not published, under the
+- [x] A crate `crates/abyme-test-support`, not published, under the
       workspace's license and lints and with no dependency, provides
       running Git in a directory with the options all three copies set
       today taken together, without global or system configuration, and
       committing everything in a repository, which answers with the new
       HEAD.
-- [ ] `cargo test --workspace` runs no test binary and no doc test of the
+- [x] `cargo test --workspace` runs no test binary and no doc test of the
       new crate.
-- [ ] abyme-core and abyme-mcp take the crate as a dev-dependency, no copy
+- [x] abyme-core and abyme-mcp take the crate as a dev-dependency, no copy
       of the Git helper remains in their tests, and wherever their tests
       add everything in a repository and commit it, they do so through
       the shared helper.
-- [ ] The sorted output of `cargo test --workspace -- --list` is the same
+- [x] The sorted output of `cargo test --workspace -- --list` is the same
       before and after the task, and no assertion and no expected text in
       the tests changes.
-- [ ] The Components table of the root `CLAUDE.md` names the crate and
+- [x] The Components table of the root `CLAUDE.md` names the crate and
       what it is for.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
-      `cargo fmt --all --check`, and `cargo deny --locked check` pass.
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
+      and `cargo fmt --all --check` pass, and `cargo deny --locked check`
+      reports nothing but the advisories for `zstd` 0.13.3 and
+      `zstd-safe` 7.3.0.
 
 ### Task 2: Local helpers for the submodule setup of the core review tests
 
@@ -105,6 +107,11 @@ Review path: Reviewer-only
   no test reads.
 - **`protocol.file.allow=always` stays at the calls that add submodules:**
   only those need it.
+- **`cargo deny` may still report the advisories for `zstd` 0.13.3 and
+  `zstd-safe` 7.3.0** (RUSTSEC-2026-0391 and 0395 to 0406): `lancedb`
+  pulls in these crates, the advisories predate this plan, and they need
+  a dependency decision of their own, handled as a separate request right
+  after this plan.
 - **Only the root `CLAUDE.md` names the crate:** the Crates table of the
   architecture lists the crates the architecture consists of, and a crate
   for tests is none of them.

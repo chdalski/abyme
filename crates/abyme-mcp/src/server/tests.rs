@@ -3,11 +3,11 @@
 
 use std::error::Error;
 use std::fs;
-use std::process::Command;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use abyme_index::{EmbedError, Embedder, ModelSpec, UserCache};
+use abyme_test_support::{commit_all, git};
 use rmcp::handler::server::common::schema_for_input;
 use rmcp::model::CallToolRequestParams;
 use rmcp::service::RunningService;
@@ -345,29 +345,6 @@ async fn preparing_at_start_and_then_searching_loads_the_model_once() -> TestRes
     Ok(())
 }
 
-/// Runs `git` in `directory` without the user's or the system's
-/// configuration, and returns what it prints.
-fn git(directory: &Path, arguments: &[&str]) -> TestResult<String> {
-    let output = Command::new("git")
-        .current_dir(directory)
-        .args([
-            "-c",
-            "user.name=Abyme Test",
-            "-c",
-            "user.email=test@example.invalid",
-            "-c",
-            "commit.gpgSign=false",
-        ])
-        .args(arguments)
-        .env("GIT_CONFIG_GLOBAL", "/dev/null")
-        .env("GIT_CONFIG_NOSYSTEM", "1")
-        .output()?;
-    if !output.status.success() {
-        return Err(format!("git {arguments:?} failed: {output:?}").into());
-    }
-    Ok(String::from_utf8(output.stdout)?.trim_end().to_owned())
-}
-
 #[tokio::test(flavor = "multi_thread")]
 async fn search_marks_its_lines_and_names_no_file() -> TestResult {
     let setup = Setup::new(true, 0, "")?;
@@ -375,9 +352,7 @@ async fn search_marks_its_lines_and_names_no_file() -> TestResult {
     git(root, &["init", "-q"])?;
     fs::create_dir_all(root.join("crates/c"))?;
     fs::write(root.join("crates/c/leak-canary.txt"), "a\n")?;
-    git(root, &["add", "-A"])?;
-    git(root, &["commit", "-q", "-m", "add"])?;
-    let stamp = git(root, &["rev-parse", "HEAD"])?;
+    let stamp = commit_all(root)?;
     fs::create_dir_all(root.join("abyme/elements"))?;
     fs::write(
         root.join("abyme/elements/changed.md"),

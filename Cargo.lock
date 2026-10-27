@@ -22,6 +22,7 @@ name = "abyme-core"
 version = "0.1.0"
 dependencies = [
  "abyme-model",
+ "abyme-test-support",
  "proptest",
  "rstest",
  "rustix",
@@ -59,6 +60,7 @@ dependencies = [
  "abyme-core",
  "abyme-index",
  "abyme-model",
+ "abyme-test-support",
  "rmcp",
  "schemars 1.2.3",
  "serde",
@@ -80,6 +82,10 @@ dependencies = [
  "thiserror 2.0.21",
  "ts-rs",
 ]
+
+[[package]]
+name = "abyme-test-support"
+version = "0.1.0"
 
 [[package]]
 name = "adler2"

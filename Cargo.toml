@@ -13,6 +13,7 @@ publish = false
 abyme-core = { path = "crates/abyme-core" }
 abyme-index = { path = "crates/abyme-index" }
 abyme-model = { path = "crates/abyme-model" }
+abyme-test-support = { path = "crates/abyme-test-support" }
 # Never `hf-hub*`, `online`, `qwen3`, or `nomic-v2-moe`: they pull in hf-hub, whose download
 # follows the latest revision unchecked and reads HF_TOKEN and HF_HOME; deny.toml bans them
 # and the crate hf-hub. ONNX Runtime comes prebuilt from ort's download, checked against the

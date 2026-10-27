@@ -1,0 +1,16 @@
+[package]
+name = "abyme-test-support"
+description = "Helpers for tests that run Git in temporary repositories"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# Only other crates' tests use it; it has no tests of its own.
+[lib]
+test = false
+doctest = false
+
+[lints]
+workspace = true
