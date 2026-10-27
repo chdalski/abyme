@@ -179,3 +179,205 @@ fn rates_every_own_flag_a_task() {
     assert_eq!(review.priority(&element_id("x")), Some(Priority::Task));
     assert_eq!(review.priority(&element_id("y")), None);
 }
+
+/// The element `id` with the given anchor, stamp, and relations, each a
+/// kind and a target.
+fn node(
+    id: &str,
+    anchor: Option<&str>,
+    stamp: Option<&str>,
+    relations: &[(&str, &str)],
+) -> Element {
+    let anchor = anchor.map_or(String::new(), |anchor| format!("anchor: \"{anchor}\"\n"));
+    let stamp = stamp.map_or(String::new(), |stamp| {
+        format!("verified: \"{stamp}\"\nverified_by: ai\n")
+    });
+    let relations = if relations.is_empty() {
+        String::new()
+    } else {
+        let lines: Vec<String> = relations
+            .iter()
+            .map(|(kind, to)| format!("  - {{kind: {kind}, to: {to}, label: \"secret label\"}}\n"))
+            .collect();
+        format!("relations:\n{}", lines.concat())
+    };
+    Element::from_markdown(
+        &element_id(id),
+        &format!("---\nid: {id}\ntype: t\nname: N\n{anchor}{stamp}{relations}---\n"),
+    )
+    .unwrap()
+}
+
+fn snapshot_of(elements: Vec<Element>) -> Snapshot {
+    Snapshot {
+        elements: elements
+            .into_iter()
+            .map(|element| (element.id().clone(), element))
+            .collect(),
+        boards: BTreeMap::new(),
+    }
+}
+
+fn upstream(kind: RelationKind, target: &str, priority: Priority) -> Flag {
+    Flag::Upstream {
+        kind,
+        target: element_id(target),
+        priority,
+    }
+}
+
+/// Facts in which `STAMP` is known and the index changed `crates/t/lib.rs`
+/// since; Git knows the files under every anchor these tests use.
+fn target_changed() -> GitFacts {
+    GitFacts {
+        known: paths(&["crates/t/lib.rs", "crates/u/lib.rs", "crates/v/lib.rs"]),
+        uncommitted: BTreeSet::new(),
+        since: BTreeMap::from([(commit(STAMP), Since::Changed(paths(&["crates/t/lib.rs"])))]),
+    }
+}
+
+#[rstest]
+#[case::depends_on("depends_on", Some(Priority::Task))]
+#[case::describes("describes", Some(Priority::Task))]
+#[case::uses("uses", Some(Priority::Hint))]
+#[case::concerns("concerns", Some(Priority::Hint))]
+#[case::see_also("see_also", None)]
+fn passes_on_what_the_relation_kind_says(#[case] kind: &str, #[case] priority: Option<Priority>) {
+    let snapshot = snapshot_of(vec![
+        node("s", None, Some(STAMP), &[(kind, "t")]),
+        node("t", Some("crates/t"), Some(STAMP), &[]),
+    ]);
+
+    let review = review(&snapshot, &target_changed());
+
+    let expected: Vec<Flag> = priority
+        .into_iter()
+        .map(|priority| upstream(RelationKind::from_name(kind).unwrap(), "t", priority))
+        .collect();
+    assert_eq!(review.flags(&element_id("s")), expected.as_slice());
+    assert_eq!(review.priority(&element_id("s")), priority);
+}
+
+#[rstest]
+#[case::source_without_a_stamp(None, "t")]
+#[case::source_with_an_unknown_stamp(Some(OTHER), "t")]
+#[case::target_without_an_anchor(Some(STAMP), "native")]
+#[case::target_without_a_file(Some(STAMP), "gone")]
+#[case::target_whose_anchor_did_not_change(Some(STAMP), "u")]
+fn passes_nothing_on_without_a_stamp_to_measure_or_a_changed_target_anchor(
+    #[case] stamp: Option<&str>,
+    #[case] target: &str,
+) {
+    let snapshot = snapshot_of(vec![
+        node("s", None, stamp, &[("depends_on", target)]),
+        node("t", Some("crates/t"), Some(STAMP), &[]),
+        node("u", Some("crates/u"), Some(STAMP), &[]),
+        node("native", None, Some(STAMP), &[]),
+    ]);
+    let mut facts = target_changed();
+    facts.since.insert(commit(OTHER), Since::Unknown);
+
+    let review = review(&snapshot, &facts);
+
+    let upstream = review
+        .flags(&element_id("s"))
+        .iter()
+        .filter(|flag| matches!(flag, Flag::Upstream { .. }))
+        .count();
+    assert_eq!(upstream, 0);
+}
+
+#[test]
+fn passes_nothing_on_from_a_stamp_the_facts_do_not_name() {
+    let snapshot = snapshot_of(vec![
+        node("s", None, Some(OTHER), &[("depends_on", "t")]),
+        node("t", Some("crates/t"), Some(STAMP), &[]),
+    ]);
+
+    let review = review(&snapshot, &target_changed());
+
+    assert_eq!(review.flags(&element_id("s")), [Flag::UnknownStamp]);
+}
+
+#[test]
+fn passes_on_a_change_in_the_working_tree() {
+    let snapshot = snapshot_of(vec![
+        node("s", None, Some(STAMP), &[("uses", "u")]),
+        node("u", Some("crates/u"), Some(STAMP), &[]),
+    ]);
+    let mut facts = target_changed();
+    facts.uncommitted = paths(&["crates/u/new.rs"]);
+
+    let review = review(&snapshot, &facts);
+
+    assert_eq!(
+        review.flags(&element_id("s")),
+        [upstream(RelationKind::Uses, "u", Priority::Hint)]
+    );
+}
+
+#[test]
+fn passes_flags_on_one_hop_only() {
+    let snapshot = snapshot_of(vec![
+        node("a", None, Some(STAMP), &[("depends_on", "b")]),
+        node("b", Some("crates/u"), Some(STAMP), &[("depends_on", "c")]),
+        node("c", Some("crates/t"), Some(STAMP), &[]),
+    ]);
+
+    let review = review(&snapshot, &target_changed());
+
+    assert_eq!(review.flags(&element_id("a")), []);
+    assert_eq!(
+        review.flags(&element_id("b")),
+        [upstream(RelationKind::DependsOn, "c", Priority::Task)]
+    );
+}
+
+#[test]
+fn passes_flags_both_ways_in_a_cycle() {
+    let snapshot = snapshot_of(vec![
+        node("a", Some("crates/t"), Some(STAMP), &[("depends_on", "b")]),
+        node("b", Some("crates/t"), Some(STAMP), &[("depends_on", "a")]),
+    ]);
+
+    let review = review(&snapshot, &target_changed());
+
+    assert_eq!(
+        review.flags(&element_id("a")),
+        [
+            changed(&["crates/t/lib.rs"]),
+            upstream(RelationKind::DependsOn, "b", Priority::Task)
+        ]
+    );
+    assert_eq!(
+        review.flags(&element_id("b")),
+        [
+            changed(&["crates/t/lib.rs"]),
+            upstream(RelationKind::DependsOn, "a", Priority::Task)
+        ]
+    );
+}
+
+#[test]
+fn passes_on_one_flag_per_relation_and_rates_the_highest() {
+    let snapshot = snapshot_of(vec![
+        node(
+            "s",
+            None,
+            Some(STAMP),
+            &[("uses", "t"), ("depends_on", "t")],
+        ),
+        node("t", Some("crates/t"), Some(STAMP), &[]),
+    ]);
+
+    let review = review(&snapshot, &target_changed());
+
+    assert_eq!(
+        review.flags(&element_id("s")),
+        [
+            upstream(RelationKind::DependsOn, "t", Priority::Task),
+            upstream(RelationKind::Uses, "t", Priority::Hint)
+        ]
+    );
+    assert_eq!(review.priority(&element_id("s")), Some(Priority::Task));
+}

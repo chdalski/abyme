@@ -932,6 +932,59 @@ async fn read_element_shows_each_kind_of_review_flag() -> TestResult {
 }
 
 #[tokio::test]
+async fn read_element_shows_flags_passed_on_along_relations() -> TestResult {
+    let directory = project()?;
+    let root = directory.path();
+    git(root, &["init", "-q"])?;
+    fs::create_dir_all(root.join("crates/db"))?;
+    fs::write(root.join("crates/db/schema.sql"), "create table a;\n")?;
+    git(root, &["add", "-A"])?;
+    git(root, &["commit", "-q", "-m", "add"])?;
+    let stamp = git(root, &["rev-parse", "HEAD"])?;
+    write_element(root, "orders-db", Some("crates/db"), Some(&stamp))?;
+    for (id, kind) in [("pay", "depends_on"), ("note", "uses")] {
+        fs::write(
+            root.join(format!("abyme/elements/{id}.md")),
+            format!(
+                "---\nid: {id}\ntype: t\nname: N\nverified: \"{stamp}\"\nverified_by: ai\n\
+                 relations:\n  - {{kind: {kind}, to: orders-db, label: \"secret label\"}}\n---\n"
+            ),
+        )?;
+    }
+    fs::write(root.join("crates/db/schema.sql"), "create table b;\n")?;
+    let config = tempfile::tempdir()?;
+    let session = start_with(root, &[("XDG_CONFIG_HOME", config.path().as_os_str())]).await?;
+    let cases = [
+        (
+            "pay",
+            "Review: task\n  depends_on orders-db: files under its anchor changed since this element's stamp\n",
+        ),
+        (
+            "note",
+            "Review: hint\n  uses orders-db: files under its anchor changed since this element's stamp\n",
+        ),
+    ];
+
+    for (id, review) in cases {
+        let read = call(&session, "read_element", json!({"element": id})).await??;
+
+        let reply = text(&read);
+        assert!(
+            reply.contains(&format!("\n{review}Boards: none\n")),
+            "{id}: {reply}"
+        );
+        let line = reply
+            .lines()
+            .find(|line| line.contains("orders-db: files"))
+            .ok_or("no passed-on flag")?;
+        assert!(!line.contains("schema.sql"), "{line}");
+        assert!(!line.contains("secret"), "{line}");
+    }
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+#[tokio::test]
 async fn read_element_asks_the_project_repository_whatever_git_variables_say() -> TestResult {
     let directory = repository_with_a_changed_anchor()?;
     let other = tempfile::tempdir()?;

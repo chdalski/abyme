@@ -12,12 +12,12 @@ Relations are typed. Only certain types trigger [[Checks]]; otherwise every chan
 | Type | Name in files and requests | Meaning | Triggers a check |
 |---|---|---|---|
 | contains | `contains` | hierarchy, e.g. system → container | yes |
-| depends on | `depends_on` | A works only with B | yes |
-| uses | `uses` | runtime relation, e.g. a call | yes |
-| describes | `describes` | a document describes an element, e.g. in the [[First Slice#MVP\|docs map]] | yes |
+| depends on | `depends_on` | A works only with B | yes, a task |
+| uses | `uses` | runtime relation, e.g. a call | yes, a hint |
+| describes | `describes` | a document describes an element, e.g. in the [[First Slice#MVP\|docs map]] | yes, a task |
 | corresponds to | `corresponds_to` | target element ↔ current element | yes, for the [[Current and Target#Diff\|diff]] |
 | replaces | `replaces` | a new element supersedes an old one | yes |
-| concerns | `concerns` | a note, idea, or question refers to an element | yes, with low priority |
+| concerns | `concerns` | a note, idea, or question refers to an element | yes, a hint |
 | see also | `see_also` | loose reference | no |
 
 - **Stored today:** `concerns`, `depends_on`, `describes`, `see_also`, and `uses`. Element files and requests know no other kind. `contains` comes with inner boards, which it usually follows from; `corresponds_to` and `replaces` come with [[Current and Target|current and target]].
@@ -25,8 +25,6 @@ Relations are typed. Only certain types trigger [[Checks]]; otherwise every chan
 - **Arrows are relations.** A board shows the relations between the elements that lie on it. Arrows are not stored.
 - **“contains”** usually follows from the inner board: whatever has its home inside X is contained in X.
 - **Across board boundaries**, relations appear as stubs or implied relations, see [[Board Graph#Relations Across Boards]].
+- **What a relation passes on:** when files under the target's anchor changed since the source's own stamp, the source gets the flag the table names for the relation's kind, a task or a hint; only the next element is flagged (see [[Checks#Content (Flag, Then Review)]]).
 
 How changes travel along these relations is shown by the relation chain in [[Reconciliation]].
-
-> [!todo] Open
-> Does `describes` trigger a task or only a hint?

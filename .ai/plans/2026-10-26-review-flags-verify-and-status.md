@@ -44,7 +44,7 @@ the AI can keep the boards honest from one session to the next.
 - [x] A content change removes the stamp
 - [x] One helper reads the project for the MCP read tools
 - [x] Review flags of an element from Git, in `read_element`
-- [ ] Flags passed one hop along relations
+- [x] Flags passed one hop along relations
 - [ ] Markers in `read_board` and `search`
 - [ ] One locked write path in the store
 - [ ] The `verify` tool
@@ -151,21 +151,21 @@ its own stamp, so the knowledge built on a changed part is reviewed too.
 
 Review path: Security-Hybrid
 
-- [ ] An element with a stamp and a relation to an element with an anchor
+- [x] An element with a stamp and a relation to an element with an anchor
       gets a flag when a file under the target's anchor differs from the
       source's stamp commit or is untracked and not ignored: a task for
       `depends_on` and `describes`, a hint for `uses` and `concerns`, and
       none for `see_also`. The flag names the relation's kind and target.
-- [ ] A flag is passed on one hop only; an element without a stamp gets no
+- [x] A flag is passed on one hop only; an element without a stamp gets no
       passed-on flag, and a target without an anchor passes none on.
-- [ ] `read_element` shows passed-on flags in its `Review:` lines.
-- [ ] Relations names, for each kind, whether it passes on a task, a hint,
+- [x] `read_element` shows passed-on flags in its `Review:` lines.
+- [x] Relations names, for each kind, whether it passes on a task, a hint,
       or nothing, and its open point on `describes` is closed; Checks
       describes the one-hop rule.
-- [ ] The pure review function is tested for every kind and for the
+- [x] The pure review function is tested for every kind and for the
       states above; an MCP test in a temporary Git repository shows a
       passed-on task.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
       and `cargo fmt --all --check` pass.
 
 ### Task 5: Markers in `read_board` and `search`

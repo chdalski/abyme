@@ -100,7 +100,7 @@ through the refund-worker.
 
 - **Fixed order:** the sections always come in this order, with `none` where there is nothing; only a missing summary leaves out its line. The description comes last.
 - **Anchor and stamp:** `Anchor:` shows the element's [[Elements#Anchors|anchor]], `Verified:` the full commit ID of its [[Checks#Verification Stamp|verification stamp]] and whether the AI or a person verified it.
-- **Review flags:** `Review:` shows the highest priority of the element's [[Checks|review flags]], `task`, `hint`, or `none`, and one indented line per flag; a flag for changed files names at most 10 of them and how many more there are. When the project lies in no Git repository, `git` cannot be run, or Git fails, the answer starts with `Review flags unavailable:` and the reason instead.
+- **Review flags:** `Review:` shows the highest priority of the element's [[Checks|review flags]], `task`, `hint`, or `none`, and one indented line per flag; a flag for changed files names at most 10 of them and how many more there are, and a flag passed on along a relation names the relation's kind and target. When the project lies in no Git repository, `git` cannot be run, or Git fails, the answer starts with `Review flags unavailable:` and the reason instead.
 - **The description keeps its lines and tabs.** Other control and invisible characters in it are written as escapes such as `\u{202e}`, so it can hide or reorder nothing; a carriage return before a line break is left out. Every other value is escaped onto its line as in the board outline.
 - **Missing targets:** a relation whose target has no element file shows the target with `⚠ missing`.
 

@@ -249,6 +249,9 @@ fn reason(flag: &Flag) -> String {
             format!("changed since the stamp: {}{rest}", shown.join(", "))
         }
         Flag::AnchorMissing => "no file that Git knows lies under the anchor".to_owned(),
+        Flag::Upstream { kind, target, .. } => {
+            format!("{kind} {target}: files under its anchor changed since this element's stamp")
+        }
     }
 }
 

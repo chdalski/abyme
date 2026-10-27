@@ -7,7 +7,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use abyme_model::{Anchor, CommitId, Element, ElementId};
+use abyme_model::{Anchor, CommitId, Element, ElementId, RelationKind};
 
 use crate::apply::Snapshot;
 
@@ -32,6 +32,16 @@ pub enum Flag {
     Changed(Vec<Vec<u8>>),
     /// No file that Git tracks or lists as untracked lies under the anchor.
     AnchorMissing,
+    /// Files under the anchor of the element a relation of this kind points
+    /// to differ from this element's stamp commit or are untracked.
+    Upstream {
+        /// The relation's kind, which decides the priority.
+        kind: RelationKind,
+        /// The element the relation points to.
+        target: ElementId,
+        /// How urgent the flag is, as the relation's kind passes it on.
+        priority: Priority,
+    },
 }
 
 /// The review flags of every element that has any.
@@ -83,6 +93,7 @@ impl Flag {
             Self::NeverVerified | Self::UnknownStamp | Self::Changed(_) | Self::AnchorMissing => {
                 Priority::Task
             }
+            Self::Upstream { priority, .. } => *priority,
         }
     }
 }
@@ -108,7 +119,10 @@ pub fn review(snapshot: &Snapshot, facts: &GitFacts) -> Review {
             .elements
             .iter()
             .filter_map(|(id, element)| {
-                let flags = own_flags(element, facts);
+                let flags: Vec<Flag> = own_flags(element, facts)
+                    .into_iter()
+                    .chain(passed_on(element, snapshot, facts))
+                    .collect();
                 (!flags.is_empty()).then(|| (id.clone(), flags))
             })
             .collect(),
@@ -148,6 +162,45 @@ fn changed_under(
         .filter(|path| anchor.covers(path))
         .collect();
     (!changed.is_empty()).then(|| Flag::Changed(changed.into_iter().cloned().collect()))
+}
+
+/// The flags the element's relations pass on, one hop: for each relation
+/// whose kind passes something on, whether files under the target's anchor
+/// changed since this element's own stamp. Only the target's anchor counts,
+/// never the target's flags, so nothing travels further.
+fn passed_on(element: &Element, snapshot: &Snapshot, facts: &GitFacts) -> Vec<Flag> {
+    let Some(Since::Changed(since)) = element
+        .verified()
+        .and_then(|stamp| facts.since.get(&stamp.commit))
+    else {
+        return Vec::new();
+    };
+    element
+        .relations()
+        .keys()
+        .filter_map(|(kind, target)| {
+            let priority = passes_on(*kind)?;
+            let anchor = snapshot.elements.get(target)?.anchor()?;
+            since
+                .iter()
+                .chain(&facts.uncommitted)
+                .any(|path| anchor.covers(path))
+                .then(|| Flag::Upstream {
+                    kind: *kind,
+                    target: target.clone(),
+                    priority,
+                })
+        })
+        .collect()
+}
+
+/// What a relation of this kind passes on from its target to its source.
+const fn passes_on(kind: RelationKind) -> Option<Priority> {
+    match kind {
+        RelationKind::DependsOn | RelationKind::Describes => Some(Priority::Task),
+        RelationKind::Uses | RelationKind::Concerns => Some(Priority::Hint),
+        RelationKind::SeeAlso => None,
+    }
 }
 
 #[cfg(test)]

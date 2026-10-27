@@ -219,9 +219,10 @@ impl AbymeServer {
         description = "Returns one element of the Abyme project in detail: its ID and name, type, anchor \
             (or none), verification stamp as the commit it was last verified against and by ai or person \
             (or none), then Review: with task, hint, or none and one indented line per review flag, such \
-            as files changed under the anchor since the stamp (at most 10 named), summary, the boards that \
-            place it, its outgoing relations (a target without a \
-            file is marked ⚠ missing), the relations of other elements to it, and last its description. \
+            as files changed under the anchor since the stamp (at most 10 named), or a relation of kind \
+            depends_on or describes (a task) or uses or concerns (a hint) whose target's files changed \
+            since the element's stamp, summary, the boards that place it, its outgoing relations (a \
+            target without a file is marked ⚠ missing), the relations of other elements to it, and last its description. \
             The single-line values are escaped onto one line as in read_board. The description keeps its \
             line breaks and tabs; other control and invisible characters in it appear as \\u{...} \
             escapes. When Git cannot be asked, the reply starts with a line Review flags unavailable: and \
