@@ -1,5 +1,5 @@
 **Repository:** root
-**Status:** NotStarted
+**Status:** InProgress
 **Created:** 2026-10-27
 
 ## Goal
@@ -11,7 +11,8 @@ Name each advisory in `deny.toml` with the reason it does not apply, so the
 check passes again and still catches every other advisory, and make it fail
 when a `zstd-safe` or `zstd-sys` feature that a reason relies on gets enabled
 or when a crate other than `arrow-ipc` and `lance-encoding` depends on
-`zstd`. A change in how those two crates call `zstd` stays a check by hand.
+`zstd` or a crate other than `zstd` on `zstd-safe`. A change in how
+`arrow-ipc` and `lance-encoding` call `zstd` stays a check by hand.
 
 ## Context
 
@@ -37,7 +38,7 @@ or when a crate other than `arrow-ipc` and `lance-encoding` depends on
 
 ## Steps
 
-- [ ] Exceptions for the zstd advisories, with checks that keep them true
+- [x] Exceptions for the zstd advisories, with checks that keep them true
 
 ## Tasks
 
@@ -48,24 +49,25 @@ trigger it, and the check enforces the facts those reasons rest on.
 
 Review path: Security-Hybrid
 
-- [ ] `deny.toml` names each of RUSTSEC-2026-0391 and RUSTSEC-2026-0395 to
+- [x] `deny.toml` names each of RUSTSEC-2026-0391 and RUSTSEC-2026-0395 to
       RUSTSEC-2026-0406 in an ignore entry of its own, whose reason says why
       Abyme cannot trigger the flaw and that the entry goes once lancedb's
       tree holds no `zstd` below 0.14.3 and no `zstd-safe` below 8.2.0.
-- [ ] `cargo deny --locked check` fails when a crate enables `zstd-safe`'s
+- [x] `cargo deny --locked check` fails when a crate enables `zstd-safe`'s
       `experimental`, `zstdmt`, or `seekable` feature or `zstd-sys`'s
-      `zstdmt` feature, and when a crate other than `arrow-ipc` and
-      `lance-encoding` depends on `zstd`; a scratch copy of the workspace
-      outside the repository shows the failure for each of the four features
-      and for such a crate.
-- [ ] What `deny.toml` says about its feature bans holds for the new bans
+      `zstdmt` or `pkg-config` feature, when a crate other than `arrow-ipc`
+      and `lance-encoding` depends on `zstd`, and when a crate other than
+      `zstd` depends on `zstd-safe`; a scratch copy of the workspace outside
+      the repository shows the failure for each of the five features and for
+      each of the two kinds of crate.
+- [x] What `deny.toml` says about its feature bans holds for the new bans
       too, and the reason of each new ban names the ignore entries it
       protects and says that the user decides whether it stays once those
       entries go.
-- [ ] A reader of `deny.toml` learns what to check again when lancedb,
+- [x] A reader of `deny.toml` learns what to check again when lancedb,
       `arrow-ipc`, or `lance-encoding` changes, since the check cannot see a
       new `zstd` call inside those crates.
-- [ ] `cargo deny --locked check` passes and warns about none of the new
+- [x] `cargo deny --locked check` passes and warns about none of the new
       entries.
 
 ## Decisions
@@ -77,6 +79,11 @@ Review path: Security-Hybrid
   turn off.
 - **One entry per advisory:** each flaw has its own reason, and an entry
   whose reason stops holding can go alone.
+- **`zstd-sys`'s `pkg-config` is banned too:** with it, Abyme would link the
+  system's libzstd, usually built with multithreading, against which one
+  reason relies on the bundled library refusing worker threads. The
+  environment variable `ZSTD_SYS_USE_PKG_CONFIG` does the same at build time
+  and is outside what the check sees; that stays accepted.
 - **Accepted:** element text from the repository is compressed with `zstd`
   0.13.3, on a one-shot path none of the advisories concerns; a process of
   the user's could make lance allocate without bound through a tampered

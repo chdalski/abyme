@@ -44,6 +44,120 @@ reason = """unsafe-libyaml comes through serde_yaml_ng in lindera, which lancedb
 which Abyme does not select. Remove once lancedb no longer enables lindera or \
 lindera drops serde_yaml_ng."""
 
+# The zstd ignores below rest on how arrow-ipc and lance-encoding call zstd,
+# which this check cannot see. When lancedb, arrow-ipc or lance-encoding
+# changes, search their sources for `with_context`, `write::Decoder`,
+# `context_mut`, `decompress_stream`, `compress_stream`, `NbWorkers`,
+# `around_pos`, `zstd::dict` / `from_samples` / `from_continuous` /
+# `from_files`, and `zstd_safe::`; each hit can invalidate a reason below.
+
+[[advisories.ignore]]
+id = "RUSTSEC-2026-0391"
+reason = """zstd 0.13.3 and zstd-safe 7.3.0 come with lancedb through \
+arrow-ipc and lance-encoding. Neither Abyme, arrow-ipc nor lance-encoding \
+calls the `with_context` constructors of `stream::raw::Encoder` and `Decoder`, \
+nor `read::Decoder::with_context` and `write::Encoder::with_context`, which \
+wrap them; every stream gets a context of its own. Remove once lancedb's tree \
+has no zstd below 0.14.3 and no zstd-safe below 8.2.0."""
+
+[[advisories.ignore]]
+id = "RUSTSEC-2026-0395"
+reason = """zstd 0.13.3 and zstd-safe 7.3.0 come with lancedb through \
+arrow-ipc and lance-encoding. `CCtx::set_parameter` runs, but \
+`CParameter::StableInBuffer` exists only with zstd-safe's `experimental` \
+feature, which no crate enables and this file bans. Remove once lancedb's tree \
+has no zstd below 0.14.3 and no zstd-safe below 8.2.0."""
+
+[[advisories.ignore]]
+id = "RUSTSEC-2026-0396"
+reason = """zstd 0.13.3 and zstd-safe 7.3.0 come with lancedb through \
+arrow-ipc and lance-encoding. The `seekable` module (`Seekable`, \
+`AdvancedSeekable`, `SeekableCStream`) exists only with zstd-safe's `seekable` \
+feature, which no crate enables and this file bans. Remove once lancedb's tree \
+has no zstd below 0.14.3 and no zstd-safe below 8.2.0."""
+
+[[advisories.ignore]]
+id = "RUSTSEC-2026-0397"
+reason = """zstd 0.13.3 and zstd-safe 7.3.0 come with lancedb through \
+arrow-ipc and lance-encoding. `OutBuffer::around_pos` is called by neither \
+Abyme, arrow-ipc, lance-encoding nor zstd 0.13.3 itself. Remove once lancedb's \
+tree has no zstd below 0.14.3 and no zstd-safe below 8.2.0."""
+
+[[advisories.ignore]]
+id = "RUSTSEC-2026-0398"
+reason = """zstd 0.13.3 and zstd-safe 7.3.0 come with lancedb through \
+arrow-ipc and lance-encoding. The `seekable` module (`Seekable`, \
+`AdvancedSeekable`, `SeekableCStream`) exists only with zstd-safe's `seekable` \
+feature, which no crate enables and this file bans. Remove once lancedb's tree \
+has no zstd below 0.14.3 and no zstd-safe below 8.2.0."""
+
+[[advisories.ignore]]
+id = "RUSTSEC-2026-0399"
+reason = """zstd 0.13.3 and zstd-safe 7.3.0 come with lancedb through \
+arrow-ipc and lance-encoding. `init_using_cdict` and `init_using_ddict` exist \
+only with zstd-safe's `experimental` feature, which no crate enables and this \
+file bans. Remove once lancedb's tree has no zstd below 0.14.3 and no \
+zstd-safe below 8.2.0."""
+
+[[advisories.ignore]]
+id = "RUSTSEC-2026-0400"
+reason = """zstd 0.13.3 and zstd-safe 7.3.0 come with lancedb through \
+arrow-ipc and lance-encoding. `DCtx::decompress` runs on bulk decompressors \
+(arrow-ipc reuses one, lance-encoding's `decompress_to_buffer` makes one per \
+call), but nothing streams on a bulk context, so no stream is open when a \
+one-shot call runs; no dictionary is used. Remove once lancedb's tree has no \
+zstd below 0.14.3 and no zstd-safe below 8.2.0."""
+
+[[advisories.ignore]]
+id = "RUSTSEC-2026-0401"
+reason = """zstd 0.13.3 and zstd-safe 7.3.0 come with lancedb through \
+arrow-ipc and lance-encoding. `train_from_buffer` is reached only through \
+`zstd::dict::from_continuous`, `from_samples` and `from_files`, which neither \
+Abyme, arrow-ipc nor lance-encoding calls. Remove once lancedb's tree has no \
+zstd below 0.14.3 and no zstd-safe below 8.2.0."""
+
+[[advisories.ignore]]
+id = "RUSTSEC-2026-0402"
+reason = """zstd 0.13.3 and zstd-safe 7.3.0 come with lancedb through \
+arrow-ipc and lance-encoding. `CCtx::try_clone` exists only with zstd-safe's \
+`experimental` feature, and a multithreaded context needs `zstdmt` too; no \
+crate enables either, and this file bans both. Remove once lancedb's tree has \
+no zstd below 0.14.3 and no zstd-safe below 8.2.0."""
+
+[[advisories.ignore]]
+id = "RUSTSEC-2026-0403"
+reason = """zstd 0.13.3 and zstd-safe 7.3.0 come with lancedb through \
+arrow-ipc and lance-encoding. `DCtx::decompress_stream` runs only inside \
+`stream::read::Decoder`, through lance-encoding's `copy_decode`, which the \
+advisory names as unaffected; nothing uses `stream::write::Decoder` or calls \
+`decompress_stream` with a `Vec<u8>` destination. Remove once lancedb's tree \
+has no zstd below 0.14.3 and no zstd-safe below 8.2.0."""
+
+[[advisories.ignore]]
+id = "RUSTSEC-2026-0404"
+reason = """zstd 0.13.3 and zstd-safe 7.3.0 come with lancedb through \
+arrow-ipc and lance-encoding. `DCtx::try_clone` exists only with zstd-safe's \
+`experimental` feature, which no crate enables and this file bans. Remove once \
+lancedb's tree has no zstd below 0.14.3 and no zstd-safe below 8.2.0."""
+
+[[advisories.ignore]]
+id = "RUSTSEC-2026-0405"
+reason = """zstd 0.13.3 and zstd-safe 7.3.0 come with lancedb through \
+arrow-ipc and lance-encoding. The `seekable` module (`Seekable`, \
+`AdvancedSeekable`, `SeekableCStream`) exists only with zstd-safe's `seekable` \
+feature, which no crate enables and this file bans. Remove once lancedb's tree \
+has no zstd below 0.14.3 and no zstd-safe below 8.2.0."""
+
+[[advisories.ignore]]
+id = "RUSTSEC-2026-0406"
+reason = """zstd 0.13.3 and zstd-safe 7.3.0 come with lancedb through \
+arrow-ipc and lance-encoding. `CCtx::set_parameter` and `load_dictionary` run \
+when arrow-ipc and lance-encoding create their bulk compressors, but no crate \
+sets `CParameter::NbWorkers`, and the bundled libzstd, built without \
+multithreading because zstd-sys's `zstdmt` and `pkg-config` are banned, \
+refuses any value but 0; no multithreaded frame ever starts. Remove once \
+lancedb's tree has no zstd below 0.14.3 and no zstd-safe below 8.2.0."""
+
 [licenses]
 # Licenses that permit use in an MIT project without conditions beyond
 # keeping notices.
@@ -83,11 +197,16 @@ wildcards = "deny"
 allow-wildcard-paths = true
 deny = [
     { crate = "hf-hub", reason = "see the comment on fastembed in the root Cargo.toml" },
+    # The ignores of RUSTSEC-2026-0391, 0397, 0400, 0401, 0403, and 0406 rest
+    # on how only these crates call zstd and zstd-safe; the user decides
+    # whether the bans stay once those ignores go.
+    { crate = "zstd", wrappers = ["arrow-ipc", "lance-encoding"], reason = "the zstd advisory ignores rely on no other crate calling zstd" },
+    { crate = "zstd-safe", wrappers = ["zstd"], reason = "the zstd advisory ignores rely on no other crate calling zstd-safe" },
 ]
 
-# The features that comments in the root Cargo.toml forbid, banned for every
-# version of each crate that has the feature; each reason names the comment
-# that says why.
+# Features banned for every version of each crate that has the feature. Each
+# reason names the comment in the root Cargo.toml that forbids the feature, or
+# the advisory ignores that rely on the feature being off.
 [[bans.features]]
 crate = "fastembed"
 deny = ["hf-hub", "hf-hub-native-tls", "hf-hub-rustls-tls", "online", "qwen3", "nomic-v2-moe"]
@@ -126,6 +245,18 @@ reason = "see the comment on ts-rs in the root Cargo.toml"
 crate = "ureq"
 deny = ["gzip"]
 reason = "see the comment on ureq in the root Cargo.toml"
+
+# The user decides whether the two zstd bans stay once the ignores they name
+# go.
+[[bans.features]]
+crate = "zstd-safe"
+deny = ["experimental", "zstdmt", "seekable"]
+reason = "the ignores of RUSTSEC-2026-0395, 0396, 0398, 0399, 0402, 0404, and 0405 rely on these features being off"
+
+[[bans.features]]
+crate = "zstd-sys"
+deny = ["zstdmt", "pkg-config"]
+reason = "the ignores of RUSTSEC-2026-0402 and 0406 rely on the bundled libzstd without multithreading"
 
 [sources]
 unknown-registry = "deny"
