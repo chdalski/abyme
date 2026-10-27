@@ -653,26 +653,17 @@ impl Repository {
     /// stays untracked; a later `commit` would track an untracked clone.
     /// Returns the nested repository's directory.
     fn nest(&self, source: &Path, path: &str, nesting: Nesting) -> TestResult<PathBuf> {
-        let source = source.to_str().ok_or("not UTF-8")?;
         let path = self.project.strip_prefix(self.top())?.join(path);
         let path = path.to_str().ok_or("not UTF-8")?;
         match nesting {
-            Nesting::Submodule => git(
-                self.top(),
-                &[
-                    "-c",
-                    "protocol.file.allow=always",
-                    "submodule",
-                    "add",
-                    "-q",
-                    source,
-                    path,
-                ],
-            )?,
+            Nesting::Submodule => submodule_add(self.top(), source, path)?,
             Nesting::Embedded | Nesting::Untracked => {
-                git(self.top(), &["clone", "-q", source, path])?
+                git(
+                    self.top(),
+                    &["clone", "-q", source.to_str().ok_or("not UTF-8")?, path],
+                )?;
             }
-        };
+        }
         if !matches!(nesting, Nesting::Untracked) {
             commit_all(self.top())?;
         }
@@ -805,25 +796,33 @@ fn verify_is_not_refused_by_an_untracked_clone_under_the_anchor() -> TestResult 
     Ok(())
 }
 
-#[test]
-fn reads_a_repository_nested_two_levels_deep() -> TestResult {
-    let sources = tempfile::tempdir()?;
-    let inner = sources.path().join("inner");
-    let stamp = library(&inner)?;
-    let middle = sources.path().join("middle");
-    library(&middle)?;
+/// Adds a clone of the repository at `source` as a submodule at `path` of
+/// the repository at `outer`, which allows Git to clone from a local path.
+fn submodule_add(outer: &Path, source: &Path, path: &str) -> TestResult {
     git(
-        &middle,
+        outer,
         &[
             "-c",
             "protocol.file.allow=always",
             "submodule",
             "add",
             "-q",
-            inner.to_str().ok_or("not UTF-8")?,
-            "inner",
+            source.to_str().ok_or("not UTF-8")?,
+            path,
         ],
     )?;
+    Ok(())
+}
+
+/// A repository whose project holds a submodule at `vendor/lib` that itself
+/// holds a submodule `inner`, both cloned from repositories in `sources`
+/// and checked out; returns it with the commit `inner` names.
+fn two_levels_deep(sources: &Path) -> TestResult<(Repository, String)> {
+    let inner = sources.join("inner");
+    let stamp = library(&inner)?;
+    let middle = sources.join("middle");
+    library(&middle)?;
+    submodule_add(&middle, &inner, "inner")?;
     git(&middle, &["commit", "-q", "-m", "inner"])?;
     let repository = Repository::new()?;
     repository.nest(&middle, "vendor/lib", Nesting::Submodule)?;
@@ -839,6 +838,13 @@ fn reads_a_repository_nested_two_levels_deep() -> TestResult {
             "--recursive",
         ],
     )?;
+    Ok((repository, stamp))
+}
+
+#[test]
+fn reads_a_repository_nested_two_levels_deep() -> TestResult {
+    let sources = tempfile::tempdir()?;
+    let (repository, stamp) = two_levels_deep(sources.path())?;
     repository.element(Some("vendor/lib/inner"), Some(&stamp))?;
     fs::write(
         repository.project.join("vendor/lib/inner/a.rs"),
@@ -1572,37 +1578,7 @@ fn verify_of_an_anchor_that_contains_a_nested_repository_refuses_only_a_moved_ro
 #[test]
 fn verify_stamps_a_repository_nested_two_levels_deep() -> TestResult {
     let sources = tempfile::tempdir()?;
-    let inner = sources.path().join("inner");
-    let stamp = library(&inner)?;
-    let middle = sources.path().join("middle");
-    library(&middle)?;
-    git(
-        &middle,
-        &[
-            "-c",
-            "protocol.file.allow=always",
-            "submodule",
-            "add",
-            "-q",
-            inner.to_str().ok_or("not UTF-8")?,
-            "inner",
-        ],
-    )?;
-    git(&middle, &["commit", "-q", "-m", "inner"])?;
-    let repository = Repository::new()?;
-    repository.nest(&middle, "vendor/lib", Nesting::Submodule)?;
-    git(
-        repository.top(),
-        &[
-            "-c",
-            "protocol.file.allow=always",
-            "submodule",
-            "update",
-            "-q",
-            "--init",
-            "--recursive",
-        ],
-    )?;
+    let (repository, stamp) = two_levels_deep(sources.path())?;
     repository.element(Some("vendor/lib/inner/a.rs"), None)?;
 
     assert_eq!(repository.verify("x")?, Ok(stamp));
@@ -1614,18 +1590,7 @@ fn verify_stamps_a_repository_nested_two_levels_deep() -> TestResult {
 /// gives the submodule a new commit and stages its moved gitlink. Returns
 /// the commit that added the submodule.
 fn ignored_submodule(outer: &Path, source: &Path, path: &str) -> TestResult<String> {
-    git(
-        outer,
-        &[
-            "-c",
-            "protocol.file.allow=always",
-            "submodule",
-            "add",
-            "-q",
-            source.to_str().ok_or("not UTF-8")?,
-            path,
-        ],
-    )?;
+    submodule_add(outer, source, path)?;
     git(
         outer,
         &[

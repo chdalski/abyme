@@ -24,7 +24,7 @@ tests, without changing what any test checks.
 ## Steps
 
 - [x] Shared Git helpers in a test-support crate
-- [ ] Local helpers for the submodule setup of the core review tests
+- [x] Local helpers for the submodule setup of the core review tests
 
 ## Tasks
 
@@ -71,13 +71,13 @@ pin the behavior.
 
 Review path: Reviewer-only
 
-- [ ] `crates/abyme-core/tests/review.rs` adds a submodule in one place, and
+- [x] `crates/abyme-core/tests/review.rs` adds a submodule in one place, and
       both tests of a repository nested two levels deep build it in one
       place.
-- [ ] The sorted output of `cargo test --workspace -- --list` is the same
+- [x] The sorted output of `cargo test --workspace -- --list` is the same
       before and after the task, and no assertion and no expected text in
       the tests changes.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
       and `cargo fmt --all --check` pass.
 
 ## Decisions
