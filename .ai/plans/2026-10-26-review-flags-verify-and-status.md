@@ -46,7 +46,7 @@ the AI can keep the boards honest from one session to the next.
 - [x] Review flags of an element from Git, in `read_element`
 - [x] Flags passed one hop along relations
 - [x] Markers in `read_board` and `search`
-- [ ] One locked write path in the store
+- [x] One locked write path in the store
 - [ ] The `verify` tool
 - [ ] The `status` tool
 
@@ -198,9 +198,9 @@ unchanged.
 
 Review path: Security-Hybrid
 
-- [ ] `apply` writes through a store function that takes the decision as
+- [x] `apply` writes through a store function that takes the decision as
       a parameter and holds the lock from reading to the last write.
-- [ ] These tests in `crates/abyme-core/tests/project.rs` and the tests in
+- [x] These tests in `crates/abyme-core/tests/project.rs` and the tests in
       `crates/abyme-core/src/project/store/tests.rs` pass with their
       assertions unchanged: `apply_writes_what_the_pure_apply_decided`,
       `a_rejected_request_changes_no_file`,
@@ -210,7 +210,7 @@ Review path: Security-Hybrid
       `applies_from_two_processes_without_losing_a_change`,
       `removes_leftover_files_before_writing_and_keeps_directories`, and
       `refuses_a_symbolic_link_at_a_fixed_path_when_writing`.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
       and `cargo fmt --all --check` pass.
 
 ### Task 7: The `verify` tool

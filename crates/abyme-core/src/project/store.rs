@@ -60,15 +60,29 @@ pub fn apply_operations(
     root: &Path,
     operations: &[Operation],
 ) -> Result<Vec<(LocalKey, Created)>, ProjectError> {
+    write_locked(root, |snapshot| {
+        let applied = apply(snapshot, operations)?;
+        Ok((applied.writes, applied.created))
+    })
+}
+
+/// Holds the project's lock from reading the files to the last rename:
+/// reads them, lets `decide` turn them into the files to write and a
+/// result, and writes those files, or none of them if one would be too
+/// large. A rejected decision writes nothing.
+pub fn write_locked<T>(
+    root: &Path,
+    decide: impl FnOnce(&Snapshot) -> Result<(Vec<Write>, T), ProjectError>,
+) -> Result<T, ProjectError> {
     ensure_local_dir(root)?;
     let lock = open_lock(root)?;
     lock.lock().map_err(io_error(Location::Lock))?;
-    let applied = apply(&read_snapshot(root)?, operations)?;
-    let files = serialized(&applied.writes)?;
+    let (writes, result) = decide(&read_snapshot(root)?)?;
+    let files = serialized(&writes)?;
     if !files.is_empty() {
         write_files(root, &files)?;
     }
-    Ok(applied.created)
+    Ok(result)
 }
 
 /// The IDs of the regular files in the directory at `location` whose names
