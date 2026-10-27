@@ -7,7 +7,9 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use abyme_model::{Anchor, CommitId, Element, ElementId, RelationKind};
+use abyme_model::{
+    Anchor, CommitId, Element, ElementId, ElementProblem, RelationKind, Verification, Verifier,
+};
 
 use crate::apply::Snapshot;
 
@@ -74,6 +76,52 @@ pub struct GitFacts {
     pub uncommitted: BTreeSet<Vec<u8>>,
     /// What each stamp commit of the project tells.
     pub since: BTreeMap<CommitId, Since>,
+}
+
+/// What `verify` needs to know of the repository. Paths are bytes,
+/// relative to the project root.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct HeadFacts {
+    /// The commit HEAD names; `None` in a repository without commits.
+    pub commit: Option<CommitId>,
+    /// The paths that differ from that commit in the index or the working
+    /// tree, that are unmerged, or that are untracked.
+    pub changed: BTreeSet<Vec<u8>>,
+}
+
+/// Why `verify` refuses to stamp an element. The texts are fixed but for
+/// the element's ID and, for an element the stamp would break, the rule it
+/// would break.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum VerifyProblem {
+    /// No element file has this ID.
+    #[error("no element has the ID {0}")]
+    UnknownElement(ElementId),
+    /// The repository has no commit to stamp.
+    #[error("element {0} cannot be verified: the repository has no commit yet")]
+    NoCommit(ElementId),
+    /// Files under the element's anchor differ from HEAD or are untracked.
+    #[error(
+        "element {0} cannot be verified: files under its anchor differ from HEAD or are untracked; they must be committed first"
+    )]
+    Uncommitted(ElementId),
+    /// Git cannot be asked.
+    #[error("element {element} cannot be verified: {reason}")]
+    Unavailable {
+        /// The element to verify.
+        element: ElementId,
+        /// Why Git cannot be asked.
+        reason: Unavailable,
+    },
+    /// The stamp would make the element file break a rule, such as the
+    /// frontmatter's size limit.
+    #[error("element {element} cannot be verified: {problem}")]
+    Rejected {
+        /// The element to verify.
+        element: ElementId,
+        /// The rule it would break.
+        problem: ElementProblem,
+    },
 }
 
 /// What a stamp commit tells.
@@ -162,6 +210,43 @@ fn changed_under(
         .filter(|path| anchor.covers(path))
         .collect();
     (!changed.is_empty()).then(|| Flag::Changed(changed.into_iter().cloned().collect()))
+}
+
+/// The element `id` stamped by `by` with the commit HEAD names, or why it
+/// cannot be: only its stamp changes. An element with an anchor is refused
+/// while files under the anchor differ from that commit or are untracked;
+/// an element without an anchor, or whose anchor matches no file, can be
+/// stamped.
+pub fn stamped(
+    snapshot: &Snapshot,
+    id: &ElementId,
+    head: &HeadFacts,
+    by: Verifier,
+) -> Result<(Element, CommitId), VerifyProblem> {
+    let element = snapshot
+        .elements
+        .get(id)
+        .ok_or_else(|| VerifyProblem::UnknownElement(id.clone()))?;
+    let commit = head
+        .commit
+        .clone()
+        .ok_or_else(|| VerifyProblem::NoCommit(id.clone()))?;
+    if element
+        .anchor()
+        .is_some_and(|anchor| head.changed.iter().any(|path| anchor.covers(path)))
+    {
+        return Err(VerifyProblem::Uncommitted(id.clone()));
+    }
+    let mut fields = element.clone().into_fields();
+    fields.verified = Some(Verification {
+        commit: commit.clone(),
+        by,
+    });
+    let element = Element::new(id.clone(), fields).map_err(|error| VerifyProblem::Rejected {
+        element: id.clone(),
+        problem: error.problem().clone(),
+    })?;
+    Ok((element, commit))
 }
 
 /// The flags the element's relations pass on, one hop: for each relation

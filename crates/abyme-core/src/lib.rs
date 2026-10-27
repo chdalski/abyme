@@ -33,4 +33,4 @@ pub use project::{
     EmbeddingModel, EntryKind, Init, MAX_FILE_BYTES, MAX_PROJECT_FILE_BYTES, PROJECT_FORMAT,
     Project, ProjectError,
 };
-pub use review::{Flag, Priority, Review, Unavailable};
+pub use review::{Flag, Priority, Review, Unavailable, VerifyProblem};

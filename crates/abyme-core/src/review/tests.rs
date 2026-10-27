@@ -381,3 +381,156 @@ fn passes_on_one_flag_per_relation_and_rates_the_highest() {
     );
     assert_eq!(review.priority(&element_id("s")), Some(Priority::Task));
 }
+
+/// HEAD at `OTHER` with the given paths changed since.
+fn head(changed: &[&str]) -> HeadFacts {
+    HeadFacts {
+        commit: Some(commit(OTHER)),
+        changed: paths(changed),
+    }
+}
+
+#[rstest]
+#[case::no_change(&[])]
+#[case::change_elsewhere(&["crates/other/lib.rs"])]
+#[case::sibling_with_the_same_start(&["crates/xy/lib.rs"])]
+fn stamps_an_element_whose_anchor_has_no_change(#[case] changed: &[&str]) {
+    let snapshot = snapshot(element(Some("crates/x"), Some(STAMP)));
+
+    let (stamped, commit) =
+        stamped(&snapshot, &element_id("x"), &head(changed), Verifier::Ai).unwrap();
+
+    assert_eq!(commit, self::commit(OTHER));
+    let before = snapshot.elements.get(&element_id("x")).unwrap();
+    assert_eq!(
+        stamped.verified(),
+        Some(&Verification {
+            commit: self::commit(OTHER),
+            by: Verifier::Ai,
+        })
+    );
+    assert_eq!(
+        Element::new(
+            element_id("x"),
+            abyme_model::ElementFields {
+                verified: before.verified().cloned(),
+                ..stamped.into_fields()
+            }
+        )
+        .unwrap(),
+        before.clone()
+    );
+}
+
+#[rstest]
+#[case::changed_file(&["crates/x/lib.rs"])]
+#[case::the_anchor_itself(&["crates/x"])]
+#[case::unmerged_or_untracked_file_below(&["crates/x/deep/new.rs"])]
+fn refuses_an_element_with_a_change_under_its_anchor(#[case] changed: &[&str]) {
+    let snapshot = snapshot(element(Some("crates/x"), None));
+
+    let refused = stamped(&snapshot, &element_id("x"), &head(changed), Verifier::Ai);
+
+    assert_eq!(refused, Err(VerifyProblem::Uncommitted(element_id("x"))));
+}
+
+#[rstest]
+#[case::without_an_anchor(None)]
+#[case::with_an_anchor_that_matches_no_file(Some("crates/gone"))]
+fn stamps_an_element_without_anything_under_its_anchor(#[case] anchor: Option<&str>) {
+    let snapshot = snapshot(element(anchor, None));
+
+    let stamped = stamped(
+        &snapshot,
+        &element_id("x"),
+        &head(&["docs/a.md"]),
+        Verifier::Ai,
+    );
+
+    assert!(stamped.is_ok(), "{stamped:?}");
+}
+
+#[test]
+fn refuses_an_element_without_a_file_and_a_repository_without_a_commit() {
+    let snapshot = snapshot(element(None, None));
+
+    assert_eq!(
+        stamped(&snapshot, &element_id("y"), &head(&[]), Verifier::Ai),
+        Err(VerifyProblem::UnknownElement(element_id("y")))
+    );
+    assert_eq!(
+        stamped(
+            &snapshot,
+            &element_id("x"),
+            &HeadFacts::default(),
+            Verifier::Ai
+        ),
+        Err(VerifyProblem::NoCommit(element_id("x")))
+    );
+}
+
+#[test]
+fn names_only_the_element_when_it_refuses() {
+    let problems = [
+        VerifyProblem::UnknownElement(element_id("x")),
+        VerifyProblem::NoCommit(element_id("x")),
+        VerifyProblem::Uncommitted(element_id("x")),
+        VerifyProblem::Unavailable {
+            element: element_id("x"),
+            reason: Unavailable::GitFailed,
+        },
+        VerifyProblem::Rejected {
+            element: element_id("x"),
+            problem: ElementProblem::FrontmatterTooLarge { size: 65_600 },
+        },
+    ];
+
+    let messages: Vec<String> = problems.iter().map(ToString::to_string).collect();
+
+    assert_eq!(
+        messages,
+        [
+            "no element has the ID x",
+            "element x cannot be verified: the repository has no commit yet",
+            "element x cannot be verified: files under its anchor differ from HEAD or are untracked; they must be committed first",
+            "element x cannot be verified: git failed",
+            "element x cannot be verified: the frontmatter has 65600 bytes, more than 65536",
+        ]
+    );
+}
+
+#[test]
+fn refuses_a_stamp_that_would_make_the_frontmatter_too_large() {
+    let with_summary = |length: usize| {
+        Element::new(
+            element_id("x"),
+            abyme_model::ElementFields {
+                type_ref: abyme_model::TypeRef::try_from("t".to_owned()).unwrap(),
+                name: "X".to_owned(),
+                summary: Some("a".repeat(length)),
+                body: String::new(),
+                relations: abyme_model::Relations::new(),
+                anchor: None,
+                verified: None,
+            },
+        )
+    };
+    let largest = (abyme_model::MAX_FRONTMATTER_BYTES - 200..=abyme_model::MAX_FRONTMATTER_BYTES)
+        .rev()
+        .find(|length| with_summary(*length).is_ok())
+        .unwrap();
+    let snapshot = snapshot(with_summary(largest).unwrap());
+
+    let refused = stamped(&snapshot, &element_id("x"), &head(&[]), Verifier::Ai);
+
+    assert!(
+        matches!(
+            refused,
+            Err(VerifyProblem::Rejected {
+                ref element,
+                problem: ElementProblem::FrontmatterTooLarge { .. },
+            }) if *element == element_id("x")
+        ),
+        "{refused:?}"
+    );
+}

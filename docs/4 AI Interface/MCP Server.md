@@ -32,7 +32,7 @@ The AI describes *what* it wants, and Abyme decides *where* it goes. Instead of 
 | `checks` / `resolve_check` | fetch review flags and change requests, resolve change requests |
 | `verify` | resolve a review flag and set a new verification stamp |
 
-The server offers `apply`, `read_board`, `read_element`, and `search` so far; the other tools come with the slices that need them.
+The server offers `apply`, `read_board`, `read_element`, `search`, and `verify` so far; the other tools come with the slices that need them. `verify` takes an element ID and stamps the element as verified by the AI against the commit HEAD names; it refuses while files under the element's anchor differ from HEAD or are untracked, so the AI asks for a commit first.
 
 Every writing response contains the consequences of the change, that is affected elements and new review flags (see [[Checks#Reports]]). For visual collaboration, tools like `get_selection` and `focus` would be added, see [[Ideas#Visual Collaboration with the AI]].
 

@@ -47,7 +47,7 @@ the AI can keep the boards honest from one session to the next.
 - [x] Flags passed one hop along relations
 - [x] Markers in `read_board` and `search`
 - [x] One locked write path in the store
-- [ ] The `verify` tool
+- [x] The `verify` tool
 - [ ] The `status` tool
 
 ## Tasks
@@ -220,31 +220,31 @@ which stamps it with the commit HEAD names, by `ai`.
 
 Review path: Security-Hybrid
 
-- [ ] The MCP tool `verify` takes only `element`, an element ID, sets the
+- [x] The MCP tool `verify` takes only `element`, an element ID, sets the
       element's stamp to the commit HEAD names with `verified_by: ai`, and
       answers with that commit; the rest of the element file stays as it
       was, and it is written under the same lock as `apply`.
-- [ ] `verify` refuses, and writes nothing, when the element has no file,
+- [x] `verify` refuses, and writes nothing, when the element has no file,
       when a file under its anchor differs from HEAD or is untracked and
       not ignored, with the answer that these changes must be committed
       first, when the repository has no commit yet, and when the flags are
       unavailable. An element whose anchor matches no file, and an element
       without an anchor, can be verified.
-- [ ] After `verify`, the element has no flag for changed files until a
+- [x] After `verify`, the element has no flag for changed files until a
       file under its anchor changes, and flags passed on to it are
       measured against the new stamp; the flag for an anchor that matches
       no file stays.
-- [ ] An MCP test in a temporary Git repository verifies an element, sees
+- [x] An MCP test in a temporary Git repository verifies an element, sees
       its flag for changed files gone in `read_element`, and sees each
       refusal; the test that checks every tool's parameters names `verify`
       with `element`.
-- [ ] The server's instructions, the `verify` description, the MCP
+- [x] The server's instructions, the `verify` description, the MCP
       README, MCP Server, Checks, Reconciliation, and Data Model describe
       `verify` as delivered; Storage in Git asks for board and code in the
       same pull request rather than the same commit. The `abyme-mcp` row
       of the Components table in the root `CLAUDE.md` and the server's
       module documentation name every tool the server offers.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
       and `cargo fmt --all --check` pass.
 
 ### Task 8: The `status` tool

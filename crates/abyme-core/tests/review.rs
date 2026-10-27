@@ -1,5 +1,5 @@
-//! Review flags of a project in a real Git repository, through
-//! `Project::review`.
+//! Review flags and verification of a project in a real Git repository,
+//! through `Project::review` and `Project::verify`.
 
 use std::error::Error;
 use std::ffi::OsStr;
@@ -10,7 +10,7 @@ use std::process::Command;
 use std::time::{Duration, SystemTime};
 
 use abyme_core::{Flag, Project, Review, Unavailable};
-use abyme_model::ElementId;
+use abyme_model::{ElementId, Verifier};
 use rstest::rstest;
 use tempfile::TempDir;
 
@@ -112,6 +112,22 @@ impl Repository {
         let project = Project::discover(&self.project)?;
         let snapshot = project.snapshot()?;
         Ok(project.review(&snapshot))
+    }
+
+    /// Verifies the element `id` by the AI: the commit, or the error text.
+    fn verify(&self, id: &str) -> TestResult<Result<String, String>> {
+        let project = Project::discover(&self.project)?;
+        Ok(project
+            .verify(&id.parse()?, Verifier::Ai)
+            .map(|commit| commit.to_string())
+            .map_err(|error| error.to_string()))
+    }
+
+    /// The text of the element file of `id`.
+    fn element_file(&self, id: &str) -> TestResult<String> {
+        Ok(fs::read_to_string(
+            self.project.join(format!("abyme/elements/{id}.md")),
+        )?)
     }
 
     /// The flags of the element `x`.
@@ -430,5 +446,185 @@ fn is_unavailable_when_git_fails() -> TestResult {
     fs::write(repository.top().join(".git/index"), "not an index")?;
 
     assert_eq!(repository.review()?, Err(Unavailable::GitFailed));
+    Ok(())
+}
+
+/// The refusal for files under the anchor of `x` that are not committed.
+fn uncommitted() -> Result<String, String> {
+    Err(
+        "element x cannot be verified: files under its anchor differ from HEAD \
+         or are untracked; they must be committed first"
+            .to_owned(),
+    )
+}
+
+#[test]
+fn verify_stamps_head_by_ai_and_changes_nothing_else() -> TestResult {
+    let repository = verified()?;
+    repository.write(b"crates/x/lib.rs", "fn a() { b() }\n")?;
+    let head = repository.commit()?;
+    let before = repository.element_file("x")?;
+    assert_eq!(repository.flags()?, [changed(&[b"crates/x/lib.rs"])]);
+
+    let verified = repository.verify("x")?;
+
+    assert_eq!(verified?, head);
+    let after = repository.element_file("x")?;
+    let without_stamp = |text: &str| -> String {
+        text.lines()
+            .filter(|line| !line.starts_with("verified"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    assert_eq!(without_stamp(&after), without_stamp(&before));
+    assert!(
+        after.contains(&format!("verified: \"{head}\"\nverified_by: \"ai\"\n")),
+        "{after}"
+    );
+    assert_eq!(repository.flags()?, []);
+    repository.write(b"crates/x/lib.rs", "fn a() { c() }\n")?;
+    assert_eq!(repository.flags()?, [changed(&[b"crates/x/lib.rs"])]);
+    Ok(())
+}
+
+#[test]
+fn verify_names_the_commit_of_a_detached_head() -> TestResult {
+    let repository = verified()?;
+    git(repository.top(), &["switch", "-q", "--detach"])?;
+    let head = git(repository.top(), &["rev-parse", "HEAD"])?;
+
+    assert_eq!(repository.verify("x")??, head);
+    Ok(())
+}
+
+#[test]
+fn verify_refuses_a_change_in_the_working_tree() -> TestResult {
+    let repository = verified()?;
+    repository.write(b"crates/x/lib.rs", "fn a() { b() }\n")?;
+    let before = repository.element_file("x")?;
+
+    assert_eq!(repository.verify("x")?, uncommitted());
+    assert_eq!(repository.element_file("x")?, before);
+    Ok(())
+}
+
+#[test]
+fn verify_refuses_a_staged_change() -> TestResult {
+    let repository = verified()?;
+    repository.write(b"crates/x/lib.rs", "fn a() { b() }\n")?;
+    git(repository.top(), &["add", "-A"])?;
+
+    assert_eq!(repository.verify("x")?, uncommitted());
+    Ok(())
+}
+
+#[test]
+fn verify_refuses_an_untracked_file() -> TestResult {
+    let repository = verified()?;
+    repository.write(b"crates/x/new.rs", "fn n() {}\n")?;
+
+    assert_eq!(repository.verify("x")?, uncommitted());
+    Ok(())
+}
+
+#[rstest]
+#[case::in_the_working_tree(false)]
+#[case::staged(true)]
+fn verify_refuses_a_removed_file(#[case] staged: bool) -> TestResult {
+    let repository = verified()?;
+    fs::remove_file(repository.project.join("crates/x/lib.rs"))?;
+    if staged {
+        git(repository.top(), &["add", "-A"])?;
+    }
+
+    assert_eq!(repository.verify("x")?, uncommitted());
+    Ok(())
+}
+
+#[test]
+fn verify_ignores_changes_outside_the_anchor_and_ignored_files() -> TestResult {
+    let repository = Repository::new()?;
+    repository.write(b".gitignore", "*.log\n")?;
+    repository.write(b"crates/x/lib.rs", "fn a() {}\n")?;
+    repository.element(Some("crates/x"), None)?;
+    repository.commit()?;
+    repository.write(b"crates/xy/lib.rs", "fn d() {}\n")?;
+    repository.write(b"crates/x/debug.log", "noise\n")?;
+
+    assert!(repository.verify("x")?.is_ok());
+    Ok(())
+}
+
+#[test]
+fn verify_keeps_the_flag_of_an_anchor_that_matches_no_file() -> TestResult {
+    let repository = Repository::new()?;
+    repository.element(Some("crates/gone"), None)?;
+    repository.commit()?;
+
+    assert!(repository.verify("x")?.is_ok());
+    assert_eq!(repository.flags()?, [Flag::AnchorMissing]);
+    Ok(())
+}
+
+#[test]
+fn verify_measures_passed_on_flags_from_the_new_stamp() -> TestResult {
+    let repository = verified()?;
+    let old = repository.commit()?;
+    repository.write(
+        b"abyme/elements/s.md",
+        &format!(
+            "---\nid: s\ntype: t\nname: S\nverified: \"{old}\"\nverified_by: person\n\
+             relations:\n  - {{kind: depends_on, to: x}}\n---\n"
+        ),
+    )?;
+    repository.write(b"crates/x/lib.rs", "fn a() { b() }\n")?;
+    repository.commit()?;
+    let project = Project::discover(&repository.project)?;
+    let review = project.review(&project.snapshot()?)?;
+    assert_eq!(review.flags(&"s".parse()?).len(), 1);
+
+    assert!(repository.verify("s")?.is_ok());
+
+    let review = project.review(&project.snapshot()?)?;
+    assert_eq!(review.flags(&"s".parse()?), []);
+    assert!(
+        repository
+            .element_file("s")?
+            .contains("verified_by: \"ai\"")
+    );
+    Ok(())
+}
+
+#[test]
+fn verify_refuses_without_a_commit_a_file_or_a_repository() -> TestResult {
+    let unborn = Repository::without_commit(Path::new(""))?;
+    unborn.element(None, None)?;
+    let committed = verified()?;
+    let outside = tempfile::tempdir()?;
+    Project::init(outside.path())?;
+    fs::create_dir_all(outside.path().join("abyme/elements"))?;
+    fs::write(
+        outside.path().join("abyme/elements/x.md"),
+        "---\nid: x\ntype: t\nname: X\n---\n",
+    )?;
+    let x: ElementId = "x".parse()?;
+
+    let refusals = [
+        unborn.verify("x")?,
+        committed.verify("y")?,
+        Project::discover(outside.path())?
+            .verify(&x, Verifier::Ai)
+            .map(|commit| commit.to_string())
+            .map_err(|error| error.to_string()),
+    ];
+
+    assert_eq!(
+        refusals,
+        [
+            Err("element x cannot be verified: the repository has no commit yet".to_owned()),
+            Err("no element has the ID y".to_owned()),
+            Err("element x cannot be verified: the project lies in no Git repository".to_owned()),
+        ]
+    );
     Ok(())
 }

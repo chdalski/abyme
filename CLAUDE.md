@@ -32,7 +32,7 @@ pnpm --dir crates/abyme-canvas/ui dev     # the UI's dev server, which the canva
 | `crates/abyme-core` | Operations on elements and boards: `apply` turns a request into the files to write, `Project` finds a project, initializes it, reads and writes its files, and asks Git through the `git` command line what changed under each anchor, from which `review` computes the review flags, and `outline` and `element_detail` render a board and an element as text for the AI |
 | `crates/abyme-index` | The search index: keeps a LanceDB table per project and model in the user's cache and ranks a project's elements for a query by full text and vectors; downloads a built-in embedding model's pinned files into that cache, checks them against the sizes and hashes in the source, and loads them with fastembed |
 | `crates/abyme-canvas` | The `abyme-canvas` binary, a Tauri app: started in a project, it lists the project's boards, shows the one the user opens as boxes on a React Flow canvas, writes a box the user drags through `apply`, which admits only `move_element`, and asks again whenever a file watcher sees the project's files change; its UI, React with Vite, lies in `ui/` |
-| `crates/abyme-mcp` | The `abyme-mcp` binary: `abyme-mcp init` makes a directory an Abyme project; without arguments it serves the tools `apply`, `read_board`, `read_element`, and `search` over MCP on stdio and downloads the project's embedding model in the background |
+| `crates/abyme-mcp` | The `abyme-mcp` binary: `abyme-mcp init` makes a directory an Abyme project; without arguments it serves the tools `apply`, `read_board`, `read_element`, `search`, and `verify` over MCP on stdio and downloads the project's embedding model in the background |
 
 ## Language
 

@@ -17,7 +17,7 @@ use std::process::{Command, Output, Stdio};
 
 use abyme_model::CommitId;
 
-use crate::review::{GitFacts, Since, Unavailable};
+use crate::review::{GitFacts, HeadFacts, Since, Unavailable};
 
 /// The environment every Git command runs with, after every `GIT_`
 /// variable is removed: no index writes, no prompts, no fetches, and no
@@ -41,24 +41,10 @@ pub fn facts(root: &Path, stamps: &BTreeSet<&CommitId>) -> Result<GitFacts, Unav
     let git = Git::find()?;
     let prefix = git.prefix(root)?;
     let tracked = paths(&git.success(root, &["ls-files", "-z", "--cached"])?)?;
-    let status = git.success(
-        root,
-        &[
-            "status",
-            "--porcelain=v2",
-            "-z",
-            "--untracked-files=all",
-            "--no-renames",
-            "--ignore-submodules=dirty",
-            "--no-show-stash",
-            "--",
-            ".",
-        ],
-    )?;
     let Status {
         uncommitted,
         untracked,
-    } = status_paths(&status, &prefix)?;
+    } = git.status(root, &prefix)?;
     let head = git.commit(root, "HEAD")?;
     let since = stamps
         .iter()
@@ -68,6 +54,26 @@ pub fn facts(root: &Path, stamps: &BTreeSet<&CommitId>) -> Result<GitFacts, Unav
         known: tracked.into_iter().chain(untracked).collect(),
         uncommitted,
         since,
+    })
+}
+
+/// What `verify` needs to know of the repository of the project at `root`:
+/// the commit HEAD names, and the paths that differ from that commit in the
+/// index or the working tree, or are untracked.
+pub fn head(root: &Path) -> Result<HeadFacts, Unavailable> {
+    let git = Git::find()?;
+    let prefix = git.prefix(root)?;
+    let Status { uncommitted, .. } = git.status(root, &prefix)?;
+    let Some(commit) = git.commit(root, "HEAD")? else {
+        return Ok(HeadFacts {
+            commit: None,
+            changed: uncommitted,
+        });
+    };
+    let staged = git.changed_in_index(root, &commit)?;
+    Ok(HeadFacts {
+        commit: Some(commit),
+        changed: staged.into_iter().chain(uncommitted).collect(),
     })
 }
 
@@ -172,6 +178,15 @@ impl Git {
         if head.is_none() || !self.knows(root, stamp)? || !self.is_ancestor(root, stamp)? {
             return Ok(Since::Unknown);
         }
+        Ok(Since::Changed(self.changed_in_index(root, stamp)?))
+    }
+
+    /// The paths in which the index differs from `commit`.
+    fn changed_in_index(
+        &self,
+        root: &Path,
+        commit: &CommitId,
+    ) -> Result<BTreeSet<Vec<u8>>, Unavailable> {
         let changed = self.success(
             root,
             &[
@@ -181,11 +196,31 @@ impl Git {
                 "-z",
                 "--no-renames",
                 "--relative",
-                stamp.as_str(),
+                commit.as_str(),
                 "--",
             ],
         )?;
-        Ok(Since::Changed(paths(&changed)?.into_iter().collect()))
+        Ok(paths(&changed)?.into_iter().collect())
+    }
+
+    /// The paths `git status` reports, relative to the project root at
+    /// `prefix` of the work tree.
+    fn status(&self, root: &Path, prefix: &[u8]) -> Result<Status, Unavailable> {
+        let status = self.success(
+            root,
+            &[
+                "status",
+                "--porcelain=v2",
+                "-z",
+                "--untracked-files=all",
+                "--no-renames",
+                "--ignore-submodules=dirty",
+                "--no-show-stash",
+                "--",
+                ".",
+            ],
+        )?;
+        status_paths(&status, prefix)
     }
 
     /// Whether the repository holds the commit `stamp`: only then does Git

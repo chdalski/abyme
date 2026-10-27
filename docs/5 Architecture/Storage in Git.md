@@ -39,7 +39,7 @@ project/
 
 ## Consequences
 
-- **Board and code in the same commit:** Changes to boards land in the same commit and pull request as the matching code change. Reviews see both. That is why the folder is visible and not hidden.
+- **Board and code in the same pull request:** Changes to boards land in the same pull request as the matching code change. `verify` stamps an element only once the code under its anchor is committed, so the stamp follows in a later commit of that pull request. Reviews see both. That is why the folder is visible and not hidden.
 - **Every branch has its own current state.** On a feature branch, the Current board shows the state of that branch.
 - **Delete instead of archive.** What is no longer true is removed. History comes from Git.
 - **The base snapshot** for [[Reconciliation#Direction of Changes|detecting the direction]] comes from the Git history.

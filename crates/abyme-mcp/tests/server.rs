@@ -287,7 +287,10 @@ async fn applies_operations_and_reads_the_board_back() -> TestResult {
     let tools = tokio::time::timeout(TIMEOUT, session.client.list_all_tools()).await??;
     let mut names: Vec<&str> = tools.iter().map(|tool| tool.name.as_ref()).collect();
     names.sort_unstable();
-    assert_eq!(names, ["apply", "read_board", "read_element", "search"]);
+    assert_eq!(
+        names,
+        ["apply", "read_board", "read_element", "search", "verify"]
+    );
 
     let applied = call(&session, "apply", create_board_with_element()).await??;
     assert_eq!(applied.is_error, Some(false), "{applied:?}");
@@ -1072,6 +1075,114 @@ async fn read_board_marks_the_elements_to_review() -> TestResult {
 }
 
 #[tokio::test]
+async fn verify_stamps_a_checked_element_and_clears_its_flag() -> TestResult {
+    let directory = repository_with_a_changed_anchor()?;
+    git(directory.path(), &["add", "-A"])?;
+    git(directory.path(), &["commit", "-q", "-m", "change x"])?;
+    let head = git(directory.path(), &["rev-parse", "HEAD"])?;
+    let config = tempfile::tempdir()?;
+    let session = start_with(
+        directory.path(),
+        &[("XDG_CONFIG_HOME", config.path().as_os_str())],
+    )
+    .await?;
+
+    let verified = call(&session, "verify", json!({"element": "x"})).await??;
+    let read = call(&session, "read_element", json!({"element": "x"})).await??;
+
+    assert_eq!(verified.is_error, Some(false), "{verified:?}");
+    assert_eq!(text(&verified), format!("Verified x against {head} by ai."));
+    assert!(
+        text(&read).contains(&format!("\nVerified: {head} by ai\nReview: none\n")),
+        "{}",
+        text(&read)
+    );
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+#[tokio::test]
+async fn verify_refuses_and_writes_nothing() -> TestResult {
+    let directory = repository_with_a_changed_anchor()?;
+    let empty_path = tempfile::tempdir()?;
+    let config = tempfile::tempdir()?;
+    let abyme = directory.path().join("abyme");
+    let before = files(&abyme)?;
+    let session = start_with(
+        directory.path(),
+        &[("XDG_CONFIG_HOME", config.path().as_os_str())],
+    )
+    .await?;
+    let cases = [
+        (
+            json!({"element": "x"}),
+            "element x cannot be verified: files under its anchor differ from HEAD or are untracked; they must be committed first",
+        ),
+        (
+            json!({"element": "nowhere"}),
+            "no element has the ID nowhere",
+        ),
+    ];
+
+    for (arguments, expected) in cases {
+        let refused = call(&session, "verify", arguments).await??;
+
+        assert_eq!(refused.is_error, Some(true), "{refused:?}");
+        assert_eq!(text(&refused), expected);
+    }
+    for arguments in [
+        json!({"element": "x", "commit": "0123456789abcdef0123456789abcdef01234567", "by": "person"}),
+        json!({"element": "../x"}),
+    ] {
+        let refused = call(&session, "verify", arguments).await??;
+
+        assert_eq!(refused.is_error, Some(true), "{refused:?}");
+        assert!(
+            text(&refused).starts_with("invalid arguments: "),
+            "{refused:?}"
+        );
+    }
+    assert_eq!(files(&abyme)?, before);
+    assert_only_protocol_messages(&finish(session).await?);
+
+    let session = start_with(directory.path(), &[("PATH", empty_path.path().as_os_str())]).await?;
+    let refused = call(&session, "verify", json!({"element": "x"})).await??;
+    assert_eq!(
+        text(&refused),
+        "element x cannot be verified: git could not be run"
+    );
+    assert_eq!(files(&abyme)?, before);
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+#[tokio::test]
+async fn verify_refuses_in_a_repository_without_a_commit() -> TestResult {
+    let directory = project()?;
+    git(directory.path(), &["init", "-q"])?;
+    write_element(directory.path(), "x", None, None)?;
+    let abyme = directory.path().join("abyme");
+    let before = files(&abyme)?;
+    let config = tempfile::tempdir()?;
+    let session = start_with(
+        directory.path(),
+        &[("XDG_CONFIG_HOME", config.path().as_os_str())],
+    )
+    .await?;
+
+    let refused = call(&session, "verify", json!({"element": "x"})).await??;
+
+    assert_eq!(refused.is_error, Some(true), "{refused:?}");
+    assert_eq!(
+        text(&refused),
+        "element x cannot be verified: the repository has no commit yet"
+    );
+    assert_eq!(files(&abyme)?, before);
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+#[tokio::test]
 async fn read_element_asks_the_project_repository_whatever_git_variables_say() -> TestResult {
     let directory = repository_with_a_changed_anchor()?;
     let other = tempfile::tempdir()?;
@@ -1587,7 +1698,7 @@ async fn no_tool_takes_a_path() -> TestResult {
         let expected: &[&str] = match tool.name.as_ref() {
             "apply" => &["operations"],
             "read_board" => &["board", "coordinates"],
-            "read_element" => &["element"],
+            "read_element" | "verify" => &["element"],
             "search" => &["query"],
             other => return Err(format!("unexpected tool {other}").into()),
         };

@@ -48,7 +48,7 @@ Changes in the repo are detected without source-specific code, through anchors a
 1. Every representation carries a [[Checks#Verification Stamp|verification stamp]], such as “verified against commit 3f2a9c1…”.
 2. Git lists the files that have changed since: those whose committed or staged state differs from the stamp's commit, those changed in the working tree, and new files Git does not track and does not ignore. A renamed file counts as removed at its old path and added at its new one.
 3. Abyme matches these paths against the anchors, byte for byte. If one lies under an anchor, the element gets a review flag, a task. So does an element with an anchor but no stamp, an element whose stamp names a commit the repository does not know or that is no ancestor of HEAD, and an element whose anchor matches no file Git tracks or lists as untracked. An element whose relation points to an element with an anchor is flagged too when files under that anchor changed since its own stamp, one hop and by the relation's kind (see [[Relations]]).
-4. The AI rereads the affected places, updates the element, and sets a new verification stamp.
+4. The AI rereads the affected places, updates the element, and calls `verify`, which stamps it with the commit HEAD names. `verify` refuses while files under the anchor are not committed, so the stamp names a commit that holds what was checked.
 
 **Example:** Someone changes `crates/payment-service/src/refund.rs`. The file lies under the anchor `crates/payment-service`, so “Payment Service” is flagged.
 

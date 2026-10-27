@@ -35,7 +35,7 @@ Flags travel **one hop**: an element whose relation points to an element with an
 
 ## Verification Stamp
 
-Every representation carries “last verified against commit X, by the AI or a person”, and a native element can carry it too, as the base for the flags its relations pass on. That way the AI knows how fresh a statement is instead of trusting it blindly. A change of the element's content through `apply`, its relations included, removes the stamp, so a stamp never vouches for text nobody verified. The verification stamp is also the starting point for [[Reconciliation#Detecting Changes|detecting changes]].
+Every representation carries “last verified against commit X, by the AI or a person”, and a native element can carry it too, as the base for the flags its relations pass on. That way the AI knows how fresh a statement is instead of trusting it blindly. A change of the element's content through `apply`, its relations included, removes the stamp, so a stamp never vouches for text nobody verified. Only the tool `verify` sets a stamp, with the commit HEAD names, and only while the files under the element's anchor are committed. The verification stamp is also the starting point for [[Reconciliation#Detecting Changes|detecting changes]].
 
 ## Reports
 

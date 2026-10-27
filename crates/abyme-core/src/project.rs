@@ -14,11 +14,11 @@ use std::fmt;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use abyme_model::{BoardError, CommitId, Element, ElementError, shown};
+use abyme_model::{BoardError, CommitId, Element, ElementError, ElementId, Verifier, shown};
 
-use crate::apply::{ApplyError, Created, Snapshot};
+use crate::apply::{ApplyError, Created, Snapshot, Write};
 use crate::operation::{LocalKey, Operation};
-use crate::review::{Review, Unavailable, review};
+use crate::review::{Review, Unavailable, VerifyProblem, review, stamped};
 
 mod discovery;
 mod files;
@@ -128,6 +128,9 @@ pub enum ProjectError {
     /// The request is rejected; nothing is written.
     #[error(transparent)]
     Rejected(#[from] ApplyError),
+    /// An element cannot be verified; nothing is written.
+    #[error(transparent)]
+    NotVerified(#[from] VerifyProblem),
     /// The request would write a file larger than the reader accepts;
     /// nothing is written.
     #[error("{} would have {size} bytes, more than {limit}", .path.display())]
@@ -239,6 +242,29 @@ impl Project {
             .collect();
         let facts = git::facts(&self.root, &stamps)?;
         Ok(review(snapshot, &facts))
+    }
+
+    /// Stamps the element `id` as verified by `by` against the commit HEAD
+    /// names, and returns that commit. Git is asked under the project's
+    /// lock, right before the element file is written, and only the stamp
+    /// changes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ProjectError::NotVerified`] when the element has no file,
+    /// the repository has no commit, files under the element's anchor
+    /// differ from HEAD or are untracked, or Git cannot be asked; nothing
+    /// is written then. Other errors come from reading or writing the
+    /// files.
+    pub fn verify(&self, id: &ElementId, by: Verifier) -> Result<CommitId, ProjectError> {
+        store::write_locked(&self.root, |snapshot| {
+            let head = git::head(&self.root).map_err(|reason| VerifyProblem::Unavailable {
+                element: id.clone(),
+                reason,
+            })?;
+            let (element, commit) = stamped(snapshot, id, &head, by)?;
+            Ok((vec![Write::Element(element)], commit))
+        })
     }
 }
 
