@@ -61,7 +61,7 @@ fn snapshot(title: &str, elements: Vec<Element>, missing: &[&str]) -> Snapshot {
 }
 
 fn outline_of(snapshot: &Snapshot) -> String {
-    outline(snapshot, &"b".parse().unwrap(), Geometry::Hidden).unwrap()
+    outline(snapshot, &"b".parse().unwrap(), Geometry::Hidden, None).unwrap()
 }
 
 #[test]
@@ -136,6 +136,7 @@ fn names_an_unknown_board() {
         &Snapshot::default(),
         &"nowhere".parse().unwrap(),
         Geometry::Hidden,
+        None,
     )
     .unwrap_err();
 
@@ -395,7 +396,7 @@ fn lists_elements_in_the_given_order_and_marks_missing_ones() {
         .collect();
 
     assert_eq!(
-        element_list(&snapshot, &ids),
+        element_list(&snapshot, &ids, None),
         "c     t  C\n\
          a     t  A\n\
          gone  ⚠ missing\n\
@@ -408,14 +409,17 @@ fn lists_an_element_given_twice_twice() {
     let snapshot = snapshot("Board", vec![element("a", "t", "A", None)], &[]);
     let id: ElementId = "a".parse().unwrap();
 
-    assert_eq!(element_list(&snapshot, [&id, &id]), "a  t  A\na  t  A\n");
+    assert_eq!(
+        element_list(&snapshot, [&id, &id], None),
+        "a  t  A\na  t  A\n"
+    );
 }
 
 #[test]
 fn lists_nothing_for_no_ids() {
     let snapshot = snapshot("Board", vec![element("a", "t", "A", None)], &[]);
 
-    assert_eq!(element_list(&snapshot, []), "");
+    assert_eq!(element_list(&snapshot, [], None), "");
 }
 
 #[test]
@@ -423,7 +427,10 @@ fn escapes_element_text_in_the_list() {
     let snapshot = snapshot("Board", vec![element("a", "t", "x\ny\u{202e}z", None)], &[]);
     let id: ElementId = "a".parse().unwrap();
 
-    assert_eq!(element_list(&snapshot, [&id]), "a  t  x\\ny\\u{202e}z\n");
+    assert_eq!(
+        element_list(&snapshot, [&id], None),
+        "a  t  x\\ny\\u{202e}z\n"
+    );
 }
 
 fn sized(x: i32, y: i32, width: u32, height: u32) -> Rect {
@@ -447,7 +454,7 @@ fn with_rect(mut snapshot: Snapshot, id: &str, rect: Rect) -> Snapshot {
 }
 
 fn outline_with_geometry(snapshot: &Snapshot) -> String {
-    outline(snapshot, &"b".parse().unwrap(), Geometry::Shown).unwrap()
+    outline(snapshot, &"b".parse().unwrap(), Geometry::Shown, None).unwrap()
 }
 
 #[test]
@@ -1142,4 +1149,92 @@ fn escapes_hostile_file_names_in_a_review() {
         ),
         "{detail}"
     );
+}
+
+/// A snapshot whose board `b` places `a`, anchored on `crates/a` and
+/// stamped, `b`, stamped and using `a`, and `c`, without flags, with the
+/// facts in which `crates/a/lib.rs` changed since the stamp; and its review.
+fn marked() -> (Snapshot, Review) {
+    let a = anchored(
+        element("a", "t", "A", None),
+        "crates/a",
+        Some((STAMP, Verifier::Ai)),
+    );
+    let b = anchored(
+        related(
+            element("b", "t", "B", Some("S")),
+            &[(RelationKind::Uses, "a", None)],
+        ),
+        "crates/b",
+        Some((STAMP, Verifier::Ai)),
+    );
+    let snapshot = snapshot("Board", vec![a, b, element("c", "t", "C", None)], &[]);
+    let review = review(
+        &snapshot,
+        &facts(
+            &[b"crates/a/lib.rs", b"crates/b/lib.rs"],
+            &[b"crates/a/lib.rs"],
+        ),
+    );
+    (snapshot, review)
+}
+
+#[test]
+fn marks_the_highest_priority_last_on_each_element_line() {
+    let (snapshot, review) = marked();
+
+    let outline = outline(
+        &snapshot,
+        &"b".parse().unwrap(),
+        Geometry::Hidden,
+        Some(&review),
+    )
+    .unwrap();
+
+    assert_eq!(
+        outline,
+        "Board: b · Board\n\
+         \n\
+         a  t  A     ⚠ task\n\
+         b  t  B  S  ⚠ hint\n\
+         c  t  C\n\
+         \n\
+         b → a  uses\n"
+    );
+}
+
+#[test]
+fn marks_search_lines_like_board_lines() {
+    let (snapshot, review) = marked();
+    let ids: Vec<ElementId> = ["c", "a"].iter().map(|id| id.parse().unwrap()).collect();
+
+    assert_eq!(
+        element_list(&snapshot, &ids, Some(&review)),
+        "c  t  C\na  t  A    ⚠ task\n"
+    );
+}
+
+#[test]
+fn marks_nothing_without_a_review() {
+    let (snapshot, _) = marked();
+
+    let outline = outline(&snapshot, &"b".parse().unwrap(), Geometry::Hidden, None).unwrap();
+
+    assert!(!outline.contains('⚠'), "{outline}");
+}
+
+#[test]
+fn keeps_the_marker_last_when_lines_show_coordinates() {
+    let (snapshot, review) = marked();
+
+    let outline = outline(
+        &snapshot,
+        &"b".parse().unwrap(),
+        Geometry::Shown,
+        Some(&review),
+    )
+    .unwrap();
+
+    let line = outline.lines().find(|line| line.starts_with("a ")).unwrap();
+    assert_eq!(line, "a  @0,0 1x1  t  A     ⚠ task");
 }

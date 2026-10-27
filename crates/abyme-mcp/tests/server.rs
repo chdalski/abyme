@@ -34,6 +34,9 @@ const EXIT_TIMEOUT: Duration = Duration::from_secs(10);
 
 const BINARY: &str = env!("CARGO_BIN_EXE_abyme-mcp");
 
+/// The line that starts a reply of a read tool in a project outside Git.
+const NO_REPOSITORY: &str = "Review flags unavailable: the project lies in no Git repository\n";
+
 /// The environment variables that would lead the server to the user's cache
 /// or through a proxy; ureq reads the proxy variables in both cases.
 const REMOVED_VARIABLES: [&str; 10] = [
@@ -297,7 +300,8 @@ async fn applies_operations_and_reads_the_board_back() -> TestResult {
     assert_eq!(read.is_error, Some(false), "{read:?}");
     assert_eq!(
         text(&read),
-        "Board: container-level · Container Level\n\
+        "Review flags unavailable: the project lies in no Git repository\n\
+         Board: container-level · Container Level\n\
          \n\
          payment-service  c4/container  Payment Service  Payments through Stripe\n"
     );
@@ -507,7 +511,8 @@ async fn read_board_shows_relations_with_their_labels_escaped_onto_one_line() ->
     assert_eq!(read.is_error, Some(false), "{read:?}");
     assert_eq!(
         text(&read),
-        "Board: container-level · Container Level\n\
+        "Review flags unavailable: the project lies in no Git repository\n\
+         Board: container-level · Container Level\n\
          \n\
          orders-db        c4/datastore  Orders DB\n\
          payment-service  c4/container  Payment Service  Payments through Stripe\n\
@@ -984,6 +989,88 @@ async fn read_element_shows_flags_passed_on_along_relations() -> TestResult {
     Ok(())
 }
 
+/// A project in a Git repository with the elements `changed`, anchored on
+/// `crates/c`, whose file `leak-canary.txt` changed since its stamp,
+/// `hinted`, which uses `changed`, `clean`, anchored on `crates/k` and
+/// unchanged, and `calm`, without flags; the board `b` places them and the
+/// ID `ghost`, which has no file.
+fn repository_with_marked_elements() -> TestResult<tempfile::TempDir> {
+    let directory = project()?;
+    let root = directory.path();
+    git(root, &["init", "-q"])?;
+    for file in ["crates/c/leak-canary.txt", "crates/k/lib.rs"] {
+        fs::create_dir_all(root.join(file).parent().ok_or("no parent")?)?;
+        fs::write(root.join(file), "a\n")?;
+    }
+    git(root, &["add", "-A"])?;
+    git(root, &["commit", "-q", "-m", "add"])?;
+    let stamp = git(root, &["rev-parse", "HEAD"])?;
+    write_element(root, "changed", Some("crates/c"), Some(&stamp))?;
+    write_element(root, "clean", Some("crates/k"), Some(&stamp))?;
+    write_element(root, "calm", None, None)?;
+    fs::write(
+        root.join("abyme/elements/hinted.md"),
+        format!(
+            "---\nid: hinted\ntype: t\nname: N\nverified: \"{stamp}\"\nverified_by: ai\n\
+             relations:\n  - {{kind: uses, to: changed}}\n---\n"
+        ),
+    )?;
+    let placements: Vec<String> = ["calm", "changed", "clean", "ghost", "hinted"]
+        .iter()
+        .enumerate()
+        .map(|(row, id)| {
+            format!(
+                "{{\"element\": \"{id}\", \"x\": 0, \"y\": {}, \"width\": 180, \"height\": 90}}",
+                row * 100
+            )
+        })
+        .collect();
+    fs::create_dir_all(root.join("abyme/boards"))?;
+    fs::write(
+        root.join("abyme/boards/b.board.json"),
+        format!(
+            "{{\"format\": 1, \"id\": \"b\", \"title\": \"B\", \"placements\": [{}]}}\n",
+            placements.join(", ")
+        ),
+    )?;
+    fs::write(root.join("crates/c/leak-canary.txt"), "b\n")?;
+    Ok(directory)
+}
+
+#[tokio::test]
+async fn read_board_marks_the_elements_to_review() -> TestResult {
+    let directory = repository_with_marked_elements()?;
+    let config = tempfile::tempdir()?;
+    let session = start_with(
+        directory.path(),
+        &[("XDG_CONFIG_HOME", config.path().as_os_str())],
+    )
+    .await?;
+
+    let read = call(&session, "read_board", json!({"board": "b"})).await??;
+    let detail = call(&session, "read_element", json!({"element": "changed"})).await??;
+
+    assert_eq!(
+        text(&read),
+        "Board: b · B\n\
+         \n\
+         calm     t  N\n\
+         changed  t  N    ⚠ task\n\
+         clean    t  N\n\
+         ghost    ⚠ missing\n\
+         hinted   t  N    ⚠ hint\n\
+         \n\
+         hinted → changed  uses\n"
+    );
+    assert!(
+        text(&detail).contains("leak-canary.txt"),
+        "{}",
+        text(&detail)
+    );
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
 #[tokio::test]
 async fn read_element_asks_the_project_repository_whatever_git_variables_say() -> TestResult {
     let directory = repository_with_a_changed_anchor()?;
@@ -1092,7 +1179,10 @@ async fn apply_deletes_an_element_and_read_board_no_longer_shows_it() -> TestRes
     assert_eq!(deleted.is_error, Some(false), "{deleted:?}");
 
     let read = call(&session, "read_board", json!({"board": "container-level"})).await??;
-    assert_eq!(text(&read), "Board: container-level · Container Level\n\n");
+    assert_eq!(
+        text(&read),
+        "Review flags unavailable: the project lies in no Git repository\nBoard: container-level · Container Level\n\n"
+    );
     assert!(
         !directory
             .path()
@@ -1275,13 +1365,15 @@ async fn read_board_shows_coordinates_only_on_request() -> TestResult {
     assert_eq!(with.is_error, Some(false), "{with:?}");
     assert_eq!(
         text(&with),
-        "Board: container-level · Container Level\n\
+        "Review flags unavailable: the project lies in no Git repository\n\
+         Board: container-level · Container Level\n\
          \n\
          payment-service  @400,200 180x90  c4/container  Payment Service  Payments through Stripe\n"
     );
     assert_eq!(
         text(&without),
-        "Board: container-level · Container Level\n\
+        "Review flags unavailable: the project lies in no Git repository\n\
+         Board: container-level · Container Level\n\
          \n\
          payment-service  c4/container  Payment Service  Payments through Stripe\n"
     );
@@ -1556,10 +1648,53 @@ async fn search_finds_elements_by_word_and_by_meaning_with_the_real_model() -> T
         text(&by_meaning)
     );
     assert!(
-        text(&by_word).starts_with("payment-service  "),
+        text(&by_word).starts_with(&format!("{NO_REPOSITORY}payment-service  ")),
         "{by_word:?}"
     );
-    assert!(text(&by_meaning).starts_with("mailer  "), "{by_meaning:?}");
+    assert!(
+        text(&by_meaning).starts_with(&format!("{NO_REPOSITORY}mailer  ")),
+        "{by_meaning:?}"
+    );
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+/// Search marks its lines like a board outline, with the real model.
+#[tokio::test]
+#[ignore = "downloads the real model from Hugging Face"]
+async fn search_marks_the_elements_to_review_with_the_real_model() -> TestResult {
+    let directory = repository_with_marked_elements()?;
+    let cache = tempfile::tempdir()?;
+    let config = tempfile::tempdir()?;
+    let session = start_with(
+        directory.path(),
+        &[
+            ("XDG_CACHE_HOME", cache.path().as_os_str()),
+            ("XDG_CONFIG_HOME", config.path().as_os_str()),
+        ],
+    )
+    .await?;
+
+    let found = call_within(
+        &session,
+        "search",
+        json!({"query": "N"}),
+        Duration::from_secs(600),
+    )
+    .await??;
+
+    let reply = text(&found);
+    eprintln!("{reply}");
+    let line = |id: &str| {
+        reply
+            .lines()
+            .find(|line| line.starts_with(&format!("{id} ")))
+            .unwrap_or_default()
+            .to_owned()
+    };
+    assert!(line("changed").ends_with("⚠ task"), "{reply}");
+    assert!(line("hinted").ends_with("⚠ hint"), "{reply}");
+    assert!(!line("calm").contains('⚠'), "{reply}");
     assert_only_protocol_messages(&finish(session).await?);
     Ok(())
 }
@@ -1609,7 +1744,10 @@ async fn search_finds_an_english_element_through_a_german_query_with_the_multili
 
     eprintln!("Rundbriefe an Kunden verschicken:\n{}", text(&found));
     assert_eq!(found.is_error, Some(false), "{found:?}");
-    assert!(text(&found).starts_with("mailer  "), "{found:?}");
+    assert!(
+        text(&found).starts_with(&format!("{NO_REPOSITORY}mailer  ")),
+        "{found:?}"
+    );
     let models: Vec<String> = fs::read_dir(cache.path().join("abyme/models"))?
         .map(|entry| entry.map(|entry| entry.file_name().to_string_lossy().into_owned()))
         .collect::<Result<_, _>>()?;

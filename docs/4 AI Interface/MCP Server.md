@@ -54,7 +54,7 @@ Above: context · Below: payment-components ▸, checkout-components ▸
 
 web-shop          container  React     storefront
 checkout-service  container  Kotlin    order completion
-payment-service   container  Go        Stripe payments   ⚠ review
+payment-service   container  Go        Stripe payments   ⚠ task
 orders-db         datastore  Postgres
 
 checkout-service → orders-db        uses  writes orders
@@ -70,6 +70,7 @@ As a rough estimate, this takes 5 to 10 times fewer tokens than the same board a
 - **One line per element:** Text from boards and elements, relation labels included, stays on its line. Backslashes, line breaks, control characters, and invisible format characters are written as escapes such as `\\`, `\n`, and `\u{202e}`, so content can neither break the outline nor hide text from a reader.
 - **Relations as arrows:** After the elements and a blank line, one line per relation between two elements on the board: source → target, kind, and label. They come by source, then by kind and target. Relations to elements on other boards are left out.
 - **Missing elements:** A placement whose element file does not exist, for example after a merge, shows its ID and `⚠ missing`.
+- **Markers:** An element line ends with `⚠ task` or `⚠ hint` when the element has [[Checks|review flags]], for their highest priority; `read_element` names them, and `search` marks its lines the same way. When the project lies in no Git repository, `git` cannot be run, or Git fails, the answer starts with `Review flags unavailable:` and the reason, and no line is marked.
 - **Coordinates** only on request, when the AI wants to arrange elements: `read_board` with `"coordinates": true` shows each element's position and size right after its ID, such as `@400,200 180x90`.
 - **Geometry is translated into relations.** “Lies in frame X” is reliable and important. “Lies near Y” is only a hint.
 - **Summaries** of boards are maintained automatically. When the content below them changes, they get a review flag themselves.

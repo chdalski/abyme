@@ -10,8 +10,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use abyme_core::{
-    Created, Geometry, LocalKey, Operations, Project, Snapshot, element_detail, element_list,
-    outline,
+    Created, Geometry, LocalKey, Operations, Project, Review, Snapshot, Unavailable,
+    element_detail, element_list, outline,
 };
 use abyme_index::{Index, MAX_QUERY_CHARS, spec};
 use abyme_model::{BoardId, ElementId, shown};
@@ -185,11 +185,13 @@ impl AbymeServer {
 
     #[tool(
         description = "Returns a board of the Abyme project as an outline: a header with the board's ID and \
-            title, then one line per element with its ID, type, name, and summary, then, after a blank line, \
+            title, then one line per element with its ID, type, name, and summary, and last ⚠ task or \
+            ⚠ hint when the element has review flags (read_element names them), then, after a blank line, \
             one line per relation between two elements on the board, as source → target, kind, and label. \
             Text from the repository, relation labels included, is escaped onto one line. With coordinates \
             true, each element line also shows the element's position and size right after its ID, as \
-            @x,y WIDTHxHEIGHT.",
+            @x,y WIDTHxHEIGHT. When Git cannot be asked, the reply starts with a line Review flags \
+            unavailable: and the reason, and no line is marked.",
         input_schema = schema_for_type::<ReadBoardArguments>()
     )]
     async fn read_board(
@@ -202,15 +204,19 @@ impl AbymeServer {
         };
         let start = self.start.clone();
         on_core(move || {
-            let (_, snapshot) = read_project(&start)?;
+            let (project, snapshot) = read_project(&start)?;
+            let review = project.review(&snapshot);
             let geometry = if arguments.coordinates {
                 Geometry::Shown
             } else {
                 Geometry::Hidden
             };
-            let text = outline(&snapshot, &arguments.board, geometry)
+            let text = outline(&snapshot, &arguments.board, geometry, review.as_ref().ok())
                 .map_err(|error| error.to_string())?;
-            bounded(&format!("the outline of board {}", arguments.board), text)
+            bounded(
+                &format!("the outline of board {}", arguments.board),
+                format!("{}{text}", unavailable_line(&review)),
+            )
         })
         .await
     }
@@ -243,10 +249,7 @@ impl AbymeServer {
             let review = project.review(&snapshot);
             let detail = element_detail(&snapshot, &arguments.element, review.as_ref().ok())
                 .map_err(|error| error.to_string())?;
-            let text = match review {
-                Ok(_) => detail,
-                Err(reason) => format!("{UNAVAILABLE}{reason}\n{detail}"),
-            };
+            let text = format!("{}{detail}", unavailable_line(&review));
             bounded(
                 &format!("the detail of element {}", arguments.element),
                 text,
@@ -258,9 +261,11 @@ impl AbymeServer {
     #[tool(
         description = "Searches the elements of the Abyme project by the words they contain and by what \
             they are about, and returns the 10 that match the query best, best first: one line per element \
-            with its ID, type, name, and summary, as in a board outline. Text from the repository is \
-            escaped onto one line. The first search after the server starts, and the first after the \
-            project file names another embedding model, may wait until that model is downloaded.",
+            with its ID, type, name, and summary, and the ⚠ task or ⚠ hint marker, as in a board outline. \
+            Text from the repository is escaped onto one line. When Git cannot be asked, the reply starts \
+            with a line Review flags unavailable: and the reason, and no line is marked. The first search \
+            after the server starts, and the first after the project file names another embedding model, \
+            may wait until that model is downloaded.",
         input_schema = schema_for_type::<SearchArguments>()
     )]
     async fn search(
@@ -292,10 +297,18 @@ impl AbymeServer {
                         .map_err(|error| error.to_string())
                 })
                 .map_err(|message| shown(&message, SHOWN_LIMIT))?;
+            let review = project.review(&snapshot);
+            let note = unavailable_line(&review);
             if found.is_empty() {
-                return Ok(NO_MATCH.to_owned());
+                return Ok(format!("{note}{NO_MATCH}"));
             }
-            bounded("the search result", element_list(&snapshot, &found))
+            bounded(
+                "the search result",
+                format!(
+                    "{note}{}",
+                    element_list(&snapshot, &found, review.as_ref().ok())
+                ),
+            )
         })
         .await
     }
@@ -326,6 +339,16 @@ fn parsed<T: DeserializeOwned>(arguments: JsonObject) -> Result<T, CallToolResul
             shown(&error.to_string(), SHOWN_LIMIT)
         ))])
     })
+}
+
+/// The line that starts a reply when the review flags are unavailable, or
+/// nothing.
+fn unavailable_line(review: &Result<Review, Unavailable>) -> String {
+    review
+        .as_ref()
+        .err()
+        .map(|reason| format!("{UNAVAILABLE}{reason}\n"))
+        .unwrap_or_default()
 }
 
 /// The project the directory `start` lies in, with all of its elements and

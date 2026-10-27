@@ -46,10 +46,11 @@ pub struct UnknownElement(pub ElementId);
 ///
 /// The outline has a header line with the board's ID and title, a blank
 /// line, and one line per placed element, ordered by ID, with the element's
-/// ID, type, name, and summary. A placement whose element is missing shows
-/// its ID and `⚠ missing`. With [`Geometry::Shown`], each line also shows
-/// the placement's position and size from the board file, right after the
-/// ID.
+/// ID, type, name, and summary, and, given a `review`, `⚠ task` or
+/// `⚠ hint` for the highest priority of the element's flags. A placement
+/// whose element is missing shows its ID and `⚠ missing`. With
+/// [`Geometry::Shown`], each line also shows the placement's position and
+/// size from the board file, right after the ID.
 ///
 /// If relations connect elements on the board, a blank line and one line
 /// per relation follow: `<from> → <to>`, the kind, and the label, if any.
@@ -64,6 +65,7 @@ pub fn outline(
     snapshot: &Snapshot,
     board: &BoardId,
     geometry: Geometry,
+    review: Option<&Review>,
 ) -> Result<String, UnknownBoard> {
     let found = snapshot
         .boards
@@ -73,7 +75,7 @@ pub fn outline(
         .placements
         .iter()
         .map(|(id, rect)| {
-            let mut columns = row(id, snapshot.elements.get(id));
+            let mut columns = row(id, snapshot.elements.get(id), review);
             if geometry == Geometry::Shown {
                 columns.insert(1, position(rect));
             }
@@ -99,7 +101,8 @@ pub fn outline(
 ///
 /// The lines come in the given order, without a header: one line per ID,
 /// each ending in a line feed, with the element's ID, type, name, and
-/// summary. An ID whose element is missing shows `⚠ missing`. An ID given
+/// summary, and the marker of its review flags as in [`outline`]. An ID
+/// whose element is missing shows `⚠ missing`. An ID given
 /// twice is rendered twice; limiting and deduplicating is the caller's
 /// business.
 ///
@@ -108,10 +111,11 @@ pub fn outline(
 pub fn element_list<'a>(
     snapshot: &Snapshot,
     ids: impl IntoIterator<Item = &'a ElementId>,
+    review: Option<&Review>,
 ) -> String {
     let rows: Vec<Vec<String>> = ids
         .into_iter()
-        .map(|id| row(id, snapshot.elements.get(id)))
+        .map(|id| row(id, snapshot.elements.get(id), review))
         .collect();
     lines(&rows)
 }
@@ -319,7 +323,7 @@ fn relation_row(
 }
 
 /// The columns of one placement's line; the last one is never padded.
-fn row(id: &ElementId, element: Option<&Element>) -> Vec<String> {
+fn row(id: &ElementId, element: Option<&Element>, review: Option<&Review>) -> Vec<String> {
     let Some(element) = element else {
         return vec![id.to_string(), MISSING_MARKER.to_owned()];
     };
@@ -328,8 +332,23 @@ fn row(id: &ElementId, element: Option<&Element>) -> Vec<String> {
         one_line(element.type_ref().as_str()),
         one_line(element.name()),
     ];
-    columns.extend(element.summary().map(one_line));
+    let summary = element.summary().map(one_line);
+    match review.and_then(|review| review.priority(id)) {
+        // An empty summary keeps the marker in the marker column.
+        Some(priority) => {
+            columns.extend([summary.unwrap_or_default(), marker(priority).to_owned()]);
+        }
+        None => columns.extend(summary),
+    }
     columns
+}
+
+/// What an element line shows for the highest priority of its flags.
+const fn marker(priority: Priority) -> &'static str {
+    match priority {
+        Priority::Task => "⚠ task",
+        Priority::Hint => "⚠ hint",
+    }
 }
 
 /// The width of each column but the last of any row: its widest value, at

@@ -45,7 +45,7 @@ the AI can keep the boards honest from one session to the next.
 - [x] One helper reads the project for the MCP read tools
 - [x] Review flags of an element from Git, in `read_element`
 - [x] Flags passed one hop along relations
-- [ ] Markers in `read_board` and `search`
+- [x] Markers in `read_board` and `search`
 - [ ] One locked write path in the store
 - [ ] The `verify` tool
 - [ ] The `status` tool
@@ -175,18 +175,18 @@ so the AI sees it before it reads an element.
 
 Review path: Security-Hybrid
 
-- [ ] Every element line of a board outline and of search results ends
+- [x] Every element line of a board outline and of search results ends
       with `⚠ task` or `⚠ hint` for the element's highest priority, or
       with no marker when it has no flag.
-- [ ] When the flags are unavailable, `read_board` and `search` answer as
+- [x] When the flags are unavailable, `read_board` and `search` answer as
       before with the first line `Review flags unavailable: ` and the
       reason.
-- [ ] The descriptions of `read_board` and `search`, the MCP README, and
+- [x] The descriptions of `read_board` and `search`, the MCP README, and
       MCP Server's board outline describe the markers and the line for
       unavailable flags.
-- [ ] An MCP test in a temporary Git repository shows both markers in
+- [x] An MCP test in a temporary Git repository shows both markers in
       `read_board` and `search`.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
       and `cargo fmt --all --check` pass.
 
 ### Task 6: One locked write path in the store

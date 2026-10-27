@@ -26,7 +26,7 @@ fn outlines_a_board_written_by_apply_and_marks_a_deleted_element() {
     let board: BoardId = "container-level".parse().unwrap();
 
     assert_eq!(
-        outline(&project.snapshot().unwrap(), &board, Geometry::Hidden).unwrap(),
+        outline(&project.snapshot().unwrap(), &board, Geometry::Hidden, None).unwrap(),
         "Board: container-level · Container Level\n\
          \n\
          orders-db        c4/datastore  Orders DB\n\
@@ -36,7 +36,7 @@ fn outlines_a_board_written_by_apply_and_marks_a_deleted_element() {
     fs::remove_file(directory.path().join("abyme/elements/orders-db.md")).unwrap();
 
     assert_eq!(
-        outline(&project.snapshot().unwrap(), &board, Geometry::Hidden).unwrap(),
+        outline(&project.snapshot().unwrap(), &board, Geometry::Hidden, None).unwrap(),
         "Board: container-level · Container Level\n\
          \n\
          orders-db        ⚠ missing\n\

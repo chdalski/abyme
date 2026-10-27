@@ -3,6 +3,7 @@
 
 use std::error::Error;
 use std::fs;
+use std::process::Command;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -197,6 +198,22 @@ async fn call(
         .await?)
 }
 
+/// The line that starts a reply of a read tool in a project outside Git.
+const NO_REPOSITORY: &str = "Review flags unavailable: the project lies in no Git repository\n";
+
+/// The search results of a reply in a project outside Git, which starts
+/// with the line that names why there are no review flags, and marks no line.
+fn results(result: &CallToolResult) -> TestResult<String> {
+    let text = text(result);
+    let results = text
+        .strip_prefix(NO_REPOSITORY)
+        .ok_or_else(|| format!("no line for unavailable flags: {text:?}"))?;
+    if results.contains('⚠') {
+        return Err(format!("a line is marked: {text:?}").into());
+    }
+    Ok(results.to_owned())
+}
+
 /// The text of a tool result.
 fn text(result: &CallToolResult) -> String {
     result
@@ -296,12 +313,12 @@ async fn search_ranks_the_matching_element_first_and_returns_at_most_ten() -> Te
 
     assert_eq!(stripe.is_error, Some(false), "{stripe:?}");
     assert!(
-        text(&stripe).starts_with("payment-service  c4/container  Payment Service  "),
+        results(&stripe)?.starts_with("payment-service  c4/container  Payment Service  "),
         "{}",
         text(&stripe)
     );
     assert_eq!(jobs.is_error, Some(false), "{jobs:?}");
-    let lines: Vec<String> = text(&jobs).lines().map(str::to_owned).collect();
+    let lines: Vec<String> = results(&jobs)?.lines().map(str::to_owned).collect();
     assert_eq!(lines.len(), SEARCH_RESULTS, "{lines:?}");
     assert!(
         lines.iter().all(|line| line.starts_with("worker-")),
@@ -322,8 +339,83 @@ async fn preparing_at_start_and_then_searching_loads_the_model_once() -> TestRes
     create(&client, &[("Mailer", "sends newsletters")]).await?;
     let found = call(&client, "search", json!({"query": "newsletters"})).await?;
 
-    assert!(text(&found).starts_with("mailer  "), "{found:?}");
+    assert!(results(&found)?.starts_with("mailer  "), "{found:?}");
     assert_eq!(setup.loads(), 1);
+    client.cancel().await?;
+    Ok(())
+}
+
+/// Runs `git` in `directory` without the user's or the system's
+/// configuration, and returns what it prints.
+fn git(directory: &Path, arguments: &[&str]) -> TestResult<String> {
+    let output = Command::new("git")
+        .current_dir(directory)
+        .args([
+            "-c",
+            "user.name=Abyme Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "-c",
+            "commit.gpgSign=false",
+        ])
+        .args(arguments)
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .output()?;
+    if !output.status.success() {
+        return Err(format!("git {arguments:?} failed: {output:?}").into());
+    }
+    Ok(String::from_utf8(output.stdout)?.trim_end().to_owned())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn search_marks_its_lines_and_names_no_file() -> TestResult {
+    let setup = Setup::new(true, 0, "")?;
+    let root = setup.project.path();
+    git(root, &["init", "-q"])?;
+    fs::create_dir_all(root.join("crates/c"))?;
+    fs::write(root.join("crates/c/leak-canary.txt"), "a\n")?;
+    git(root, &["add", "-A"])?;
+    git(root, &["commit", "-q", "-m", "add"])?;
+    let stamp = git(root, &["rev-parse", "HEAD"])?;
+    fs::create_dir_all(root.join("abyme/elements"))?;
+    fs::write(
+        root.join("abyme/elements/changed.md"),
+        format!(
+            "---\nid: changed\ntype: t\nname: Billing\nsummary: billing jobs\nanchor: crates/c\n\
+             verified: \"{stamp}\"\nverified_by: ai\n---\n"
+        ),
+    )?;
+    fs::write(
+        root.join("abyme/elements/calm.md"),
+        "---\nid: calm\ntype: t\nname: Calm\nsummary: billing reports\n---\n",
+    )?;
+    fs::write(
+        root.join("abyme/elements/hinted.md"),
+        format!(
+            "---\nid: hinted\ntype: t\nname: Hinted\nsummary: billing notes\n\
+             verified: \"{stamp}\"\nverified_by: ai\nrelations:\n  - {{kind: uses, to: changed}}\n---\n"
+        ),
+    )?;
+    fs::write(root.join("crates/c/leak-canary.txt"), "b\n")?;
+    let client = connect(setup.server()?).await?;
+
+    let found = call(&client, "search", json!({"query": "billing"})).await?;
+
+    let reply = text(&found);
+    let line = |id: &str| {
+        reply
+            .lines()
+            .find(|line| line.starts_with(&format!("{id} ")))
+            .unwrap_or_default()
+            .to_owned()
+    };
+    assert!(line("changed").ends_with("⚠ task"), "{reply}");
+    assert!(line("hinted").ends_with("⚠ hint"), "{reply}");
+    assert!(line("calm").starts_with("calm "), "{reply}");
+    assert!(!line("calm").contains('⚠'), "{reply}");
+    assert!(!reply.contains("leak-canary"), "{reply}");
+    assert!(!reply.contains("Review flags unavailable"), "{reply}");
     client.cancel().await?;
     Ok(())
 }
@@ -336,7 +428,7 @@ async fn in_a_project_without_elements_no_element_matches() -> TestResult {
     let found = call(&client, "search", json!({"query": "anything"})).await?;
 
     assert_eq!(found.is_error, Some(false), "{found:?}");
-    assert_eq!(text(&found), NO_MATCH);
+    assert_eq!(results(&found)?, NO_MATCH);
     client.cancel().await?;
     Ok(())
 }
@@ -461,7 +553,7 @@ async fn prepares_and_searches_with_the_model_the_project_file_names() -> TestRe
     create(&client, &[("Mailer", "sends newsletters")]).await?;
     let found = call(&client, "search", json!({"query": "newsletters"})).await?;
 
-    assert!(text(&found).starts_with("mailer  "), "{found:?}");
+    assert!(results(&found)?.starts_with("mailer  "), "{found:?}");
     assert_eq!(setup.loaded(), [MULTILINGUAL]);
     assert_eq!(setup.embedded_by("bge-small-en-v1.5"), 0);
     client.cancel().await?;
@@ -488,7 +580,7 @@ async fn a_changed_model_takes_effect_at_the_next_search_with_its_own_index() ->
     setup.choose_model(MULTILINGUAL)?;
     let changed = call(&client, "search", json!({"query": "newsletters"})).await?;
 
-    assert!(text(&changed).starts_with("mailer  "), "{changed:?}");
+    assert!(results(&changed)?.starts_with("mailer  "), "{changed:?}");
     assert_eq!(setup.loaded(), ["bge-small-en-v1.5", MULTILINGUAL]);
     assert_eq!(setup.embedded_by(MULTILINGUAL), 3 + 1);
     let tables = setup.table_dirs()?;
