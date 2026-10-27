@@ -553,23 +553,27 @@ impl<'snapshot> Draft<'snapshot> {
         }
     }
 
-    /// The boards that place `id`, as the request has them: the boards it
-    /// has changed, and the snapshot's other boards.
-    fn boards_placing(&self, id: &ElementId) -> Vec<BoardId> {
+    /// The boards as the request has them, each with its ID: the boards it
+    /// has changed, then the snapshot's other boards.
+    fn current_boards(&self) -> impl Iterator<Item = (&BoardId, &Board)> {
         let changed = self
             .boards
             .iter()
-            .filter(|(_, (board, _))| board.placements.contains_key(id))
-            .map(|(board_id, _)| board_id.clone());
+            .map(|(board_id, (board, _))| (board_id, board));
         let untouched = self
             .snapshot
             .boards
             .iter()
-            .filter(|(board_id, board)| {
-                !self.boards.contains_key(*board_id) && board.placements.contains_key(id)
-            })
-            .map(|(board_id, _)| board_id.clone());
-        changed.chain(untouched).collect()
+            .filter(|(board_id, _)| !self.boards.contains_key(*board_id));
+        changed.chain(untouched)
+    }
+
+    /// The boards that place `id`, as the request has them.
+    fn boards_placing(&self, id: &ElementId) -> Vec<BoardId> {
+        self.current_boards()
+            .filter(|(_, board)| board.placements.contains_key(id))
+            .map(|(board_id, _)| board_id.clone())
+            .collect()
     }
 
     /// The source and kind of every relation that points to `id`, as the

@@ -1,5 +1,5 @@
 **Repository:** root
-**Status:** NotStarted
+**Status:** InProgress
 **Created:** 2026-10-27
 
 ## Goal
@@ -33,7 +33,7 @@ summaries and open review flags.
 
 ## Steps
 
-- [ ] One view of the boards as a request stands
+- [x] One view of the boards as a request stands
 - [ ] Inner boards and board summaries in the files and in `apply`
 - [ ] Inner boards in the board outline and the element detail
 - [ ] The `overview` tool
@@ -51,13 +51,13 @@ placements on several boards, placements without a file) and
 
 Review path: Reviewer-only
 
-- [ ] Finding the boards that place an element uses the one view, which
+- [x] Finding the boards that place an element uses the one view, which
       yields the request's changed boards and the snapshot's untouched
       ones.
-- [ ] The tests in `crates/abyme-core/src/apply/tests.rs` and
+- [x] The tests in `crates/abyme-core/src/apply/tests.rs` and
       `crates/abyme-core/tests/apply_properties.rs` pass with their
       assertions unchanged.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
       and `cargo fmt --all --check` pass.
 
 ### Task 2: Inner boards and board summaries in the files and in `apply`
