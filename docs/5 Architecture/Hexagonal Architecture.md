@@ -111,7 +111,8 @@ The MCP server is started by the client per AI session, so “embedded” is the
 
 ## Security Baseline
 
-- **The core writes only inside `abyme/` and `.abyme/`.** Outside them it reads only through Git, with fixed arguments and with Git commands that leave the repository and its index as they are. It never opens a path built from an anchor, and no anchor reaches Git's command line: whether something changed or exists under an anchor is answered by matching the paths Git reports. Git never uses a bare repository it finds on its own, since a clone can bring the files of one whose configuration runs commands; older versions of Git than 2.38 ignore this setting.
+- **The core writes only inside `abyme/` and `.abyme/`.** Outside them it reads only through Git, with fixed arguments and with Git commands that leave the repository and its index as they are. It never opens a path built from an anchor, and no anchor reaches Git's command line: whether something changed or exists under an anchor is answered by matching the paths Git reports. Git never uses a bare repository it finds on its own, since a clone can bring the files of one whose configuration runs commands; older versions of Git than 2.38 ignore this setting. Git uses no transport, so it never fetches.
+- **Git runs in a nested repository only where the project's Git output names it:** every directory down to it is a real directory, not a symbolic link, Git names it as the top of its work tree, and its Git directory is its own `.git` directory or lies in the outer repository's store of submodules. Its own filters and hooks are turned off there, as is the file system monitor everywhere, and every path it prints must stay inside it. A nested repository that fails a check, or in which Git fails, is not read.
 - **Search keeps its index and model files only in Abyme's directory of the user's cache (`~/.cache/abyme/`),** never in the repository. The paths there are built only from a hash of the project root and from built-in model names, never from repository content (see [[Search and Index#Where Search Keeps Its Files]]).
 - **Search downloads only the model files of a revision fixed in Abyme's source.** Every file the model loads, the tokenizer files included, is checked against a size and a SHA-256 built into Abyme, after the download and before every load. The download sends no project content and no credentials.
 - **The build downloads the ONNX Runtime library,** checked against the SHA-256 that the pinned `ort-sys` crate carries.
@@ -121,7 +122,7 @@ The MCP server is started by the client per AI session, so “embedded” is the
 **Accepted risks:**
 
 - Content in Abyme can carry a stored prompt injection that later AI sessions read as project knowledge. Only Git and pull-request review catch it.
-- The repository's Git configuration, hooks, and filters are trusted, and so is the `git` that `PATH` names.
+- The project repository's Git configuration, hooks, and filters are trusted, and so is the `git` that `PATH` names. In a nested repository, the filters of the user's global and system configuration run, unless its own configuration sets up the same driver, and its Git directory is trusted in what it holds: whoever can write there can hide changes inside it, or make Git read another repository on the machine and report its file names.
 - File names that Git reports reach the AI in review flags, escaped onto one line; like other content, they can carry a prompt injection.
 - The AI client's own shell access is outside Abyme's scope.
 - Once their hashes match, the prebuilt ONNX Runtime and the pinned model files are trusted: a hash proves only that they are the files pinned when it was written. Native ONNX Runtime code parses the model.

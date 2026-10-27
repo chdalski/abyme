@@ -104,7 +104,8 @@ pub struct HeadFacts {
     /// The commit HEAD names; `None` in a repository without commits.
     pub commit: Option<CommitId>,
     /// The paths that differ from that commit in the index or the working
-    /// tree, that are unmerged, or that are untracked.
+    /// tree, that are unmerged, or that are untracked; never the root of an
+    /// untracked repository.
     pub changed: BTreeSet<Vec<u8>>,
 }
 
@@ -185,25 +186,28 @@ impl Review {
 }
 
 impl GitFacts {
-    /// The root of the repository an element with `anchor` belongs to: the
-    /// deepest nested repository whose root is the anchor or lies above it,
-    /// or `None` for the project's repository, which also holds an element
-    /// without an anchor.
-    fn root_of(&self, anchor: Option<&Anchor>) -> Option<&[u8]> {
-        let anchor = anchor?;
-        self.nested
-            .keys()
-            .filter(|root| anchor.lies_in(root))
-            .max_by_key(|root| root.len())
-            .map(Vec::as_slice)
-    }
-
     /// The facts of the repository with the root `root`, as
-    /// [`GitFacts::root_of`] names it.
+    /// [`repository_root`] names it.
     fn repository(&self, root: Option<&[u8]>) -> &RepositoryFacts {
         root.and_then(|root| self.nested.get(root))
             .unwrap_or(&self.project)
     }
+}
+
+/// The root of the repository an element with `anchor` belongs to, among
+/// the nested repositories at `roots`: the deepest one whose root is the
+/// anchor or lies above it, or `None` for the project's repository, which
+/// also holds an element without an anchor.
+pub fn repository_root<'a>(
+    roots: impl IntoIterator<Item = &'a Vec<u8>>,
+    anchor: Option<&Anchor>,
+) -> Option<&'a [u8]> {
+    let anchor = anchor?;
+    roots
+        .into_iter()
+        .filter(|root| anchor.lies_in(root))
+        .max_by_key(|root| root.len())
+        .map(Vec::as_slice)
 }
 
 /// The flags of every element of `snapshot` from what Git reports.
@@ -213,7 +217,7 @@ pub fn review(snapshot: &Snapshot, facts: &GitFacts) -> Review {
             .elements
             .iter()
             .filter_map(|(id, element)| {
-                let root = facts.root_of(element.anchor());
+                let root = repository_root(facts.nested.keys(), element.anchor());
                 let flags: Vec<Flag> = own_flags(element, facts.repository(root))
                     .into_iter()
                     .chain(passed_on(element, root, snapshot, facts))
@@ -323,7 +327,7 @@ fn passed_on(
         .filter_map(|(kind, target)| {
             let priority = passes_on(*kind)?;
             let anchor = snapshot.elements.get(target)?.anchor()?;
-            let same_repository = facts.root_of(Some(anchor)) == root;
+            let same_repository = repository_root(facts.nested.keys(), Some(anchor)) == root;
             since
                 .iter()
                 .chain(&repository.uncommitted)

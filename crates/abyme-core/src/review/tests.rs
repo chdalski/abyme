@@ -466,12 +466,18 @@ fn belongs_to_the_deepest_repository_its_anchor_lies_in(
     let facts = changes_in_every_repository();
     let anchor = Anchor::try_from(anchor.to_owned()).unwrap();
 
-    assert_eq!(facts.root_of(Some(&anchor)), root.map(str::as_bytes));
+    assert_eq!(
+        repository_root(facts.nested.keys(), Some(&anchor)),
+        root.map(str::as_bytes)
+    );
 }
 
 #[test]
 fn belongs_to_the_project_repository_without_an_anchor() {
-    assert_eq!(changes_in_every_repository().root_of(None), None);
+    assert_eq!(
+        repository_root(changes_in_every_repository().nested.keys(), None),
+        None
+    );
 }
 
 #[test]
@@ -482,7 +488,7 @@ fn belongs_to_no_repository_whose_root_is_empty_or_ends_with_a_slash() {
     );
     let anchor = Anchor::try_from("sub/x".to_owned()).unwrap();
 
-    assert_eq!(facts.root_of(Some(&anchor)), None);
+    assert_eq!(repository_root(facts.nested.keys(), Some(&anchor)), None);
 }
 
 #[test]

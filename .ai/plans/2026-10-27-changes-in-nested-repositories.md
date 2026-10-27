@@ -36,7 +36,7 @@ a nested repository's own configuration sets up.
 ## Steps
 
 - [x] Review facts per repository
-- [ ] Changes in nested repositories in the review
+- [x] Changes in nested repositories in the review
 - [ ] `verify` in nested repositories
 
 ## Tasks
@@ -86,43 +86,43 @@ elements anchored there.
 
 Review path: Security-Hybrid
 
-- [ ] The review finds nested repositories only through Git's output, as
+- [x] The review finds nested repositories only through Git's output, as
       gitlinks and untracked repositories, also nested more than one
       level.
-- [ ] A file committed, staged, changed, or untracked in a nested
+- [x] A file committed, staged, changed, or untracked in a nested
       repository since an element's stamp flags the element anchored over
       it, measured in that repository; a stamp commit that repository does
       not know is an unknown stamp.
-- [ ] For an element of the outer repository whose anchor contains a
+- [x] For an element of the outer repository whose anchor contains a
       nested repository: a gitlink that moved flags it, and the dirty files
       of a submodule or an embedded clone do not; an untracked clone
       neither flags it as changed nor leaves its anchor matching no file.
       The test that expected an untracked clone to count as a change
       expects this instead.
-- [ ] Git runs in no nested repository whose Git directory lies outside it
+- [x] Git runs in no nested repository whose Git directory lies outside it
       and outside the outer repository's store of submodules, whose work
       tree is not its own path, that is reached through a symbolic link, or
       whose directory is empty; an anchor inside such a repository is
       judged by the outer repository and gets the missing-anchor flag. In
       the nested repositories it does read, Git runs only the read-only
       commands it runs in the project repository.
-- [ ] No filter that a nested repository's own configuration sets up runs;
+- [x] No filter that a nested repository's own configuration sets up runs;
       filters from the user's global or system configuration do.
-- [ ] An anchor inside a clone that Git ignores gets the missing-anchor
+- [x] An anchor inside a clone that Git ignores gets the missing-anchor
       flag.
-- [ ] Integration tests in temporary repositories show the flags for a
+- [x] Integration tests in temporary repositories show the flags for a
       submodule, an embedded clone, an untracked clone, two levels of
       nesting, and a passed-on flag within a nested repository and across
       repositories; and that an uninitialized submodule, a `.git` file or
       work tree pointing outside, a symbolic link to a repository, and
       hostile filters in a nested repository's configuration or attributes
       run nothing and report nothing from outside the project.
-- [ ] A reader of Reconciliation's "Detecting Changes" learns which nested
+- [x] A reader of Reconciliation's "Detecting Changes" learns which nested
       repositories are covered and which are not, and its open point is
       gone, also from `docs/Open Questions.md`; a reader of the Security
       Baseline and of its row in `docs/Decisions.md` learns what Abyme
       reads and trusts in a nested repository and what it turns off.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
       and `cargo fmt --all --check` pass.
 
 ### Task 3: `verify` in nested repositories
@@ -176,6 +176,15 @@ Review path: Security-Hybrid
   every ignored file on every read is too costly.
 - **Only nested repositories that hold an anchor are read,** so a project
   with nested repositories nothing is anchored in pays nothing extra.
+- **Two read-only queries beyond the project's commands:** in a nested
+  repository, `rev-parse` also names its Git, common, and submodule
+  directories, and `config --show-scope --name-only` lists its filter
+  drivers, as the security engineer's controls require; the project's
+  `rev-parse` names its submodule directory once a nested repository is
+  wanted.
+- **Untracked repository roots are no uncommitted paths,** so from Task 2
+  on, an untracked clone under an anchor no longer makes `verify` refuse
+  that element.
 
 ## Non-Goals
 

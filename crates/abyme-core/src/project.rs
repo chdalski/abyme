@@ -9,12 +9,11 @@
 //! ignored, every read is limited in size, and a project is used only when
 //! it belongs to the user running Abyme.
 
-use std::collections::BTreeSet;
 use std::fmt;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use abyme_model::{BoardError, CommitId, Element, ElementError, ElementId, Verifier, shown};
+use abyme_model::{BoardError, CommitId, ElementError, ElementId, Verifier, shown};
 
 use crate::apply::{ApplyError, Created, Snapshot, Write};
 use crate::operation::{LocalKey, Operation};
@@ -234,13 +233,15 @@ impl Project {
     /// Returns an [`Unavailable`] when the project lies in no Git
     /// repository, `git` cannot be run, or Git fails.
     pub fn review(&self, snapshot: &Snapshot) -> Result<Review, Unavailable> {
-        let stamps: BTreeSet<&CommitId> = snapshot
+        let elements: Vec<git::AnchorAndStamp<'_>> = snapshot
             .elements
             .values()
-            .filter_map(Element::verified)
-            .map(|stamp| &stamp.commit)
+            .map(|element| git::AnchorAndStamp {
+                anchor: element.anchor(),
+                stamp: element.verified().map(|stamp| &stamp.commit),
+            })
             .collect();
-        let facts = git::facts(&self.root, &stamps)?;
+        let facts = git::facts(&self.root, &elements)?;
         Ok(review(snapshot, &facts))
     }
 
