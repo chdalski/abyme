@@ -68,40 +68,40 @@ at most one inner board and every board out of its own inside.
 
 Review path: Security-Hybrid
 
-- [ ] A board file holds an optional `owner` (an element ID) and an
+- [x] A board file holds an optional `owner` (an element ID) and an
       optional `summary` (any text); a file without them reads and writes
       byte for byte as before, and an invalid owner ID is rejected as other
       invalid fields are.
-- [ ] `create_board` takes an optional `owner`, an element named as in
+- [x] `create_board` takes an optional `owner`, an element named as in
       `place_element`, also one the same request creates, and an optional
       `summary`.
-- [ ] `update_board` changes only the fields it names among `title`,
+- [x] `update_board` changes only the fields it names among `title`,
       `summary`, and `owner`, where `null` removes a summary or an owner;
       it is rejected when it names none, and its board keeps its ID and
       placements.
-- [ ] Every owner is an element, no element owns two boards, and no board
+- [x] Every owner is an element, no element owns two boards, and no board
       lies inside itself: `create_board`, `update_board`, and
       `place_element` are each rejected when, as the request stands, they
       would bring in a breach of one of these that was not there before.
       A breach the files already hold rejects nothing else, so a request
       can repair it step by step. An owner without a home is accepted, so
       the order of a request's operations stays free.
-- [ ] `delete_element` is rejected while a board names the element as its
+- [x] `delete_element` is rejected while a board names the element as its
       owner, and the error names that board.
-- [ ] `apply`'s checks take the hierarchy of boards from one pure board
+- [x] `apply`'s checks take the hierarchy of boards from one pure board
       tree, which the readers of the next tasks use too.
-- [ ] The canvas refuses `update_board` as it refuses the other operations
+- [x] The canvas refuses `update_board` as it refuses the other operations
       it does not admit.
-- [ ] Unit tests cover each rule above, a cycle closed by `update_board` as
+- [x] Unit tests cover each rule above, a cycle closed by `update_board` as
       well as by `place_element`, and a request that repairs one of two
       breaches the files hold; an integration test through the MCP tool
       `apply` builds a context board, a container placed on it, and the
       container's inner board in one request, and reads the files back.
-- [ ] The `apply` tool's description, the MCP README, Data Model, Storage in
+- [x] The `apply` tool's description, the MCP README, Data Model, Storage in
       Git, and Board Graph's Deleting section describe the board fields and
       the operations as delivered, and no doc names `inner_board` as a
       field or link of the element.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
       and `cargo fmt --all --check` pass.
 
 ### Task 3: Inner boards in the board outline and the element detail
@@ -177,6 +177,9 @@ Review path: Security-Hybrid
 
 ## Decisions
 
+- **Tasks 2 to 4 run as Security-Hybrid:** they widen the input that board
+  files and `apply` accept and bring behavior no test covered before; the
+  user chose this path over handling them outside this workflow.
 - **The board names its owner; the element file stays as it is:** creating
   an inner board then never removes a container's verification stamp, the
   link travels with the board, and one owner per board follows from the

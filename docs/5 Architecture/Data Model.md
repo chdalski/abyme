@@ -30,7 +30,6 @@ classDiagram
         attributes: Map
         anchor: Option~Anchor~
         statement: Option~StatementKind~
-        inner_board: Option~BoardId~
         verified: Option~Verification~
         expected_anchor: Option~Anchor~
     }
@@ -79,7 +78,7 @@ classDiagram
     Board *-- Zone
     Frame *-- Zone
     Placement --> Element : shows
-    Element ..> Board : inner_board
+    Board ..> Element : owner
     ChangeRequest --> Element
 ```
 
@@ -104,7 +103,6 @@ pub struct Element {
     pub anchor: Option<Anchor>,              // Some → representation, None → native
     pub statement: Option<StatementKind>,    // overrides the zone
     pub relations: Vec<Relation>,            // outgoing relations
-    pub inner_board: Option<BoardId>,        // inner board, the inside of the element
     pub verified: Option<Verification>,      // verification stamp
     pub expected_anchor: Option<Anchor>,     // target elements only: expected destination
 }
@@ -178,6 +176,7 @@ pub struct Rect { pub x: i32, pub y: i32, pub width: NonZeroU32, pub height: Non
 - **Representation or native:** An element is a representation if it has an `anchor` (see [[Elements]]).
 - **Anchors are paths in the project,** relative to its root, covering the path and everything below it. An anchor is kept as written, never normalized, and rejected when it is empty, starts or ends with `/`, has an empty, `.`, or `..` segment, holds a backslash, a colon, or a character a reader cannot see, is longer than 4096 bytes or has a segment longer than 255 bytes, or lies in `abyme` or `.abyme` at the project root or in a `.git` folder (case does not count for these names).
 - **A verification stamp** names a full commit ID (40 or 64 lowercase hex digits) of the repository the element's anchor lies in, a nested one or the project's, and who verified, `ai` or `person`. An element without an anchor can carry one too, a commit of the project's repository.
+- **Inner boards:** A board's `owner` names the element whose inside it is. An element owns at most one board, and no board lies inside itself: the board above a board is the home board of its owner, and going up from a board never reaches it again. An owner needs no home; its board then has nothing above it. Merges and hand edits can still break these rules, so readers show such boards instead of failing.
 - **Home:** Every element has exactly one `Placement` with `is_reference = false`. All others are references (see [[Board Graph]]). An element without a home, for example freshly created by the AI, is allowed and reported as a hint.
 - **Arrows are not stored.** They follow from the relations. Deleting an arrow means deleting the relation.
 - **One relation per kind and target:** an element has at most one relation of a kind to a target, and none to itself. A relation to an element whose file is missing is read like any other (see [[Checks#Structural (Deterministic)|structural checks]]).
@@ -212,9 +211,11 @@ A request is a list of operations, each a JSON object with the field `op`:
 ]
 ```
 
-- **`create_element`** takes a key, `type_ref`, `name`, and optionally `summary`, `body`, and `anchor`; **`create_board`** takes a key and `title`; **`place_element`** gives an element its home on a board; **`move_element`** sets the position of an element on a board where it lies, with `x` and `y` from -1,000,000 to 1,000,000, and keeps its size. Other fields are rejected.
+- **`create_element`** takes a key, `type_ref`, `name`, and optionally `summary`, `body`, and `anchor`; **`create_board`** takes a key, `title`, and optionally `summary` and `owner`, the element whose inside the board is; **`place_element`** gives an element its home on a board; **`move_element`** sets the position of an element on a board where it lies, with `x` and `y` from -1,000,000 to 1,000,000, and keeps its size. Other fields are rejected.
 - **`update_element`** changes only the fields it names among `name`, `type_ref`, `summary`, `body`, and `anchor`; `"summary": null` and `"anchor": null` remove them, and `null` is rejected for the others. The element keeps its ID and its relations, also when its name changes, and an update that names no field is rejected. Text is stored exactly as sent.
-- **`delete_element`** removes an element's file, its placement on every board, and its own relations. It is rejected while other elements still relate to it, as the request stands at that operation; the error names each source and the relation's kind. It also takes an ID that a board places although its file is missing, and then removes only the placements. A deleted element cannot be named again in the same request, and its ID stays taken there.
+- **`update_board`** changes only the fields it names among `title`, `summary`, and `owner`; `"summary": null` and `"owner": null` remove them, and `null` is rejected for the title. The board keeps its ID and its placements, and an update that names no field is rejected.
+- **Inner boards in a request:** `create_board`, `update_board`, and `place_element` are rejected when, as the request stands, they would make an element own a second board or a board lie inside itself, or name an owner that is no element. A breach that the files already hold rejects nothing else, so a request can repair it step by step.
+- **`delete_element`** removes an element's file, its placement on every board, and its own relations. It is rejected while other elements still relate to it, or while a board names it as its owner, as the request stands at that operation; the error names each source and the relation's kind, or the board. It also takes an ID that a board places although its file is missing, and then removes only the placements. A deleted element cannot be named again in the same request, and its ID stays taken there.
 - **A content change removes the verification stamp:** `update_element`, `create_relation`, and `delete_relation` remove the stamp of the element they change, also when an update leaves every value as it was. No operation sets a stamp: only the tool `verify` does, with the commit it reads itself (see [[Checks#Verification Stamp]]). An anchor passes the [[#Rules|rules]] above; whether its path exists is not checked.
 - **`create_relation`** adds a relation from `from` to `to` of a `kind` (see [[Relations]]), with an optional `label`; it is rejected when the element has that relation already or would point to itself. **`delete_relation`** removes the relation with `from`, `kind`, and `to`; its `to` is only looked up among the relations of `from`, so a relation to an element whose file is gone can still be removed. Both rewrite only the element file of `from`.
 - **References:** `{"new": "<key>"}` names what an earlier operation of the same request creates, `{"existing": "<id>"}` what already exists. A **local key** has 1 to 64 ASCII letters, digits, hyphens, and underscores, is valid only within its request, and elements and boards share one set of keys.

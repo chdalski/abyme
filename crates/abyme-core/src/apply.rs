@@ -13,6 +13,7 @@ use abyme_model::{
     Relations, TypeRef,
 };
 
+use crate::board_tree::BoardTree;
 use crate::layout::Layout;
 use crate::operation::{LocalKey, MAX_COORDINATE, Operation, Ref};
 use crate::slug::free_slug;
@@ -163,6 +164,28 @@ pub enum OperationProblem {
     /// An update names no field to change.
     #[error("the update of element {0} names no field to change")]
     NothingToUpdate(ElementId),
+    /// An update of a board names no field to change.
+    #[error("the update of board {0} names no field to change")]
+    NothingToUpdateBoard(BoardId),
+    /// The element already owns a board, and an element owns at most one.
+    #[error("element {element} already owns board {board}; an element owns at most one board")]
+    AlreadyOwns {
+        /// The element.
+        element: ElementId,
+        /// A board it owns.
+        board: BoardId,
+    },
+    /// The board would lie inside itself.
+    #[error("board {0} would lie inside itself")]
+    InsideItself(BoardId),
+    /// A board names the element a deletion names as its owner.
+    #[error("element {element} owns board {board}; give the board another owner or none first")]
+    OwnsBoard {
+        /// The element to delete.
+        element: ElementId,
+        /// A board it owns.
+        board: BoardId,
+    },
     /// The element has no relation of this kind to this target.
     #[error("element {from} has no relation {kind} to {to}")]
     NoSuchRelation {
@@ -240,13 +263,20 @@ impl<'snapshot> Draft<'snapshot> {
             .values()
             .flat_map(|board| board.placements.keys().cloned())
             .collect();
-        // An element placed on a board whose file is missing still owns its
-        // ID: a new element must not take over that placement.
+        // An element placed on a board or owning one, whose file is missing,
+        // still owns its ID: a new element must not take over that placement
+        // or that board.
         let taken_elements = snapshot
             .elements
             .keys()
             .cloned()
             .chain(placed.iter().cloned())
+            .chain(
+                snapshot
+                    .boards
+                    .values()
+                    .filter_map(|board| board.owner.clone()),
+            )
             .collect();
         Self {
             snapshot,
@@ -278,7 +308,23 @@ impl<'snapshot> Draft<'snapshot> {
                 body,
                 anchor.as_deref(),
             ),
-            Operation::CreateBoard { key, title } => self.create_board(key, title),
+            Operation::CreateBoard {
+                key,
+                title,
+                owner,
+                summary,
+            } => self.create_board(key, title, owner.as_ref(), summary.as_deref()),
+            Operation::UpdateBoard {
+                board,
+                title,
+                summary,
+                owner,
+            } => self.update_board(
+                board,
+                title.as_deref(),
+                summary.as_ref().map(Option::as_deref),
+                owner.as_ref().map(Option::as_ref),
+            ),
             Operation::PlaceElement { element, board } => self.place_element(element, board),
             Operation::MoveElement {
                 element,
@@ -349,12 +395,29 @@ impl<'snapshot> Draft<'snapshot> {
         Ok(())
     }
 
-    fn create_board(&mut self, key: &LocalKey, title: &str) -> Result<(), OperationProblem> {
+    /// Creates a board, the inside of `owner` if it names one. A new board
+    /// places nothing, so it cannot lie inside itself.
+    fn create_board(
+        &mut self,
+        key: &LocalKey,
+        title: &str,
+        owner: Option<&Ref<ElementId>>,
+        summary: Option<&str>,
+    ) -> Result<(), OperationProblem> {
         self.check_new_key(key)?;
+        let owner = owner
+            .map(|owner| {
+                let owner = self.resolve_element(owner)?;
+                self.check_owner(&owner, None)?;
+                Ok(owner)
+            })
+            .transpose()?;
         let id = free_slug(title, "board", &self.taken_boards).ok_or(OperationProblem::NoFreeId)?;
         let board = Board {
             id: id.clone(),
             title: title.to_owned(),
+            owner,
+            summary: summary.map(str::to_owned),
             placements: BTreeMap::new(),
         };
         let layout = Layout::of(&board);
@@ -373,6 +436,17 @@ impl<'snapshot> Draft<'snapshot> {
         let board = self.resolve_board(board)?;
         if self.homed.contains(&element) {
             return Err(OperationProblem::AlreadyHomed(element));
+        }
+        if self.owns_a_board(&element) {
+            // Placing the owner on `board` makes `board` the parent of every
+            // board the element owns.
+            let tree = BoardTree::of(self.current_boards());
+            if let Some(owned) = tree
+                .owned_by(&element)
+                .find(|owned| tree.lies_inside(&board, owned))
+            {
+                return Err(OperationProblem::InsideItself(owned.clone()));
+            }
         }
         let (draft_board, layout) = self.draft_board(&board)?;
         let rect = layout
@@ -465,6 +539,56 @@ impl<'snapshot> Draft<'snapshot> {
         })
     }
 
+    /// Changes the fields an update names of a board and keeps the others,
+    /// the ID and the placements included. An update that names no field is
+    /// rejected. An owner that stays the same is not checked again, so a
+    /// board that merges or hand edits left in a breach can still be
+    /// renamed or unlinked.
+    #[expect(
+        clippy::option_option,
+        reason = "a missing summary or owner keeps it, `Some(None)` removes it, and a value replaces it"
+    )]
+    fn update_board(
+        &mut self,
+        board: &Ref<BoardId>,
+        title: Option<&str>,
+        summary: Option<Option<&str>>,
+        owner: Option<Option<&Ref<ElementId>>>,
+    ) -> Result<(), OperationProblem> {
+        let id = self.resolve_board(board)?;
+        if title.is_none() && summary.is_none() && owner.is_none() {
+            return Err(OperationProblem::NothingToUpdateBoard(id));
+        }
+        let owner = match owner {
+            Some(Some(owner)) => {
+                let current = self
+                    .current_boards()
+                    .find(|(board_id, _)| **board_id == id)
+                    .and_then(|(_, board)| board.owner.clone());
+                let owner = self.resolve_element(owner)?;
+                if current.as_ref() == Some(&owner) {
+                    None
+                } else {
+                    self.check_owner(&owner, Some(&id))?;
+                    Some(Some(owner))
+                }
+            }
+            Some(None) => Some(None),
+            None => None,
+        };
+        let (draft_board, _) = self.draft_board(&id)?;
+        if let Some(title) = title {
+            title.clone_into(&mut draft_board.title);
+        }
+        if let Some(summary) = summary {
+            draft_board.summary = summary.map(str::to_owned);
+        }
+        if let Some(owner) = owner {
+            draft_board.owner = owner;
+        }
+        Ok(())
+    }
+
     fn create_relation(
         &mut self,
         from: &Ref<ElementId>,
@@ -522,6 +646,15 @@ impl<'snapshot> Draft<'snapshot> {
     /// file is missing can be deleted too; then only its placements go.
     fn delete_element(&mut self, element: &Ref<ElementId>) -> Result<(), OperationProblem> {
         let id = self.resolve_deletion(element)?;
+        if let Some((board, _)) = self
+            .current_boards()
+            .find(|(_, board)| board.owner.as_ref() == Some(&id))
+        {
+            return Err(OperationProblem::OwnsBoard {
+                element: id,
+                board: board.clone(),
+            });
+        }
         let sources = self.incoming_relations(&id);
         if !sources.is_empty() {
             return Err(OperationProblem::StillRelated {
@@ -574,6 +707,39 @@ impl<'snapshot> Draft<'snapshot> {
             .filter(|(_, board)| board.placements.contains_key(id))
             .map(|(board_id, _)| board_id.clone())
             .collect()
+    }
+
+    /// Whether a board names `element` as its owner, as the request has
+    /// the boards.
+    fn owns_a_board(&self, element: &ElementId) -> bool {
+        self.current_boards()
+            .any(|(_, board)| board.owner.as_ref() == Some(element))
+    }
+
+    /// Checks `owner` as the new owner of the board `board`, or of a board
+    /// the request creates for `None`: it must own no other board, and the
+    /// board must not lie inside itself with it, that is above the owner's
+    /// home.
+    fn check_owner(
+        &self,
+        owner: &ElementId,
+        board: Option<&BoardId>,
+    ) -> Result<(), OperationProblem> {
+        let tree = BoardTree::of(self.current_boards());
+        if let Some(owned) = tree.owned_by(owner).find(|owned| Some(*owned) != board) {
+            return Err(OperationProblem::AlreadyOwns {
+                element: owner.clone(),
+                board: owned.clone(),
+            });
+        }
+        if let Some(board) = board
+            && tree
+                .home(owner)
+                .is_some_and(|home| tree.lies_inside(home, board))
+        {
+            return Err(OperationProblem::InsideItself(board.clone()));
+        }
+        Ok(())
     }
 
     /// The source and kind of every relation that points to `id`, as the

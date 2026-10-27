@@ -9,6 +9,8 @@ fn create_board(title: &str) -> Operation {
     Operation::CreateBoard {
         key: LocalKey::try_from(format!("board-{}", title.len())).unwrap(),
         title: title.to_owned(),
+        owner: None,
+        summary: None,
     }
 }
 

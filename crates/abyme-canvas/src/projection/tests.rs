@@ -46,6 +46,8 @@ fn snapshot() -> Snapshot {
     let board = Board {
         id: board_id("context"),
         title: "Context".to_owned(),
+        owner: None,
+        summary: None,
         placements: BTreeMap::from([
             (element_id("payments"), rect(40, 80, 180, 90)),
             (element_id("orders"), rect(-20, 300, 200, 100)),

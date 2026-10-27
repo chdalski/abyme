@@ -14,6 +14,7 @@
 compile_error!("abyme-core checks who owns a project, which it can do on Unix only");
 
 mod apply;
+mod board_tree;
 mod layout;
 mod operation;
 mod outline;

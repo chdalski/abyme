@@ -77,6 +77,7 @@ const fn refused_kind(operation: &Operation) -> Option<&'static str> {
     match operation {
         Operation::CreateElement { .. } => Some("create_element"),
         Operation::CreateBoard { .. } => Some("create_board"),
+        Operation::UpdateBoard { .. } => Some("update_board"),
         Operation::PlaceElement { .. } => Some("place_element"),
         Operation::MoveElement { element, board, .. } => match (element, board) {
             (Ref::Existing(_), Ref::Existing(_)) => None,

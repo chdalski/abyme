@@ -37,12 +37,22 @@ fn board() -> impl Strategy<Value = Board> {
     (
         board_id(),
         any::<String>(),
+        proptest::option::of(element_id()),
+        proptest::option::of(any::<String>()),
         proptest::collection::btree_map(element_id(), rect(), 0..8),
     )
         .prop_map(
-            |(id, title, placements): (BoardId, String, BTreeMap<ElementId, Rect>)| Board {
+            |(id, title, owner, summary, placements): (
+                BoardId,
+                String,
+                Option<ElementId>,
+                Option<String>,
+                BTreeMap<ElementId, Rect>,
+            )| Board {
                 id,
                 title,
+                owner,
+                summary,
                 placements,
             },
         )
@@ -64,7 +74,9 @@ proptest! {
             .lines()
             .filter(|line| line.starts_with("    {\"element\": "))
             .count();
-        let frame_lines = if board.placements.is_empty() { 6 } else { 7 };
+        let frame_lines = if board.placements.is_empty() { 6 } else { 7 }
+            + usize::from(board.owner.is_some())
+            + usize::from(board.summary.is_some());
         prop_assert_eq!(placement_lines, board.placements.len());
         prop_assert_eq!(json.lines().count(), board.placements.len() + frame_lines);
     }

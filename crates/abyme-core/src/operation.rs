@@ -51,6 +51,45 @@ pub enum Operation {
         key: LocalKey,
         /// The title shown for the board.
         title: String,
+        /// The element whose inside the board is; an element owns at most
+        /// one board.
+        #[serde(default)]
+        owner: Option<Ref<ElementId>>,
+        /// A one-line summary of what the board shows.
+        #[serde(default)]
+        summary: Option<String>,
+    },
+    /// Changes the fields it names of a board; the others stay as they are.
+    /// The board keeps its ID and its placements, also when its title
+    /// changes.
+    UpdateBoard {
+        /// The board to change.
+        board: Ref<BoardId>,
+        /// The new title.
+        #[serde(
+            default,
+            deserialize_with = "present",
+            skip_serializing_if = "Option::is_none"
+        )]
+        #[cfg_attr(feature = "json-schema", schemars(with = "String"))]
+        title: Option<String>,
+        /// The new one-line summary; `null` removes it.
+        #[serde(
+            default,
+            deserialize_with = "present",
+            skip_serializing_if = "Option::is_none"
+        )]
+        #[cfg_attr(feature = "json-schema", schemars(with = "Option<String>"))]
+        summary: Option<Option<String>>,
+        /// The element whose inside the board becomes; `null` makes the
+        /// board the inside of no element.
+        #[serde(
+            default,
+            deserialize_with = "present",
+            skip_serializing_if = "Option::is_none"
+        )]
+        #[cfg_attr(feature = "json-schema", schemars(with = "Option<Ref<ElementId>>"))]
+        owner: Option<Option<Ref<ElementId>>>,
     },
     /// Gives an element its home on a board.
     PlaceElement {
@@ -461,6 +500,70 @@ mod tests {
         );
     }
 
+    #[test]
+    fn reads_a_board_with_an_owner_and_a_summary() {
+        let json = r#"[{"op": "create_board", "key": "b", "title": "Inside",
+            "owner": {"existing": "shop"}, "summary": "S"}]"#;
+
+        assert_eq!(
+            read(json).unwrap(),
+            vec![Operation::CreateBoard {
+                key: LocalKey::try_from("b".to_owned()).unwrap(),
+                title: "Inside".to_owned(),
+                owner: Some(Ref::Existing("shop".parse().unwrap())),
+                summary: Some("S".to_owned()),
+            }]
+        );
+    }
+
+    /// An update of the board `main` with the given fields.
+    fn board_update(json_fields: &str) -> String {
+        format!(r#"[{{"op": "update_board", "board": {{"existing": "main"}}{json_fields}}}]"#)
+    }
+
+    #[test]
+    fn reads_an_update_of_every_field_of_a_board() {
+        let json = board_update(r#", "title": "T", "summary": "S", "owner": {"new": "e"}"#);
+
+        assert_eq!(
+            read(&json).unwrap(),
+            vec![Operation::UpdateBoard {
+                board: Ref::Existing("main".parse().unwrap()),
+                title: Some("T".to_owned()),
+                summary: Some(Some("S".to_owned())),
+                owner: Some(Some(Ref::New(LocalKey::try_from("e".to_owned()).unwrap()))),
+            }]
+        );
+    }
+
+    #[test]
+    fn reads_null_as_removing_a_board_s_summary_and_owner() {
+        let json = board_update(r#", "summary": null, "owner": null"#);
+
+        assert_eq!(
+            read(&json).unwrap(),
+            vec![Operation::UpdateBoard {
+                board: Ref::Existing("main".parse().unwrap()),
+                title: None,
+                summary: Some(None),
+                owner: Some(None),
+            }]
+        );
+    }
+
+    #[test]
+    fn reads_an_update_of_a_board_that_names_no_field() {
+        assert_eq!(
+            read(&board_update("")).unwrap(),
+            vec![Operation::UpdateBoard {
+                board: Ref::Existing("main".parse().unwrap()),
+                title: None,
+                summary: None,
+                owner: None,
+            }]
+        );
+    }
+
     #[rstest]
     #[case::summary_null(
         r#"[{"op": "create_element", "key": "k", "type_ref": "t", "name": "n", "summary": null}]"#
@@ -594,6 +697,29 @@ mod tests {
     #[case::missing_op(r#"[{"key": "k", "title": "t"}]"#)]
     #[case::op_as_number(r#"[{"op": 1, "key": "k", "title": "t"}]"#)]
     #[case::unknown_op(r#"[{"op": "delete_board", "key": "k"}]"#)]
+    #[case::board_update_with_a_null_title(
+        r#"[{"op": "update_board", "board": {"existing": "main"}, "title": null}]"#
+    )]
+    #[case::board_update_with_an_unknown_field(
+        r#"[{"op": "update_board", "board": {"existing": "main"}, "zone": {}}]"#
+    )]
+    #[case::board_update_of_the_id(
+        r#"[{"op": "update_board", "board": {"existing": "main"}, "id": "other"}]"#
+    )]
+    #[case::board_update_of_placements(
+        r#"[{"op": "update_board", "board": {"existing": "main"}, "placements": []}]"#
+    )]
+    #[case::board_update_without_a_board(r#"[{"op": "update_board", "title": "T"}]"#)]
+    #[case::board_update_as_array(r#"[["update_board", {"existing": "main"}, "T"]]"#)]
+    #[case::board_owner_of_an_invalid_id(
+        r#"[{"op": "update_board", "board": {"existing": "main"}, "owner": {"existing": "../x"}}]"#
+    )]
+    #[case::new_board_owner_of_an_invalid_id(
+        r#"[{"op": "create_board", "key": "k", "title": "t", "owner": {"existing": "../x"}}]"#
+    )]
+    #[case::board_summary_as_number(
+        r#"[{"op": "create_board", "key": "k", "title": "t", "summary": 1}]"#
+    )]
     #[case::op_in_other_case(r#"[{"op": "CreateBoard", "key": "k", "title": "t"}]"#)]
     #[case::body_null(
         r#"[{"op": "create_element", "key": "k", "type_ref": "t", "name": "n", "body": null}]"#
@@ -675,7 +801,7 @@ mod tests {
             .flatten()
             .filter(|variant| variant.pointer("/type") == Some(&serde_json::json!("object")))
             .collect();
-        assert_eq!(variants.len(), 8 + 2 + 2, "{schema}");
+        assert_eq!(variants.len(), 9 + 2 + 2, "{schema}");
         for variant in variants {
             assert_eq!(
                 variant.pointer("/additionalProperties"),
@@ -721,6 +847,41 @@ mod tests {
                 "{update}"
             );
         }
+    }
+
+    #[cfg(feature = "json-schema")]
+    #[test]
+    fn schema_lets_only_the_summary_and_the_owner_of_a_board_update_be_null() {
+        let schema = serde_json::to_value(schemars::schema_for!(Operations)).unwrap();
+
+        let update = schema
+            .pointer("/$defs")
+            .and_then(serde_json::Value::as_object)
+            .unwrap()
+            .values()
+            .filter_map(|definition| definition.pointer("/oneOf")?.as_array())
+            .flatten()
+            .find(|variant| {
+                variant.pointer("/properties/op/const") == Some(&serde_json::json!("update_board"))
+            })
+            .unwrap();
+        assert_eq!(
+            update.pointer("/required"),
+            Some(&serde_json::json!(["op", "board"])),
+            "{update}"
+        );
+        assert_eq!(
+            update.pointer("/properties/title/type"),
+            Some(&serde_json::json!("string")),
+            "{update}"
+        );
+        assert_eq!(
+            update.pointer("/properties/summary/type"),
+            Some(&serde_json::json!(["string", "null"])),
+            "{update}"
+        );
+        let owner = update.pointer("/properties/owner").unwrap().to_string();
+        assert!(owner.contains("null"), "{update}");
     }
 
     #[cfg(feature = "json-schema")]

@@ -476,6 +476,10 @@ fn a_rejected_request_changes_no_file() {
     r#"[{"op": "create_board", "key": "b", "title": "BigBODY"}]"#,
     "abyme/boards/big.board.json"
 )]
+#[case::board_summary(
+    r#"[{"op": "create_board", "key": "b", "title": "Big", "summary": "BODY"}]"#,
+    "abyme/boards/big.board.json"
+)]
 fn a_request_that_would_write_a_too_large_file_changes_no_file(
     #[case] template: &str,
     #[case] expected_path: &str,

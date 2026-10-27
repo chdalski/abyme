@@ -41,6 +41,14 @@ fn every_other_operation_is_refused_by_its_position_and_kind() {
             "create_board",
         ),
         (
+            json!({"op": "update_board", "board": {"existing": "context"}, "title": "SECRET-TITLE", "summary": "SECRET-SUMMARY"}),
+            "update_board",
+        ),
+        (
+            json!({"op": "update_board", "board": {"new": "secret-key"}, "owner": {"existing": "secret-id"}}),
+            "update_board",
+        ),
+        (
             json!({"op": "place_element", "element": {"existing": "secret-id"}, "board": {"existing": "context"}}),
             "place_element",
         ),
@@ -104,6 +112,8 @@ fn the_first_refused_operation_is_named() {
     let create = Operation::CreateBoard {
         key: LocalKey::try_from("b".to_owned()).unwrap(),
         title: "Context".to_owned(),
+        owner: None,
+        summary: None,
     };
 
     assert_eq!(

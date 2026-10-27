@@ -100,6 +100,8 @@ fn snapshot() -> impl Strategy<Value = Snapshot> {
         .prop_map(|(id, title, placements)| Board {
             id,
             title,
+            owner: None,
+            summary: None,
             placements,
         });
     let boards = prop::collection::vec(board, 0..=2).prop_map(|boards| {
@@ -180,7 +182,30 @@ fn operation() -> impl Strategy<Value = Operation> {
                     anchor,
                 }
             }),
-        (key(), name()).prop_map(|(key, title)| Operation::CreateBoard { key, title }),
+        (
+            key(),
+            name(),
+            proptest::option::of(element_ref()),
+            proptest::option::of(any::<String>()),
+        )
+            .prop_map(|(key, title, owner, summary)| Operation::CreateBoard {
+                key,
+                title,
+                owner,
+                summary,
+            }),
+        (
+            board_ref(),
+            proptest::option::of(name()),
+            proptest::option::of(proptest::option::of(any::<String>())),
+            proptest::option::of(proptest::option::of(element_ref())),
+        )
+            .prop_map(|(board, title, summary, owner)| Operation::UpdateBoard {
+                board,
+                title,
+                summary,
+                owner,
+            }),
         (element_ref(), board_ref())
             .prop_map(|(element, board)| Operation::PlaceElement { element, board }),
         (
@@ -230,6 +255,7 @@ fn deleted_existing_elements(operations: &[Operation]) -> BTreeSet<&ElementId> {
             } => Some(id),
             Operation::CreateElement { .. }
             | Operation::CreateBoard { .. }
+            | Operation::UpdateBoard { .. }
             | Operation::PlaceElement { .. }
             | Operation::MoveElement { .. }
             | Operation::UpdateElement { .. }
@@ -261,6 +287,7 @@ fn named_existing_elements(operations: &[Operation]) -> BTreeSet<&ElementId> {
             } => Some(id),
             Operation::CreateElement { .. }
             | Operation::CreateBoard { .. }
+            | Operation::UpdateBoard { .. }
             | Operation::PlaceElement { .. }
             | Operation::MoveElement { .. }
             | Operation::UpdateElement { .. }
@@ -269,6 +296,85 @@ fn named_existing_elements(operations: &[Operation]) -> BTreeSet<&ElementId> {
             | Operation::DeleteRelation { .. } => None,
         })
         .collect()
+}
+
+/// The existing boards that a request's operations update.
+fn updated_existing_boards(operations: &[Operation]) -> BTreeSet<&BoardId> {
+    operations
+        .iter()
+        .filter_map(|operation| match operation {
+            Operation::UpdateBoard {
+                board: Ref::Existing(id),
+                ..
+            } => Some(id),
+            Operation::CreateElement { .. }
+            | Operation::CreateBoard { .. }
+            | Operation::UpdateBoard { .. }
+            | Operation::PlaceElement { .. }
+            | Operation::MoveElement { .. }
+            | Operation::UpdateElement { .. }
+            | Operation::DeleteElement { .. }
+            | Operation::CreateRelation { .. }
+            | Operation::DeleteRelation { .. } => None,
+        })
+        .collect()
+}
+
+/// Checks that, after a successful request, no element owns two boards,
+/// every owner is an element, and no board lies inside itself. The
+/// snapshot's boards have no owner, so every breach would be one the
+/// request brought in.
+fn check_board_hierarchy(snapshot: &Snapshot, applied: &Applied) -> Result<(), TestCaseError> {
+    let mut boards: BTreeMap<&BoardId, &Board> = snapshot.boards.iter().collect();
+    let mut written = BTreeSet::new();
+    let mut removed = BTreeSet::new();
+    for write in &applied.writes {
+        match write {
+            Write::Board(board) => {
+                boards.insert(&board.id, board);
+            }
+            Write::Element(element) => {
+                written.insert(element.id());
+            }
+            Write::RemoveElement(id) => {
+                removed.insert(id);
+            }
+        }
+    }
+    let mut owned = BTreeSet::new();
+    for (id, board) in &boards {
+        if let Some(owner) = &board.owner {
+            prop_assert!(owned.insert(owner), "{owner} owns two boards");
+            prop_assert!(
+                written.contains(owner)
+                    || (snapshot.elements.contains_key(owner) && !removed.contains(owner)),
+                "owner {owner} of board {id} is no element"
+            );
+        }
+    }
+    let home = |element: &ElementId| {
+        boards
+            .iter()
+            .filter(|(_, board)| board.placements.contains_key(element))
+            .map(|(id, _)| *id)
+            .min()
+    };
+    for start in boards.keys() {
+        let mut seen = BTreeSet::new();
+        let mut current = *start;
+        while let Some(parent) = boards
+            .get(current)
+            .and_then(|board| board.owner.as_ref())
+            .and_then(home)
+        {
+            prop_assert!(parent != *start, "board {start} lies inside itself");
+            if !seen.insert(parent) {
+                break;
+            }
+            current = parent;
+        }
+    }
+    Ok(())
 }
 
 /// Arbitrary text without the characters an element file cannot hold.
@@ -307,6 +413,8 @@ fn well_formed_request() -> impl Strategy<Value = Vec<Operation>> {
             let mut operations = vec![Operation::CreateBoard {
                 key: board.clone(),
                 title,
+                owner: None,
+                summary: None,
             }];
             for (index, (name, summary, body)) in elements.into_iter().enumerate() {
                 let key = LocalKey::try_from(format!("e{index}")).ok()?;
@@ -347,6 +455,7 @@ fn deleted_keys(operations: &[Operation]) -> BTreeSet<&LocalKey> {
             } => Some(key),
             Operation::CreateElement { .. }
             | Operation::CreateBoard { .. }
+            | Operation::UpdateBoard { .. }
             | Operation::PlaceElement { .. }
             | Operation::MoveElement { .. }
             | Operation::UpdateElement { .. }
@@ -473,6 +582,7 @@ fn check(
 ) -> Result<(), TestCaseError> {
     let named = named_existing_elements(operations);
     let deleted = deleted_existing_elements(operations);
+    let updated_boards = updated_existing_boards(operations);
     let existing_element_ids: BTreeSet<&ElementId> = snapshot
         .elements
         .keys()
@@ -503,6 +613,7 @@ fn check(
     }
     check_elements_written_as_created(snapshot, operations, applied)?;
     check_removals(snapshot, &deleted, applied)?;
+    check_board_hierarchy(snapshot, applied)?;
     let mut seen_board = false;
     let mut written_boards = BTreeSet::new();
     for write in &applied.writes {
@@ -540,7 +651,11 @@ fn check(
                 );
                 let before = snapshot.boards.get(&board.id);
                 if let Some(before) = before {
-                    prop_assert_eq!(&board.title, &before.title);
+                    if !updated_boards.contains(&board.id) {
+                        prop_assert_eq!(&board.title, &before.title);
+                        prop_assert_eq!(&board.owner, &before.owner);
+                        prop_assert_eq!(&board.summary, &before.summary);
+                    }
                     for (id, rect) in &before.placements {
                         // A placement disappears only through delete_element.
                         let expected = (!deleted.contains(id)).then_some(rect);

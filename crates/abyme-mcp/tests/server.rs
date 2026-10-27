@@ -449,6 +449,60 @@ async fn a_rejected_apply_is_a_tool_error_and_changes_no_file() -> TestResult {
 }
 
 #[tokio::test]
+async fn apply_builds_an_element_s_inner_board_and_refuses_a_board_inside_itself() -> TestResult {
+    let directory = project()?;
+    let session = start(directory.path()).await?;
+
+    let applied = call(
+        &session,
+        "apply",
+        json!({"operations": [
+            {"op": "create_board", "key": "ctx", "title": "Context"},
+            {"op": "create_element", "key": "shop", "type_ref": "c4/system", "name": "Shop"},
+            {"op": "place_element", "element": {"new": "shop"}, "board": {"new": "ctx"}},
+            {"op": "create_board", "key": "inside", "title": "Shop Containers",
+             "owner": {"new": "shop"}, "summary": "What the shop runs"},
+            {"op": "create_element", "key": "pay", "type_ref": "c4/container", "name": "Payments"},
+            {"op": "place_element", "element": {"new": "pay"}, "board": {"new": "inside"}}
+        ]}),
+    )
+    .await??;
+    assert_eq!(applied.is_error, Some(false), "{applied:?}");
+    let before = files(directory.path())?;
+    let rejected = call(
+        &session,
+        "apply",
+        json!({"operations": [
+            {"op": "update_board", "board": {"existing": "context"}, "owner": {"existing": "payments"}}
+        ]}),
+    )
+    .await??;
+
+    assert_eq!(
+        fs::read_to_string(
+            directory
+                .path()
+                .join("abyme/boards/shop-containers.board.json")
+        )?,
+        "{\n  \"format\": 1,\n  \"id\": \"shop-containers\",\n  \"title\": \"Shop Containers\",\n  \
+         \"owner\": \"shop\",\n  \"summary\": \"What the shop runs\",\n  \"placements\": [\n    \
+         {\"element\": \"payments\", \"x\": 0, \"y\": 0, \"width\": 180, \"height\": 90}\n  ]\n}\n"
+    );
+    assert!(
+        !fs::read_to_string(directory.path().join("abyme/boards/context.board.json"))?
+            .contains("owner")
+    );
+    assert_eq!(rejected.is_error, Some(true), "{rejected:?}");
+    assert_eq!(
+        text(&rejected),
+        "operation 1: board context would lie inside itself"
+    );
+    assert_eq!(files(directory.path())?, before);
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+#[tokio::test]
 async fn apply_creates_and_deletes_relations_in_the_element_files() -> TestResult {
     let directory = project()?;
     let session = start(directory.path()).await?;

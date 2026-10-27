@@ -69,7 +69,7 @@ This gives the picture within the picture without all boards having to lie on on
 Removing something from the board means deleting it. There is no hiding. What gets deleted is always what you click:
 
 - **A reference:** Only the reference disappears; the element stays.
-- **An element:** It disappears everywhere. Beforehand, the system warns where there are still references or relations. Through `apply`, the warning is a rejection that names each element still relating to it, with the relation's kind; a request that first deletes those relations, or their sources, then deletes the element.
+- **An element:** It disappears everywhere. Beforehand, the system warns where there are still references or relations, or an inner board. Through `apply`, the warning is a rejection that names each element still relating to it, with the relation's kind, or the board it owns; a request that first deletes those relations, or their sources, and gives the board another owner or none, then deletes the element.
 - **A representation in a synced zone:** This becomes a [[Change Requests|change request]] to the external resource.
 
 > [!todo] Open

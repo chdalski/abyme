@@ -107,7 +107,7 @@ through the refund-worker.
 - **Limits:** `type`, `name`, `summary`, the anchor, and the labels hold only characters YAML counts as printable: no control characters other than tab, line feed, carriage return, and U+0085, and neither U+FFFE nor U+FFFF. The frontmatter is at most 64 KiB, counted as Abyme writes it.
 - **Strict YAML:** The frontmatter is one mapping of plain values, except `relations`, a list of mappings of plain values. Aliases, YAML anchors, tags, directives, and document markers are rejected, so the file means the same to every reader.
 - **The body** below the closing `---` line is kept byte for byte.
-- **Later fields:** `attributes`, `statement`, `inner_board`, and `expected_anchor` from the [[Data Model#Types|data model]] come with the slices that need them.
+- **Later fields:** `attributes`, `statement`, and `expected_anchor` from the [[Data Model#Types|data model]] come with the slices that need them. Which board is an element's inside, the [[#Board File|board file]] says, so the element file never changes for it.
 
 ## Board File
 
@@ -118,6 +118,8 @@ A board is a JSON file. Its structure follows JSON Canvas, so an export to `.can
   "format": 1,
   "id": "container-level",
   "title": "Container Level",
+  "owner": "shop-system",
+  "summary": "The containers of the shop",
   "placements": [
     {"element": "checkout-service", "x": 80, "y": 200, "width": 180, "height": 90},
     {"element": "payment-service", "x": 400, "y": 200, "width": 180, "height": 90}
@@ -125,10 +127,10 @@ A board is a JSON file. Its structure follows JSON Canvas, so an export to `.can
 }
 ```
 
-- **Fields:** `format`, which is 1, `id`, which equals the file name, `title`, and the placements with `element`, `x`, `y`, `width`, and `height`. Positions are integers, sizes positive integers. The file must be a JSON object; other fields and an element placed twice are rejected.
+- **Fields:** `format`, which is 1, `id`, which equals the file name, `title`, the optional `owner`, the element whose inside the board is (its [[Board Graph|inner board]]), the optional `summary`, and the placements with `element`, `x`, `y`, `width`, and `height`. The owner and the summary each have a line of their own and are written only when present. Positions are integers, sizes positive integers. The file must be a JSON object; other fields and an element placed twice are rejected.
 - **One placement per line**, sorted by element ID. Moving a box changes exactly one line.
 - **Arrows are not in the file.** They follow from the relations of the elements.
-- **Later fields:** `owner`, `zone`, and `frames` on the board; `frame`, `presentation`, `pinned`, and `attached_to` on a placement. An attached sticky note's coordinates will be relative to the element it hangs on (see [[Presentation#Sticky Notes]]).
+- **Later fields:** `zone` and `frames` on the board; `frame`, `presentation`, `pinned`, and `attached_to` on a placement. An attached sticky note's coordinates will be relative to the element it hangs on (see [[Presentation#Sticky Notes]]).
 
 ## Project File
 

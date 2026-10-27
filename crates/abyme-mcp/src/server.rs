@@ -157,7 +157,12 @@ impl AbymeServer {
 
     #[tool(
         description = "Applies operations to the Abyme project in one transaction: either all of them or none. \
-            create_board takes a key and a title; create_element takes a key, type_ref, name, and optionally \
+            create_board takes a key, a title, and optionally a summary and an owner, the element whose \
+            inside (inner board) the board is; update_board takes board and any of title, summary (null \
+            removes it), and owner (null removes it), and changes only the fields it names; an element owns \
+            at most one board, and no board may lie inside itself (the board above a board is its owner's \
+            home). \
+            create_element takes a key, type_ref, name, and optionally \
             summary, body, and anchor; place_element gives an element its home on a board; move_element takes an \
             element, the board it lies on, and a new x and y from -1000000 to 1000000, and keeps its size; \
             update_element takes element and any of name, type_ref, summary (null removes it), body, and \
@@ -171,7 +176,7 @@ impl AbymeServer {
             escapes read_board and read_element show are not decoded; \
             delete_element takes element and removes its file, its placement on every board, and its own \
             relations, and is refused while other elements still relate to it (delete those relations \
-            first); it also clears the placements of an element whose file is missing; \
+            first) or while it owns a board (give that board another owner or none first); it also clears the placements of an element whose file is missing; \
             create_relation takes from, kind, to, and optionally a label, and adds a relation from one \
             element to another; delete_relation takes from, kind, and to, and removes that relation, also \
             when the target is gone. A kind is one of concerns, depends_on, describes (from a document to \

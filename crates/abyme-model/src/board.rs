@@ -20,13 +20,18 @@ pub const BOARD_FORMAT: u32 = 1;
 /// How many characters of a parser message an error shows.
 const DETAIL_LIMIT: usize = 200;
 
-/// A board: its title and where each element on it lies.
+/// A board: its title and summary, the element whose inside it is, and
+/// where each element on it lies.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Board {
     /// The board's ID, which is also its file name.
     pub id: BoardId,
     /// The title shown for the board.
     pub title: String,
+    /// The element whose inside the board is, if it is an inner board.
+    pub owner: Option<ElementId>,
+    /// A short summary of what the board shows, for every output.
+    pub summary: Option<String>,
     /// The rectangle of each element on the board. A map, so an element
     /// lies on a board at most once and the order is always by element ID.
     pub placements: BTreeMap<ElementId, Rect>,
@@ -93,6 +98,10 @@ struct BoardFile {
     format: u32,
     id: BoardId,
     title: String,
+    #[serde(default)]
+    owner: Option<ElementId>,
+    #[serde(default)]
+    summary: Option<String>,
     placements: Vec<ObjectOnly<PlacementLine>>,
 }
 
@@ -141,10 +150,14 @@ impl Board {
             placements: collect_placements(expected, file.placements)?,
             id: file.id,
             title: file.title,
+            owner: file.owner,
+            summary: file.summary,
         })
     }
 
     /// Writes the board file, one placement per line, ordered by element ID.
+    /// The owner and the summary each get a line of their own, and only
+    /// when the board has them.
     #[must_use]
     pub fn to_json(&self) -> String {
         let lines: Vec<String> = self
@@ -157,8 +170,14 @@ impl Board {
         } else {
             format!("[\n{}\n  ]", lines.join(",\n"))
         };
+        let owner = self.owner.as_ref().map_or(String::new(), |owner| {
+            format!("  \"owner\": {},\n", json_string(owner.as_str()))
+        });
+        let summary = self.summary.as_ref().map_or(String::new(), |summary| {
+            format!("  \"summary\": {},\n", json_string(summary))
+        });
         format!(
-            "{{\n  \"format\": {BOARD_FORMAT},\n  \"id\": {},\n  \"title\": {},\n  \"placements\": {placements}\n}}\n",
+            "{{\n  \"format\": {BOARD_FORMAT},\n  \"id\": {},\n  \"title\": {},\n{owner}{summary}  \"placements\": {placements}\n}}\n",
             json_string(self.id.as_str()),
             json_string(&self.title),
         )
@@ -238,6 +257,8 @@ mod tests {
         Board {
             id: board_id("container-level"),
             title: "Container Level".to_owned(),
+            owner: None,
+            summary: None,
             placements: BTreeMap::from([
                 (element_id("checkout-service"), rect(80, 200)),
                 (element_id("payment-service"), rect(400, 200)),
@@ -300,6 +321,8 @@ mod tests {
         let board = Board {
             id: board_id("empty"),
             title: String::new(),
+            owner: None,
+            summary: None,
             placements: BTreeMap::new(),
         };
 
@@ -339,6 +362,111 @@ mod tests {
             sample_board().to_json().lines().count()
         );
         assert_eq!(Board::from_json(&board.id, &json).unwrap(), board);
+    }
+
+    /// The sample board as the inner board of `shop-system`, with a
+    /// summary.
+    fn inner_board() -> Board {
+        Board {
+            owner: Some(element_id("shop-system")),
+            summary: Some("The containers of the shop".to_owned()),
+            ..sample_board()
+        }
+    }
+
+    #[test]
+    fn writes_the_owner_and_the_summary_on_lines_of_their_own() {
+        let expected = r#"{
+  "format": 1,
+  "id": "container-level",
+  "title": "Container Level",
+  "owner": "shop-system",
+  "summary": "The containers of the shop",
+  "placements": [
+    {"element": "checkout-service", "x": 80, "y": 200, "width": 180, "height": 90},
+    {"element": "payment-service", "x": 400, "y": 200, "width": 180, "height": 90}
+  ]
+}
+"#;
+
+        assert_eq!(inner_board().to_json(), expected);
+        assert_eq!(
+            Board::from_json(&board_id("container-level"), expected).unwrap(),
+            inner_board()
+        );
+    }
+
+    #[test]
+    fn writes_a_board_without_owner_and_summary_as_before() {
+        let text = main_file(r#"{"element": "a", "x": 0, "y": 0, "width": 1, "height": 1}"#);
+        let written = Board::from_json(&board_id("main"), &text)
+            .unwrap()
+            .to_json();
+
+        let board = Board::from_json(&board_id("main"), &written).unwrap();
+
+        assert_eq!(board.owner, None);
+        assert_eq!(board.summary, None);
+        assert_eq!(board.to_json(), written);
+        assert!(!written.contains("owner"));
+        assert!(!written.contains("summary"));
+    }
+
+    #[test]
+    fn keeps_a_summary_with_special_characters_on_its_line() {
+        let board = Board {
+            summary: Some("line\nbreak \"quoted\" back\\slash \u{2028} \u{1b}[31m ]}".to_owned()),
+            ..inner_board()
+        };
+
+        let json = board.to_json();
+
+        assert_eq!(
+            json.lines().count(),
+            inner_board().to_json().lines().count()
+        );
+        assert_eq!(Board::from_json(&board.id, &json).unwrap(), board);
+    }
+
+    #[test]
+    fn reads_a_null_owner_and_summary_as_none() {
+        let text = r#"{"format": 1, "id": "main", "title": "t", "owner": null, "summary": null, "placements": []}"#;
+
+        let board = Board::from_json(&board_id("main"), text).unwrap();
+
+        assert_eq!((board.owner, board.summary), (None, None));
+    }
+
+    #[rstest]
+    #[case::path(r#""../x""#)]
+    #[case::capitals(r#""Shop""#)]
+    #[case::too_long(r#""aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa""#)]
+    #[case::number("1")]
+    #[case::object(r#"{"id": "shop"}"#)]
+    fn rejects_an_owner_that_is_no_element_id(#[case] owner: &str) {
+        let text = format!(
+            r#"{{"format": 1, "id": "main", "title": "t", "owner": {owner}, "placements": []}}"#
+        );
+
+        assert!(matches!(
+            Board::from_json(&board_id("main"), &text),
+            Err(BoardError::Invalid { .. })
+        ));
+    }
+
+    #[rstest]
+    #[case::summary_as_number(r#""summary": 1"#)]
+    #[case::summary_as_array(r#""summary": ["a"]"#)]
+    #[case::owner_twice(r#""owner": "a", "owner": "b""#)]
+    #[case::summary_twice(r#""summary": "a", "summary": "b""#)]
+    fn rejects_owner_and_summary_fields_it_does_not_expect(#[case] fields: &str) {
+        let text =
+            format!(r#"{{"format": 1, "id": "main", "title": "t", {fields}, "placements": []}}"#);
+
+        assert!(matches!(
+            Board::from_json(&board_id("main"), &text),
+            Err(BoardError::Invalid { .. })
+        ));
     }
 
     #[rstest]

@@ -153,6 +153,8 @@ mod tests {
         Board {
             id: "main".parse::<BoardId>().unwrap(),
             title: String::new(),
+            owner: None,
+            summary: None,
             placements: placements
                 .iter()
                 .map(|(id, rect)| (id.parse::<ElementId>().unwrap(), *rect))

@@ -49,6 +49,8 @@ fn snapshot(title: &str, elements: Vec<Element>, missing: &[&str]) -> Snapshot {
     let board = Board {
         id: "b".parse().unwrap(),
         title: title.to_owned(),
+        owner: None,
+        summary: None,
         placements: placed.map(|id| (id, rect())).collect(),
     };
     Snapshot {
@@ -781,6 +783,8 @@ fn detail_snapshot() -> Snapshot {
     let onboarding = Board {
         id: "onboarding".parse().unwrap(),
         title: "Onboarding".to_owned(),
+        owner: None,
+        summary: None,
         placements: BTreeMap::from([("payment".parse().unwrap(), rect())]),
     };
     snapshot.boards.insert(onboarding.id.clone(), onboarding);
