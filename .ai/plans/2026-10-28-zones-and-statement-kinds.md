@@ -49,7 +49,7 @@ board refuse the drags a person makes in the canvas.
 ## Steps
 
 - [x] Zones in the board file and in `apply`
-- [ ] Each element's statement kind, shown wherever the AI reads elements
+- [x] Each element's statement kind, shown wherever the AI reads elements
 - [ ] Search filtered by statement kind
 - [ ] Mirrored boards in the canvas
 
@@ -96,12 +96,12 @@ sees it in every tool that shows elements or boards.
 
 Review path: Security-Hybrid
 
-- [ ] One public core function gives every element with a file the
+- [x] One public core function gives every element with a file the
       statement kind of its home board's zone; an element without a home,
       or whose home has no zone, has none. An element placed on several
       boards takes the kind of its home, the one of them with the lowest
       ID.
-- [ ] `read_board` shows, for a board with a zone, a header line
+- [x] `read_board` shows, for a board with a zone, a header line
       `Zone: <mode> · <kind>` after the owner line and before the summary
       line. `overview` shows `<mode> · <kind>` in a column after the
       title. The element lines of `read_board`, `search`, and `status`
@@ -114,17 +114,17 @@ Review path: Security-Hybrid
       `crates/abyme-mcp/tests/server.rs`, and
       `crates/abyme-mcp/src/server/tests.rs` pass with their assertions
       unchanged.
-- [ ] `read_element` shows, after `Type:`, `Statement kind: <kind>, from
+- [x] `read_element` shows, after `Type:`, `Statement kind: <kind>, from
       board <id>` or `Statement kind: none`.
-- [ ] Unit tests cover the function for an element without a home, on a
+- [x] Unit tests cover the function for an element without a home, on a
       board without a zone, and placed on two boards, and each display; an
       integration test through the MCP tools reads a zoned board, its
       overview, and one of its elements.
-- [ ] The read tools' descriptions, the MCP README, MCP Server, and the
+- [x] The read tools' descriptions, the MCP README, MCP Server, and the
       inheritance rule in Data Model and Boards and Zones describe the
       statement kind as delivered: inherited from the home board's zone,
       none without one.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
       and `cargo fmt --all --check` pass.
 
 ### Task 3: Search filtered by statement kind

@@ -222,15 +222,20 @@ impl AbymeServer {
         description = "Returns a board of the Abyme project as an outline: a header with the board's ID and \
             title; for a board that is an element's inner board, a line Inside of: with that element and \
             Above: with the board it lies on, marked ⚠ missing for an element without a file, ⚠ no home for \
-            one no board places, and ⚠ cycle for a board that lies inside itself; and for a board with a \
-            summary, a line Summary: with it. Then, after a blank line, one line per element with its ID, \
-            type, name, summary, ▸ and the IDs of the boards it owns (its inner boards, which read_board \
-            opens), and last ⚠ task or ⚠ hint when the element has review flags (read_element names \
-            them), then, after a blank line, \
+            one no board places, and ⚠ cycle for a board that lies inside itself; for a zone, a line \
+            Zone: with its mode and statement kind; and for a board with a summary, a line Summary: with \
+            it. Then, after a blank line, one line per element with its ID, type, statement kind, name, \
+            summary, ▸ and the IDs of the boards it owns (its inner boards, which read_board opens), and \
+            last ⚠ task or ⚠ hint when the element has review flags (read_element names them), then, \
+            after a blank line, \
             one line per relation between two elements on the board, as source → target, kind, and label. \
             Text from the repository, relation labels included, is escaped onto one line. With coordinates \
             true, each element line also shows the element's position and size right after its ID, as \
-            @x,y WIDTHxHEIGHT. When Git cannot be asked, the reply starts with a line Review flags \
+            @x,y WIDTHxHEIGHT. The statement kind column appears on a zone and wherever an element has \
+            a kind: it is the element's own kind, that of the zone of its home board, also on a board \
+            that is not its home; none means it has none, not the kind of the board shown. current says \
+            what the content claims, not that it was checked: Verified: in read_element and the ⚠ \
+            markers say that. When Git cannot be asked, the reply starts with a line Review flags \
             unavailable: and the reason, and no line is marked.",
         input_schema = schema_for_type::<ReadBoardArguments>()
     )]
@@ -262,8 +267,9 @@ impl AbymeServer {
     }
 
     #[tool(
-        description = "Returns one element of the Abyme project in detail: its ID and name, type, anchor \
-            (or none), verification stamp as the commit it was last verified against and by ai or person \
+        description = "Returns one element of the Abyme project in detail: its ID and name, type, \
+            Statement kind: with the kind of its home board's zone and that board (or none, when its home \
+            is no zone), anchor (or none), verification stamp as the commit it was last verified against and by ai or person \
             (or none), then Review: with task, hint, or none and one indented line per review flag, such \
             as files changed under the anchor since the stamp (at most 10 named), or a relation of kind \
             depends_on or describes (a task) or uses or concerns (a hint) where what the target's anchor \
@@ -302,8 +308,8 @@ impl AbymeServer {
     #[tool(
         description = "Searches the elements of the Abyme project by the words they contain and by what \
             they are about, and returns the 10 that match the query best, best first: one line per element \
-            with its ID, type, name, summary, ▸ and its inner boards, and the ⚠ task or ⚠ hint marker, as \
-            in a board outline. \
+            with its ID, type, statement kind (when one of them has one; none for the others), name, \
+            summary, ▸ and its inner boards, and the ⚠ task or ⚠ hint marker, as in a board outline. \
             Text from the repository is escaped onto one line. When Git cannot be asked, the reply starts \
             with a line Review flags unavailable: and the reason, and no line is marked. The first search \
             after the server starts, and the first after the project file names another embedding model, \
@@ -358,7 +364,8 @@ impl AbymeServer {
     #[tool(
         description = "Returns all boards of the Abyme project as a tree, the place to start a session: \
             one line per board, each board's inner boards below it indented two spaces further, with its \
-            ID, title, summary, how many elements have their home on it, and how many of those are marked \
+            ID, title, zone as mode · statement kind (or no zone; the column appears when a board is a \
+            zone), summary, how many elements have their home on it, and how many of those are marked \
             ⚠ task or ⚠ hint, as ⚠ 2 tasks, 1 hint; a title longer than 80 characters and a summary \
             longer than 160 are cut and end in …, and read_board shows them in full. A board that a \
             merge or a hand edit took out of the tree stands at the top level with its Inside of: line \

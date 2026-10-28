@@ -22,6 +22,7 @@ mod outline;
 mod project;
 mod review;
 mod slug;
+mod statement;
 
 pub use apply::{
     Applied, ApplyError, Created, Kind, MAX_OPERATIONS, MAX_SHOWN_SOURCES, OperationProblem,
@@ -39,3 +40,4 @@ pub use project::{
     Project, ProjectError,
 };
 pub use review::{Flag, Priority, Review, Unavailable, VerifyProblem};
+pub use statement::statement_kinds;

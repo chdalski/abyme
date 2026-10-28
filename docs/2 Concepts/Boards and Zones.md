@@ -31,7 +31,7 @@ A mode answers two questions: Who may change things on the board? And is it reco
 
 ## Statement Kind
 
-So that the AI weighs content correctly, every piece of content has a statement kind. It does not say how finished something is, but what kind of statement it is.
+So that the AI weighs content correctly, content carries a statement kind, from the zone it has its home in (see [[#Inheritance]]). It does not say how finished something is, but what kind of statement it is.
 
 | Kind | Meaning | How the AI treats it |
 |---|---|---|
@@ -58,8 +58,11 @@ Nobody should have to maintain settings per element. For a board or a frame, you
 
 A zone stores its mode and its statement kind, never the preset's name: a preset only names a usual pair. The AI gives a board the Current preset as `"zone": {"mode": "mirrored", "statement": "current"}` (see [[Storage in Git#Board File]]). Abyme knows the modes free and mirrored and every kind but historic so far, so Archive comes with locked, and a Current zone may also be synced once synced zones exist.
 
-Some element types bring their own kind: question, ADR (= decision), and knowledge note (= knowledge). The AI sets the settings itself when it creates something, because it knows which zone it writes to. Overriding them by hand is rarely necessary.
+The AI sets the zone itself when it creates a board, because it knows what the board holds.
 
 ## Inheritance
 
-Elements inherit the settings of the zone they lie in. Frame settings take precedence over board settings, element settings over both.
+An element takes the statement kind of the zone it has its home in, its home board. Without a home, or when its home board is no zone, it has none: no other board that shows it and no board above stands in, so nothing becomes a fact by accident. The AI sees each element's kind in the [[MCP Server#Detail Levels|detail levels]].
+
+> [!question] Proposal
+> Frames and elements get settings of their own, and some element types bring their own kind: question, ADR (= decision), and knowledge note (= knowledge). Frame settings take precedence over board settings, element settings over both; overriding them by hand is rarely necessary.

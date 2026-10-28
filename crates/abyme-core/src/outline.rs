@@ -9,11 +9,15 @@
 
 use std::collections::BTreeMap;
 
-use abyme_model::{Board, BoardId, Element, ElementId, Rect, RelationKind, hides_or_breaks_text};
+use abyme_model::{
+    Board, BoardId, Element, ElementId, Rect, RelationKind, StatementKind, Zone,
+    hides_or_breaks_text,
+};
 
 use crate::apply::Snapshot;
 use crate::board_tree::BoardTree;
 use crate::review::{Flag, Priority, Review};
+use crate::statement::kind_of;
 
 /// The widest a column is padded to, in characters. A longer value runs past
 /// its column, so one long name cannot pad every other line.
@@ -31,6 +35,23 @@ const CYCLE_MARKER: &str = "⚠ cycle";
 
 /// What an element line shows before the IDs of the boards the element owns.
 const INNER_BOARDS_MARKER: &str = "▸";
+
+/// What a statement kind column shows for an element without one, so that
+/// no empty cell lets the name beside it pass for a kind.
+const NO_KIND: &str = "none";
+
+/// What the zone column of the overview shows for a board that is no zone.
+const NO_ZONE: &str = "no zone";
+
+/// When element lines show the statement kind column.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum KindColumn {
+    /// When one of the listed elements has a statement kind.
+    WhenAnyHasOne,
+    /// Always: on the outline of a zone, lines without the column would read
+    /// as if they took the zone's kind.
+    Always,
+}
 
 /// How many changed files a review flag names at most.
 const SHOWN_CHANGED_FILES: usize = 10;
@@ -72,8 +93,10 @@ pub struct UnknownElement(pub ElementId);
 /// Renders all boards as an overview.
 ///
 /// One line per board, depth first as [`BoardTree::depth_first`] orders
-/// them, each level indented two spaces further: the board's ID, title, and
-/// summary, each cut after [`OVERVIEW_TITLE_CHARS`] and
+/// them, each level indented two spaces further: the board's ID and title;
+/// the zone as `<mode> · <kind>`, or `no zone`, in a column shown only when
+/// one of the boards listed is a zone; the summary; title and summary each
+/// cut after [`OVERVIEW_TITLE_CHARS`] and
 /// [`OVERVIEW_SUMMARY_CHARS`] characters and then ending in `…`; how many
 /// elements with a file have their home on it; given a `review`, how many
 /// of those have a task and how many only a hint, as `⚠ 2 tasks, 1 hint`;
@@ -92,31 +115,48 @@ pub fn overview(snapshot: &Snapshot, review: Option<&Review>) -> String {
     let own = own_elements(snapshot, &tree, review);
     // Only the boards shown are rendered, so no line costs a walk or a width
     // beyond them.
-    let rows: Vec<Vec<String>> = order
+    let shown: Vec<(usize, &Board)> = order
         .iter()
         .take(OVERVIEW_LINES)
-        .filter_map(|&(depth, id)| {
-            let board = snapshot.boards.get(id)?;
+        .filter_map(|&(depth, id)| Some((depth, snapshot.boards.get(id)?)))
+        .collect();
+    let shows_zones = shown.iter().any(|(_, board)| board.zone.is_some());
+    let rows: Vec<Vec<String>> = shown
+        .into_iter()
+        .map(|(depth, board)| {
+            let id = &board.id;
             let counts = own.get(id).copied().unwrap_or_default();
-            let mut columns = vec![
-                format!("{}{id}", "  ".repeat(depth)),
-                one_line(&cut(&board.title, OVERVIEW_TITLE_CHARS)),
-                board
-                    .summary
-                    .as_deref()
-                    .map(|summary| one_line(&cut(summary, OVERVIEW_SUMMARY_CHARS)))
-                    .unwrap_or_default(),
-                counted(counts.elements, "element"),
-                review
-                    .map(|_| flag_counts(counts.tasks, counts.hints))
-                    .unwrap_or_default(),
-                tree.owner(id)
-                    .filter(|_| depth == 0)
-                    .map(|owner| owner_line(snapshot, &tree, id, owner))
-                    .unwrap_or_default(),
-            ];
+            let zone =
+                shows_zones.then(|| board.zone.map_or_else(|| NO_ZONE.to_owned(), zone_text));
+            let mut columns: Vec<String> = [
+                Some(format!("{}{id}", "  ".repeat(depth))),
+                Some(one_line(&cut(&board.title, OVERVIEW_TITLE_CHARS))),
+                zone,
+                Some(
+                    board
+                        .summary
+                        .as_deref()
+                        .map(|summary| one_line(&cut(summary, OVERVIEW_SUMMARY_CHARS)))
+                        .unwrap_or_default(),
+                ),
+                Some(counted(counts.elements, "element")),
+                Some(
+                    review
+                        .map(|_| flag_counts(counts.tasks, counts.hints))
+                        .unwrap_or_default(),
+                ),
+                Some(
+                    tree.owner(id)
+                        .filter(|_| depth == 0)
+                        .map(|owner| owner_line(snapshot, &tree, id, owner))
+                        .unwrap_or_default(),
+                ),
+            ]
+            .into_iter()
+            .flatten()
+            .collect();
             drop_empty_tail(&mut columns);
-            Some(columns)
+            columns
         })
         .collect();
     let more = order.len().saturating_sub(OVERVIEW_LINES);
@@ -204,9 +244,11 @@ fn drop_empty_tail(columns: &mut Vec<String>) {
 /// The outline has a header line with the board's ID and title; for a board
 /// with an owner, a line `Inside of:` with the owner and, if a board places
 /// the owner, `Above:` with the owner's home (see [`owner_line`] for the
-/// markers); for a board with a summary, a line `Summary:` with it. A blank
-/// line follows, and one line per placed element, ordered by ID, as
-/// [`element_list`] renders it. A placement whose element is missing shows
+/// markers); for a zone, a line `Zone: <mode> · <kind>`; for a board with
+/// a summary, a line `Summary:` with it. A blank line follows, and one line
+/// per placed element, ordered by ID, as [`element_list`] renders it; on a
+/// zone, the lines always show the statement kind column, each with the
+/// element's own kind. A placement whose element is missing shows
 /// its ID and `⚠ missing`. With [`Geometry::Shown`], each line also shows
 /// the placement's position and size from the board file, right after the
 /// ID.
@@ -231,16 +273,27 @@ pub fn outline(
         .get(board)
         .ok_or_else(|| UnknownBoard(board.clone()))?;
     let tree = BoardTree::of(&snapshot.boards);
-    let rows: Vec<Vec<String>> = element_rows(snapshot, &tree, found.placements.keys(), review)
-        .into_iter()
-        .zip(found.placements.values())
-        .map(|(mut columns, rect)| {
-            if geometry == Geometry::Shown {
-                columns.insert(1, position(rect));
-            }
-            columns
-        })
-        .collect();
+    let kind_column = if found.zone.is_some() {
+        KindColumn::Always
+    } else {
+        KindColumn::WhenAnyHasOne
+    };
+    let rows: Vec<Vec<String>> = element_rows(
+        snapshot,
+        &tree,
+        found.placements.keys(),
+        review,
+        kind_column,
+    )
+    .into_iter()
+    .zip(found.placements.values())
+    .map(|(mut columns, rect)| {
+        if geometry == Geometry::Shown {
+            columns.insert(1, position(rect));
+        }
+        columns
+    })
+    .collect();
     let relations = relation_rows(snapshot, found);
     // The relation lines are aligned on their own, so that they never change
     // the columns of the element lines.
@@ -259,7 +312,9 @@ pub fn outline(
 /// Renders the elements with the given IDs as the outline's element lines.
 ///
 /// The lines come in the given order, without a header: one line per ID,
-/// each ending in a line feed, with the element's ID, type, name, and
+/// each ending in a line feed, with the element's ID and type; its
+/// statement kind, the kind of its home board's zone or `none`, in a column
+/// that a list shows only when one of its elements has a kind; its name and
 /// summary; `▸` and the IDs of the boards the element owns, in a column that
 /// a list shows only when one of its elements owns a board; and, given a
 /// `review`, `⚠ task` or `⚠ hint` for the highest priority of the element's
@@ -275,7 +330,13 @@ pub fn element_list<'a>(
     review: Option<&Review>,
 ) -> String {
     let tree = BoardTree::of(&snapshot.boards);
-    lines(&element_rows(snapshot, &tree, ids, review))
+    lines(&element_rows(
+        snapshot,
+        &tree,
+        ids,
+        review,
+        KindColumn::WhenAnyHasOne,
+    ))
 }
 
 /// The rows of the elements with the given IDs, in the given order, as
@@ -285,17 +346,35 @@ fn element_rows<'a>(
     tree: &BoardTree,
     ids: impl IntoIterator<Item = &'a ElementId>,
     review: Option<&Review>,
+    kind_column: KindColumn,
 ) -> Vec<Vec<String>> {
-    let elements: Vec<(&ElementId, Option<&Element>, String)> = ids
+    let elements: Vec<(&ElementId, Option<&Element>, Option<StatementKind>, String)> = ids
         .into_iter()
-        .map(|id| (id, snapshot.elements.get(id), inner_boards(tree, id)))
+        .map(|id| {
+            let element = snapshot.elements.get(id);
+            let kind = element
+                .and_then(|_| kind_of(snapshot, tree, id))
+                .map(|(kind, _)| kind);
+            (id, element, kind, inner_boards(tree, id))
+        })
         .collect();
+    let shows_kinds =
+        kind_column == KindColumn::Always || elements.iter().any(|(_, _, kind, _)| kind.is_some());
     let shows_inner_boards = elements
         .iter()
-        .any(|(_, element, inner)| element.is_some() && !inner.is_empty());
+        .any(|(_, element, _, inner)| element.is_some() && !inner.is_empty());
     elements
         .into_iter()
-        .map(|(id, element, inner)| row(id, element, shows_inner_boards.then_some(inner), review))
+        .map(|(id, element, kind, inner)| {
+            let kind = shows_kinds.then(|| kind.map_or(NO_KIND, StatementKind::as_str).to_owned());
+            row(
+                id,
+                element,
+                kind,
+                shows_inner_boards.then_some(inner),
+                review,
+            )
+        })
         .collect()
 }
 
@@ -341,13 +420,14 @@ pub fn status_report(snapshot: &Snapshot, review: &Review) -> String {
 
 /// Renders the element `id` in detail, in this order:
 ///
-/// - `Element:` with its ID and name, `Type:`, `Anchor:` with its anchor or
-///   `none`, `Verified:` with the stamp's commit and `by ai` or
-///   `by person`, or `none`, given a `review`, `Review:` with the highest
-///   priority of the element's flags or `none` and one indented line per
-///   flag, `Summary:` if it has one, `Boards:` with every board that places
-///   it, by ID, or `none`, and `Inner board:` with every board it owns, by
-///   ID, or `none`;
+/// - `Element:` with its ID and name, `Type:`, `Statement kind:` with the
+///   kind of its home board's zone and `from board` that board, or `none`,
+///   `Anchor:` with its anchor or `none`, `Verified:` with the stamp's
+///   commit and `by ai` or `by person`, or `none`, given a `review`,
+///   `Review:` with the highest priority of the element's flags or `none`
+///   and one indented line per flag, `Summary:` if it has one, `Boards:`
+///   with every board that places it, by ID, or `none`, and `Inner board:`
+///   with every board it owns, by ID, or `none`;
 /// - after a blank line, `Outgoing relations:` with one line per relation
 ///   as in the outline, a target without a file marked `⚠ missing`, or
 ///   `none`;
@@ -417,8 +497,13 @@ pub fn element_detail(
         .collect();
     let tree = BoardTree::of(&snapshot.boards);
     let inner_boards: Vec<&str> = tree.owned_by(id).map(BoardId::as_str).collect();
+    let statement = kind_of(snapshot, &tree, id).map_or_else(
+        || NO_KIND.to_owned(),
+        |(kind, home)| format!("{}, from board {home}", kind.as_str()),
+    );
     Ok(format!(
-        "Element: {id} · {}\nType: {}\nAnchor: {anchor}\nVerified: {verified}\n{}\
+        "Element: {id} · {}\nType: {}\nStatement kind: {statement}\nAnchor: {anchor}\n\
+         Verified: {verified}\n{}\
          {summary}Boards: {}\nInner board: {}\n\n\
          Outgoing relations:\n{}\nIncoming relations:\n{}\nDescription:\n{}",
         one_line(element.name()),
@@ -516,12 +601,16 @@ fn position(rect: &Rect) -> String {
 }
 
 /// The header lines of `board`, each ending in a line feed: the ID and
-/// title, then the owner line if it has an owner, then the summary if it has
-/// one that is not empty.
+/// title, then the owner line if it has an owner, the zone if it is one, and
+/// the summary if it has one that is not empty.
 fn header(snapshot: &Snapshot, tree: &BoardTree, board: &Board) -> String {
     let owner = tree
         .owner(&board.id)
         .map(|owner| format!("{}\n", owner_line(snapshot, tree, &board.id, owner)))
+        .unwrap_or_default();
+    let zone = board
+        .zone
+        .map(|zone| format!("Zone: {}\n", zone_text(zone)))
         .unwrap_or_default();
     let summary = board
         .summary
@@ -530,10 +619,15 @@ fn header(snapshot: &Snapshot, tree: &BoardTree, board: &Board) -> String {
         .map(|summary| format!("Summary: {}\n", one_line(summary)))
         .unwrap_or_default();
     format!(
-        "Board: {} · {}\n{owner}{summary}",
+        "Board: {} · {}\n{owner}{zone}{summary}",
         board.id,
         one_line(&board.title)
     )
+}
+
+/// A zone as `<mode> · <kind>`.
+fn zone_text(zone: Zone) -> String {
+    format!("{} · {}", zone.mode.as_str(), zone.statement.as_str())
 }
 
 /// The line naming `owner`, whose inside `board` is: `Inside of:` and the
@@ -591,13 +685,15 @@ fn relation_row(
     columns
 }
 
-/// The columns of one element's line: ID, type, name, summary, the inner
-/// boards when `inner_boards` is given, and the review marker. Empty columns
-/// at the end are left out; an empty one before a filled one stays, so the
-/// columns keep their places. The last column is never padded.
+/// The columns of one element's line: ID, type, the statement kind when
+/// `kind` is given, name, summary, the inner boards when `inner_boards` is
+/// given, and the review marker. Empty columns at the end are left out; an
+/// empty one before a filled one stays, so the columns keep their places.
+/// The last column is never padded.
 fn row(
     id: &ElementId,
     element: Option<&Element>,
+    kind: Option<String>,
     inner_boards: Option<String>,
     review: Option<&Review>,
 ) -> Vec<String> {
@@ -618,11 +714,13 @@ fn row(
     .collect();
     drop_empty_tail(&mut optional);
     [
-        id.to_string(),
-        one_line(element.type_ref().as_str()),
-        one_line(element.name()),
+        Some(id.to_string()),
+        Some(one_line(element.type_ref().as_str())),
+        kind,
+        Some(one_line(element.name())),
     ]
     .into_iter()
+    .flatten()
     .chain(optional)
     .collect()
 }

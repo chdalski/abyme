@@ -556,6 +556,72 @@ async fn apply_sets_changes_and_removes_a_board_s_zone_and_refuses_another_one()
 }
 
 #[tokio::test]
+async fn the_read_tools_show_each_element_s_kind_from_its_home_board_s_zone() -> TestResult {
+    let directory = project()?;
+    let session = start(directory.path()).await?;
+    let applied = call(
+        &session,
+        "apply",
+        json!({"operations": [
+            {"op": "create_board", "key": "ctx", "title": "Context",
+             "zone": {"mode": "mirrored", "statement": "current"}},
+            {"op": "create_element", "key": "shop", "type_ref": "c4/system", "name": "Shop"},
+            {"op": "place_element", "element": {"new": "shop"}, "board": {"new": "ctx"}},
+            {"op": "create_board", "key": "z", "title": "Zeta",
+             "zone": {"mode": "free", "statement": "idea"}},
+            {"op": "create_element", "key": "spark", "type_ref": "note", "name": "Spark"},
+            {"op": "place_element", "element": {"new": "spark"}, "board": {"new": "z"}}
+        ]}),
+    )
+    .await??;
+    assert_eq!(applied.is_error, Some(false), "{applied:?}");
+    // A hand edit places the shop on the idea board too; its home stays the
+    // context, the board with the lower ID.
+    fs::write(
+        directory.path().join("abyme/boards/zeta.board.json"),
+        r#"{"format": 1, "id": "zeta", "title": "Zeta",
+            "zone": {"mode": "free", "statement": "idea"}, "placements": [
+            {"element": "shop", "x": 0, "y": 0, "width": 180, "height": 90},
+            {"element": "spark", "x": 0, "y": 100, "width": 180, "height": 90}]}"#,
+    )?;
+    let unavailable = "Review flags unavailable: the project lies in no Git repository\n";
+
+    let board = call(&session, "read_board", json!({"board": "zeta"})).await??;
+    let overview = call(&session, "overview", json!({})).await??;
+    let shop = call(&session, "read_element", json!({"element": "shop"})).await??;
+
+    assert_eq!(
+        text(&board),
+        format!(
+            "{unavailable}Board: zeta · Zeta\n\
+             Zone: free · idea\n\
+             \n\
+             shop   c4/system  current  Shop\n\
+             spark  note       idea     Spark\n"
+        )
+    );
+    assert_eq!(
+        text(&overview),
+        format!(
+            "{unavailable}context  Context  mirrored · current    1 element\n\
+             zeta     Zeta     free · idea           1 element\n"
+        )
+    );
+    assert!(
+        text(&shop).contains("\nType: c4/system\nStatement kind: current, from board context\n"),
+        "{}",
+        text(&shop)
+    );
+    assert!(
+        text(&shop).contains("\nBoards: context, zeta\n"),
+        "{}",
+        text(&shop)
+    );
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+#[tokio::test]
 async fn read_board_and_read_element_show_inner_boards_also_from_hand_edited_files() -> TestResult {
     let directory = project()?;
     let session = start(directory.path()).await?;
@@ -749,6 +815,7 @@ async fn read_element_shows_an_element_with_its_relations_and_description() -> T
         "Review flags unavailable: the project lies in no Git repository\n\
          Element: payment-service · Payment Service\n\
          Type: c4/container\n\
+         Statement kind: none\n\
          Anchor: none\n\
          Verified: none\n\
          Summary: Payments through Stripe\n\
@@ -798,6 +865,7 @@ async fn apply_updates_an_element_and_read_element_shows_it() -> TestResult {
         "Review flags unavailable: the project lies in no Git repository\n\
          Element: payment-service · Payments\n\
          Type: c4/container\n\
+         Statement kind: none\n\
          Anchor: none\n\
          Verified: none\n\
          Boards: container-level\n\
@@ -893,6 +961,7 @@ async fn apply_sets_and_changes_anchors_and_a_changed_anchor_removes_the_stamp()
             "Review flags unavailable: the project lies in no Git repository\n\
              Element: docs-page · Docs Page\n\
              Type: doc\n\
+             Statement kind: none\n\
              Anchor: docs/a \"b\" #c\n\
              Verified: none\n"
         ),

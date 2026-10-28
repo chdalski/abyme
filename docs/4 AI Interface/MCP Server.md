@@ -42,20 +42,20 @@ Abyme gives the AI three detail levels in a compact text format instead of JSON:
 
 | Level | Content | Size |
 |---|---|---|
-| **Overview** | all boards as a tree, each with its summary, how many elements have their home on it, and their open review flags | a few hundred tokens, the entry point of every session |
+| **Overview** | all boards as a tree, each with its zone, its summary, how many elements have their home on it, and their open review flags | a few hundred tokens, the entry point of every session |
 | **Board outline** | elements and relations as lines, inner boards as links, notes shortened | depends on the board size |
-| **Element detail** | name, type, anchor, verification stamp, review flags, summary, the boards that place it, its inner boards, outgoing and incoming relations, and the full description; references come with their slice | per element |
+| **Element detail** | name, type, statement kind, anchor, verification stamp, review flags, summary, the boards that place it, its inner boards, outgoing and incoming relations, and the full description; references come with their slice | per element |
 
 Example of an overview, as `overview` returns it:
 
 ```
-context                 Context             The web shop and its users  1 element
-  container-level       Container Level     Containers of the shop      4 elements  ⚠ 1 task
-    payment-components  Payment Components                              3 elements  ⚠ 1 task, 2 hints
-drafts                  Drafts                                          2 elements
+context                 Context             mirrored · current  The web shop and its users  1 element
+  container-level       Container Level     mirrored · current  Containers of the shop      4 elements  ⚠ 1 task
+    payment-components  Payment Components  mirrored · current                              3 elements  ⚠ 1 task, 2 hints
+drafts                  Drafts              free · idea                                     2 elements
 ```
 
-- **One line per board,** depth first: each board's inner boards follow it, indented two spaces further, ordered by ID. A line shows the board's ID, title, and summary, how many elements with a file have their home on it, and how many of those have a task or only a hint. A title longer than 80 characters and a summary longer than 160 are cut and end in `…`, so one long text cannot make the overview too large to answer; `read_board` shows them in full.
+- **One line per board,** depth first: each board's inner boards follow it, indented two spaces further, ordered by ID. A line shows the board's ID and title, its zone as `<mode> · <kind>` or `no zone` in a column that appears when one of the boards listed is a zone, its summary, how many elements with a file have their home on it, and how many of those have a task or only a hint. A title longer than 80 characters and a summary longer than 160 are cut and end in `…`, so one long text cannot make the overview too large to answer; `read_board` shows them in full.
 - **Boards out of the tree:** a board that lies inside itself, or whose owner has no file or no home, stands at the top level with the `Inside of:` line of its outline, markers included, so no board is left out and none is listed twice.
 - **At most 50 boards,** then how many more there are.
 
@@ -64,12 +64,13 @@ Example of a board outline:
 ```
 Board: container-level · Container Level
 Inside of: web-shop-system · Above: context
+Zone: mirrored · current
 Summary: The containers of the web shop and how they talk
 
-checkout-service  c4/container  Checkout Service  order completion
-orders-db         c4/datastore  Orders DB
-payment-service   c4/container  Payment Service   Stripe payments  ▸ payment-components  ⚠ task
-web-shop          c4/container  Web Shop          storefront
+checkout-service  c4/container  current  Checkout Service  order completion
+orders-db         c4/datastore  current  Orders DB
+payment-service   c4/container  current  Payment Service   Stripe payments  ▸ payment-components  ⚠ task
+web-shop          c4/container  current  Web Shop          storefront
 
 checkout-service → orders-db        uses  writes orders
 checkout-service → payment-service  uses  REST, synchronous
@@ -78,7 +79,8 @@ web-shop → checkout-service         uses  REST
 
 As a rough estimate, this takes 5 to 10 times fewer tokens than the same board as JSON with geometry. A prototype still has to confirm this.
 
-- **Header:** The first line names the board's ID and title. A board that is an element's [[Board Graph|inner board]] names that element in a second line, `Inside of:`, and with `Above:` the board the element lies on. Merges and hand edits can break the hierarchy, so the line marks an element without a file `⚠ missing`, one that no board places `⚠ no home`, and a board that lies inside itself `⚠ cycle`. A board with a summary shows it in a line `Summary:`.
+- **Header:** The first line names the board's ID and title. A board that is an element's [[Board Graph|inner board]] names that element in a second line, `Inside of:`, and with `Above:` the board the element lies on. Merges and hand edits can break the hierarchy, so the line marks an element without a file `⚠ missing`, one that no board places `⚠ no home`, and a board that lies inside itself `⚠ cycle`. A [[Boards and Zones|zone]] shows its mode and statement kind in a line `Zone:`, and a board with a summary shows it in a line `Summary:`.
+- **Statement kinds:** An element's statement kind is that of its home board's zone. An element line shows it after the type, on a zone and wherever an element of the list has one, `none` for an element without one; on a zone, an element whose home is another board shows the kind of that board, never the zone's. `search` and `status` show the kind the same way. A kind says what the content claims, not that it was checked; `Verified:` and the markers say that.
 - **Inner boards:** An element line shows `▸` and the IDs of the boards the element owns, which `read_board` opens; `search` and `status` show them the same way.
 - **Real IDs:** The outline shows the element IDs themselves, which are short, readable slugs (see [[Data Model#Rules]]). The server needs no state between calls, and an ID from an older response never points to the wrong element.
 - **One line per element:** Text from boards and elements, relation labels included, stays on its line. Backslashes, line breaks, control characters, and invisible format characters are written as escapes such as `\\`, `\n`, and `\u{202e}`, so content can neither break the outline nor hide text from a reader.
@@ -94,6 +96,7 @@ Example of an element detail, as `read_element` returns it:
 ```
 Element: payment-service · Payment Service
 Type: c4/container
+Statement kind: current, from board container-level
 Anchor: crates/payment-service
 Verified: 4fc3a1e0b8d27c95e61f0a3d8b7c2e19f5a6d403 by ai
 Review: task
@@ -117,6 +120,7 @@ through the refund-worker.
 - **Fixed order:** the sections always come in this order, with `none` where there is nothing; only a missing summary leaves out its line. The description comes last.
 - **Anchor and stamp:** `Anchor:` shows the element's [[Elements#Anchors|anchor]], `Verified:` the full commit ID of its [[Checks#Verification Stamp|verification stamp]] and whether the AI or a person verified it.
 - **Review flags:** `Review:` shows the highest priority of the element's [[Checks|review flags]], `task`, `hint`, or `none`, and one indented line per flag; a flag for changed files names at most 10 of them and how many more there are, and a flag passed on along a relation names the relation's kind and target and says that what the target's anchor stands for may have changed since the element's stamp. When the project lies in no Git repository, `git` cannot be run, or Git fails, the answer starts with `Review flags unavailable:` and the reason instead.
+- **Statement kind:** `Statement kind:` shows the kind of the element's home board's zone and that board, or `none` when the element has no home or its home is no zone.
 - **Boards:** `Boards:` names every board that places the element, `Inner board:` every board that is its inside.
 - **The description keeps its lines and tabs.** Other control and invisible characters in it are written as escapes such as `\u{202e}`, so it can hide or reorder nothing; a carriage return before a line break is left out. Every other value is escaped onto its line as in the board outline.
 - **Missing targets:** a relation whose target has no element file shows the target with `⚠ missing`.

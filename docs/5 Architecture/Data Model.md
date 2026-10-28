@@ -182,7 +182,7 @@ pub struct Rect { pub x: i32, pub y: i32, pub width: NonZeroU32, pub height: Non
 - **One relation per kind and target:** an element has at most one relation of a kind to a target, and none to itself. A relation to an element whose file is missing is read like any other (see [[Checks#Structural (Deterministic)|structural checks]]).
 - **The board decides what is shown and how.** The [[Presentation]] belongs to the placement; the default comes from the [[Extensions#Type Packs|type pack]].
 - **Attaching is layout, “concerns” is content.** An attached sticky note has both: the relation in the element and `attached_to` in the placement (see [[Presentation#Sticky Notes]]).
-- **Inheritance:** The effective mode and the effective statement kind come from the element, otherwise from the frame, otherwise from the board, otherwise from the type pack (see [[Boards and Zones#Inheritance]]).
+- **Inheritance:** An element's statement kind is that of its home board's zone. Without a home, or when its home is no zone, it has none: no other board that places it and no board above stands in (see [[Boards and Zones#Inheritance]]).
 - **Summaries are data:** short texts on elements and boards, written by the AI or supplied by a parser. The AI sees them in the [[MCP Server#Detail Levels|board outline]], the canvas for example as a tooltip.
 - **Integer coordinates** keep the diffs calm.
 - **Review flags are not part of the model.** They are computed from anchors, verification stamps, Git, and relations (see [[Checks]]).
