@@ -10,7 +10,7 @@ use std::fmt;
 
 use abyme_model::{
     Anchor, Board, BoardId, Element, ElementFields, ElementId, ElementProblem, RelationKind,
-    Relations, TypeRef,
+    Relations, TypeRef, Zone,
 };
 
 use crate::board_tree::BoardTree;
@@ -313,17 +313,20 @@ impl<'snapshot> Draft<'snapshot> {
                 title,
                 owner,
                 summary,
-            } => self.create_board(key, title, owner.as_ref(), summary.as_deref()),
+                zone,
+            } => self.create_board(key, title, owner.as_ref(), summary.as_deref(), *zone),
             Operation::UpdateBoard {
                 board,
                 title,
                 summary,
                 owner,
+                zone,
             } => self.update_board(
                 board,
                 title.as_deref(),
                 summary.as_ref().map(Option::as_deref),
                 owner.as_ref().map(Option::as_ref),
+                *zone,
             ),
             Operation::PlaceElement { element, board } => self.place_element(element, board),
             Operation::MoveElement {
@@ -403,6 +406,7 @@ impl<'snapshot> Draft<'snapshot> {
         title: &str,
         owner: Option<&Ref<ElementId>>,
         summary: Option<&str>,
+        zone: Option<Zone>,
     ) -> Result<(), OperationProblem> {
         self.check_new_key(key)?;
         let owner = owner
@@ -418,6 +422,7 @@ impl<'snapshot> Draft<'snapshot> {
             title: title.to_owned(),
             owner,
             summary: summary.map(str::to_owned),
+            zone,
             placements: BTreeMap::new(),
         };
         let layout = Layout::of(&board);
@@ -546,7 +551,7 @@ impl<'snapshot> Draft<'snapshot> {
     /// renamed or unlinked.
     #[expect(
         clippy::option_option,
-        reason = "a missing summary or owner keeps it, `Some(None)` removes it, and a value replaces it"
+        reason = "a missing summary, owner, or zone keeps it, `Some(None)` removes it, and a value replaces it"
     )]
     fn update_board(
         &mut self,
@@ -554,9 +559,10 @@ impl<'snapshot> Draft<'snapshot> {
         title: Option<&str>,
         summary: Option<Option<&str>>,
         owner: Option<Option<&Ref<ElementId>>>,
+        zone: Option<Option<Zone>>,
     ) -> Result<(), OperationProblem> {
         let id = self.resolve_board(board)?;
-        if title.is_none() && summary.is_none() && owner.is_none() {
+        if title.is_none() && summary.is_none() && owner.is_none() && zone.is_none() {
             return Err(OperationProblem::NothingToUpdateBoard(id));
         }
         let owner = match owner {
@@ -585,6 +591,9 @@ impl<'snapshot> Draft<'snapshot> {
         }
         if let Some(owner) = owner {
             draft_board.owner = owner;
+        }
+        if let Some(zone) = zone {
+            draft_board.zone = zone;
         }
         Ok(())
     }

@@ -7,7 +7,7 @@
 
 use std::fmt;
 
-use abyme_model::{BoardId, ElementId, ObjectOnly, RelationKind, shown};
+use abyme_model::{BoardId, ElementId, ObjectOnly, RelationKind, Zone, shown};
 use serde::{Deserialize, Serialize};
 
 /// The longest local key, in characters.
@@ -58,6 +58,9 @@ pub enum Operation {
         /// A one-line summary of what the board shows.
         #[serde(default)]
         summary: Option<String>,
+        /// The board's mode and the statement kind of its content.
+        #[serde(default)]
+        zone: Option<Zone>,
     },
     /// Changes the fields it names of a board; the others stay as they are.
     /// The board keeps its ID and its placements, also when its title
@@ -90,6 +93,15 @@ pub enum Operation {
         )]
         #[cfg_attr(feature = "json-schema", schemars(with = "Option<Ref<ElementId>>"))]
         owner: Option<Option<Ref<ElementId>>>,
+        /// The board's new mode and statement kind; `null` makes the board
+        /// no zone.
+        #[serde(
+            default,
+            deserialize_with = "present",
+            skip_serializing_if = "Option::is_none"
+        )]
+        #[cfg_attr(feature = "json-schema", schemars(with = "Option<Zone>"))]
+        zone: Option<Option<Zone>>,
     },
     /// Gives an element its home on a board.
     PlaceElement {
@@ -317,6 +329,7 @@ impl schemars::JsonSchema for LocalKey {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use abyme_model::{Mode, StatementKind};
     use rstest::rstest;
 
     fn read(json: &str) -> Result<Vec<Operation>, serde_json::Error> {
@@ -512,6 +525,7 @@ mod tests {
                 title: "Inside".to_owned(),
                 owner: Some(Ref::Existing("shop".parse().unwrap())),
                 summary: Some("S".to_owned()),
+                zone: None,
             }]
         );
     }
@@ -521,9 +535,42 @@ mod tests {
         format!(r#"[{{"op": "update_board", "board": {{"existing": "main"}}{json_fields}}}]"#)
     }
 
+    const MIRRORED_CURRENT: Zone = Zone {
+        mode: Mode::Mirrored,
+        statement: StatementKind::Current,
+    };
+
+    #[rstest]
+    #[case::with_a_zone(
+        r#", "zone": {"mode": "mirrored", "statement": "current"}"#,
+        Some(MIRRORED_CURRENT)
+    )]
+    #[case::without_a_zone("", None)]
+    #[case::with_a_null_zone(r#", "zone": null"#, None)]
+    fn reads_a_board_with_and_without_a_zone(
+        #[case] zone_field: &str,
+        #[case] expected: Option<Zone>,
+    ) {
+        let json = format!(r#"[{{"op": "create_board", "key": "b", "title": "T"{zone_field}}}]"#);
+
+        assert_eq!(
+            read(&json).unwrap(),
+            vec![Operation::CreateBoard {
+                key: LocalKey::try_from("b".to_owned()).unwrap(),
+                title: "T".to_owned(),
+                owner: None,
+                summary: None,
+                zone: expected,
+            }]
+        );
+    }
+
     #[test]
     fn reads_an_update_of_every_field_of_a_board() {
-        let json = board_update(r#", "title": "T", "summary": "S", "owner": {"new": "e"}"#);
+        let json = board_update(
+            r#", "title": "T", "summary": "S", "owner": {"new": "e"},
+            "zone": {"mode": "mirrored", "statement": "current"}"#,
+        );
 
         assert_eq!(
             read(&json).unwrap(),
@@ -532,13 +579,14 @@ mod tests {
                 title: Some("T".to_owned()),
                 summary: Some(Some("S".to_owned())),
                 owner: Some(Some(Ref::New(LocalKey::try_from("e".to_owned()).unwrap()))),
+                zone: Some(Some(MIRRORED_CURRENT)),
             }]
         );
     }
 
     #[test]
-    fn reads_null_as_removing_a_board_s_summary_and_owner() {
-        let json = board_update(r#", "summary": null, "owner": null"#);
+    fn reads_null_as_removing_a_board_s_summary_owner_and_zone() {
+        let json = board_update(r#", "summary": null, "owner": null, "zone": null"#);
 
         assert_eq!(
             read(&json).unwrap(),
@@ -547,6 +595,7 @@ mod tests {
                 title: None,
                 summary: Some(None),
                 owner: Some(None),
+                zone: Some(None),
             }]
         );
     }
@@ -560,8 +609,35 @@ mod tests {
                 title: None,
                 summary: None,
                 owner: None,
+                zone: None,
             }]
         );
+    }
+
+    #[rstest]
+    #[case::synced(r#"{"mode": "synced", "statement": "current"}"#)]
+    #[case::locked(r#"{"mode": "locked", "statement": "current"}"#)]
+    #[case::historic(r#"{"mode": "free", "statement": "historic"}"#)]
+    #[case::capitals(r#"{"mode": "free", "statement": "Current"}"#)]
+    #[case::mode_as_an_object(r#"{"mode": {"free": null}, "statement": "current"}"#)]
+    #[case::mode_as_an_object_with_content(r#"{"mode": {"free": {}}, "statement": "current"}"#)]
+    #[case::kind_as_an_object(r#"{"mode": "free", "statement": {"idea": null}}"#)]
+    #[case::null_mode(r#"{"mode": null, "statement": "current"}"#)]
+    #[case::no_mode(r#"{"statement": "current"}"#)]
+    #[case::no_kind(r#"{"mode": "free"}"#)]
+    #[case::empty("{}")]
+    #[case::unknown_field(r#"{"mode": "free", "statement": "current", "preset": "current"}"#)]
+    #[case::mode_twice(r#"{"mode": "free", "mode": "mirrored", "statement": "idea"}"#)]
+    #[case::preset_name(r#""current""#)]
+    #[case::as_an_array(r#"["free", "current"]"#)]
+    #[case::as_a_boolean("true")]
+    fn rejects_any_other_zone_when_creating_or_updating_a_board(#[case] zone: &str) {
+        let create =
+            format!(r#"[{{"op": "create_board", "key": "b", "title": "T", "zone": {zone}}}]"#);
+        let update = board_update(&format!(r#", "zone": {zone}"#));
+
+        assert!(read(&create).is_err(), "{create}");
+        assert!(read(&update).is_err(), "{update}");
     }
 
     #[rstest]
@@ -689,7 +765,9 @@ mod tests {
     #[case::update_of_an_invalid_id(
         r#"[{"op": "update_element", "element": {"existing": "../x"}, "name": "x"}]"#
     )]
-    #[case::unknown_field(r#"[{"op": "create_board", "key": "k", "title": "t", "zone": {}}]"#)]
+    #[case::unknown_field(
+        r#"[{"op": "create_board", "key": "k", "title": "t", "unexpected": {}}]"#
+    )]
     #[case::duplicate_field(r#"[{"op": "create_board", "key": "k", "key": "j", "title": "t"}]"#)]
     #[case::duplicate_op(
         r#"[{"op": "create_board", "op": "create_board", "key": "k", "title": "t"}]"#
@@ -701,7 +779,7 @@ mod tests {
         r#"[{"op": "update_board", "board": {"existing": "main"}, "title": null}]"#
     )]
     #[case::board_update_with_an_unknown_field(
-        r#"[{"op": "update_board", "board": {"existing": "main"}, "zone": {}}]"#
+        r#"[{"op": "update_board", "board": {"existing": "main"}, "unexpected": {}}]"#
     )]
     #[case::board_update_of_the_id(
         r#"[{"op": "update_board", "board": {"existing": "main"}, "id": "other"}]"#
@@ -851,7 +929,7 @@ mod tests {
 
     #[cfg(feature = "json-schema")]
     #[test]
-    fn schema_lets_only_the_summary_and_the_owner_of_a_board_update_be_null() {
+    fn schema_lets_only_the_summary_the_owner_and_the_zone_of_a_board_update_be_null() {
         let schema = serde_json::to_value(schemars::schema_for!(Operations)).unwrap();
 
         let update = schema
@@ -880,8 +958,67 @@ mod tests {
             Some(&serde_json::json!(["string", "null"])),
             "{update}"
         );
-        let owner = update.pointer("/properties/owner").unwrap().to_string();
-        assert!(owner.contains("null"), "{update}");
+        for field in ["owner", "zone"] {
+            let schema = update
+                .pointer(&format!("/properties/{field}"))
+                .unwrap()
+                .to_string();
+            assert!(schema.contains("null"), "{update}");
+        }
+    }
+
+    #[cfg(feature = "json-schema")]
+    #[test]
+    fn schema_names_exactly_the_modes_and_kinds_a_zone_takes() {
+        let schema = serde_json::to_value(schemars::schema_for!(Operations)).unwrap();
+        let definitions = schema.pointer("/$defs").unwrap();
+        let names = |definition: &str| -> Vec<String> {
+            let text = definitions
+                .pointer(&format!("/{definition}"))
+                .unwrap()
+                .to_string();
+            [
+                "free",
+                "mirrored",
+                "synced",
+                "locked",
+                "current",
+                "decision",
+                "idea",
+                "knowledge",
+                "question",
+                "target",
+                "historic",
+            ]
+            .into_iter()
+            .filter(|name| text.contains(&format!("\"{name}\"")))
+            .map(str::to_owned)
+            .collect()
+        };
+
+        let zone = definitions.pointer("/Zone").unwrap();
+        assert_eq!(
+            zone.pointer("/required"),
+            Some(&serde_json::json!(["mode", "statement"])),
+            "{zone}"
+        );
+        assert_eq!(
+            zone.pointer("/additionalProperties"),
+            Some(&serde_json::Value::Bool(false)),
+            "{zone}"
+        );
+        assert_eq!(names("Mode"), ["free", "mirrored"]);
+        assert_eq!(
+            names("StatementKind"),
+            [
+                "current",
+                "decision",
+                "idea",
+                "knowledge",
+                "question",
+                "target"
+            ]
+        );
     }
 
     #[cfg(feature = "json-schema")]

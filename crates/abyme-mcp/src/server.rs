@@ -165,11 +165,15 @@ impl AbymeServer {
 
     #[tool(
         description = "Applies operations to the Abyme project in one transaction: either all of them or none. \
-            create_board takes a key, a title, and optionally a summary and an owner, the element whose \
-            inside (inner board) the board is; update_board takes board and any of title, summary (null \
-            removes it), and owner (null removes it), and changes only the fields it names; an element owns \
-            at most one board, and no board may lie inside itself (the board above a board is its owner's \
-            home). \
+            create_board takes a key, a title, and optionally a summary, an owner, the element whose \
+            inside (inner board) the board is, and a zone; update_board takes board and any of title, \
+            summary (null removes it), owner (null removes it), and zone (null removes it), and changes only \
+            the fields it names; an element owns at most one board, and no board may lie inside itself (the \
+            board above a board is its owner's home). A zone is {\"mode\": ..., \"statement\": ...} with the \
+            mode free or mirrored (mirrored: what it shows follows the code) and the \
+            statement kind current, target, decision, idea, knowledge, or question; \
+            the presets are Current (mirrored, current) for what exists today, Target (free, target) for \
+            what is agreed but not built, and Brainstorm (free, idea) for ideas. \
             create_element takes a key, type_ref, name, and optionally \
             summary, body, and anchor; place_element gives an element its home on a board; move_element takes an \
             element, the board it lies on, and a new x and y from -1000000 to 1000000, and keeps its size; \

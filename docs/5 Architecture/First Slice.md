@@ -31,7 +31,7 @@ The MVP tests the core loop of [[Reconciliation]]: the AI builds the boards, a c
 - **Review flags:** They come from anchors and `git diff` and propagate along the relations (see [[Checks]]). `verify` resolves a flag and sets a new [[Checks#Verification Stamp|verification stamp]].
 - **Search:** `search` is a hybrid search in LanceDB, filterable by statement kind (see [[Search and Index]]).
 - **Canvas:** navigating inner boards with a breadcrumb, showing review flags and live changes, moving and pinning elements, creating and attaching [[Presentation#Sticky Notes|sticky notes]].
-- **Zones:** the modes free and mirrored. Statement kinds come from [[Boards and Zones#Zone Presets|zone presets]].
+- **Zones:** boards with the modes free and mirrored and a statement kind, set as the pairs that [[Boards and Zones#Zone Presets|zone presets]] name.
 
 **Not in the MVP:** current and target, synced zones and change requests, specifications, `render` and the visual check, exports, parsers, type packs as an extension mechanism (C4 is built in), references, stubs, and implied relations.
 

@@ -13,6 +13,7 @@ use serde_json::Value;
 use crate::id::{BoardId, ElementId};
 use crate::object_only::ObjectOnly;
 use crate::untrusted::shown;
+use crate::zone::Zone;
 
 /// The version of the board file format this crate reads and writes.
 pub const BOARD_FORMAT: u32 = 1;
@@ -20,8 +21,8 @@ pub const BOARD_FORMAT: u32 = 1;
 /// How many characters of a parser message an error shows.
 const DETAIL_LIMIT: usize = 200;
 
-/// A board: its title and summary, the element whose inside it is, and
-/// where each element on it lies.
+/// A board: its title and summary, the element whose inside it is, its
+/// zone, and where each element on it lies.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Board {
     /// The board's ID, which is also its file name.
@@ -32,6 +33,9 @@ pub struct Board {
     pub owner: Option<ElementId>,
     /// A short summary of what the board shows, for every output.
     pub summary: Option<String>,
+    /// The board's mode and the statement kind of its content, if it is a
+    /// zone.
+    pub zone: Option<Zone>,
     /// The rectangle of each element on the board. A map, so an element
     /// lies on a board at most once and the order is always by element ID.
     pub placements: BTreeMap<ElementId, Rect>,
@@ -102,6 +106,8 @@ struct BoardFile {
     owner: Option<ElementId>,
     #[serde(default)]
     summary: Option<String>,
+    #[serde(default)]
+    zone: Option<Zone>,
     placements: Vec<ObjectOnly<PlacementLine>>,
 }
 
@@ -152,12 +158,13 @@ impl Board {
             title: file.title,
             owner: file.owner,
             summary: file.summary,
+            zone: file.zone,
         })
     }
 
     /// Writes the board file, one placement per line, ordered by element ID.
-    /// The owner and the summary each get a line of their own, and only
-    /// when the board has them.
+    /// The owner, the summary, and the zone each get a line of their own,
+    /// and only when the board has them.
     #[must_use]
     pub fn to_json(&self) -> String {
         let lines: Vec<String> = self
@@ -170,18 +177,32 @@ impl Board {
         } else {
             format!("[\n{}\n  ]", lines.join(",\n"))
         };
-        let owner = self.owner.as_ref().map_or(String::new(), |owner| {
-            format!("  \"owner\": {},\n", json_string(owner.as_str()))
-        });
-        let summary = self.summary.as_ref().map_or(String::new(), |summary| {
-            format!("  \"summary\": {},\n", json_string(summary))
-        });
+        let owner = optional_line(
+            "owner",
+            self.owner.as_ref().map(|owner| json_string(owner.as_str())),
+        );
+        let summary = optional_line("summary", self.summary.as_deref().map(json_string));
+        let zone = optional_line(
+            "zone",
+            self.zone.map(|zone| {
+                format!(
+                    "{{\"mode\": {}, \"statement\": {}}}",
+                    json_string(zone.mode.as_str()),
+                    json_string(zone.statement.as_str())
+                )
+            }),
+        );
         format!(
-            "{{\n  \"format\": {BOARD_FORMAT},\n  \"id\": {},\n  \"title\": {},\n{owner}{summary}  \"placements\": {placements}\n}}\n",
+            "{{\n  \"format\": {BOARD_FORMAT},\n  \"id\": {},\n  \"title\": {},\n{owner}{summary}{zone}  \"placements\": {placements}\n}}\n",
             json_string(self.id.as_str()),
             json_string(&self.title),
         )
     }
+}
+
+/// The line `  "key": value,` for a field the board has, or nothing.
+fn optional_line(key: &str, value: Option<String>) -> String {
+    value.map_or(String::new(), |value| format!("  \"{key}\": {value},\n"))
 }
 
 /// Collects the placement lines into a map and rejects an element placed
@@ -259,6 +280,7 @@ mod tests {
             title: "Container Level".to_owned(),
             owner: None,
             summary: None,
+            zone: None,
             placements: BTreeMap::from([
                 (element_id("checkout-service"), rect(80, 200)),
                 (element_id("payment-service"), rect(400, 200)),
@@ -323,6 +345,7 @@ mod tests {
             title: String::new(),
             owner: None,
             summary: None,
+            zone: None,
             placements: BTreeMap::new(),
         };
 
@@ -410,6 +433,7 @@ mod tests {
         assert_eq!(board.to_json(), written);
         assert!(!written.contains("owner"));
         assert!(!written.contains("summary"));
+        assert!(!written.contains("zone"));
     }
 
     #[test]
@@ -469,6 +493,122 @@ mod tests {
         ));
     }
 
+    const MIRRORED_CURRENT: Zone = Zone {
+        mode: crate::Mode::Mirrored,
+        statement: crate::StatementKind::Current,
+    };
+
+    #[test]
+    fn writes_the_zone_on_a_line_of_its_own_after_the_summary() {
+        let expected = r#"{
+  "format": 1,
+  "id": "container-level",
+  "title": "Container Level",
+  "owner": "shop-system",
+  "summary": "The containers of the shop",
+  "zone": {"mode": "mirrored", "statement": "current"},
+  "placements": [
+    {"element": "checkout-service", "x": 80, "y": 200, "width": 180, "height": 90},
+    {"element": "payment-service", "x": 400, "y": 200, "width": 180, "height": 90}
+  ]
+}
+"#;
+        let board = Board {
+            zone: Some(MIRRORED_CURRENT),
+            ..inner_board()
+        };
+
+        assert_eq!(board.to_json(), expected);
+        assert_eq!(
+            Board::from_json(&board_id("container-level"), expected).unwrap(),
+            board
+        );
+    }
+
+    #[test]
+    fn writes_a_zone_without_owner_and_summary_after_the_title() {
+        let board = Board {
+            id: board_id("main"),
+            title: "t".to_owned(),
+            owner: None,
+            summary: None,
+            zone: Some(MIRRORED_CURRENT),
+            placements: BTreeMap::new(),
+        };
+
+        assert_eq!(
+            board.to_json(),
+            "{\n  \"format\": 1,\n  \"id\": \"main\",\n  \"title\": \"t\",\n  \
+             \"zone\": {\"mode\": \"mirrored\", \"statement\": \"current\"},\n  \
+             \"placements\": []\n}\n"
+        );
+    }
+
+    #[test]
+    fn reads_a_null_zone_as_none_and_writes_no_zone_line() {
+        let text = r#"{"format": 1, "id": "main", "title": "t", "zone": null, "placements": []}"#;
+
+        let board = Board::from_json(&board_id("main"), text).unwrap();
+
+        assert_eq!(board.zone, None);
+        assert!(!board.to_json().contains("zone"));
+    }
+
+    #[rstest]
+    #[case::synced(r#"{"mode": "synced", "statement": "current"}"#)]
+    #[case::locked(r#"{"mode": "locked", "statement": "current"}"#)]
+    #[case::historic(r#"{"mode": "free", "statement": "historic"}"#)]
+    #[case::capitals(r#"{"mode": "free", "statement": "Current"}"#)]
+    #[case::trailing_space(r#"{"mode": "free", "statement": "current "}"#)]
+    #[case::empty_name(r#"{"mode": "free", "statement": ""}"#)]
+    #[case::preset_name(r#""current""#)]
+    #[case::as_an_array(r#"["free", "current"]"#)]
+    #[case::as_a_boolean("true")]
+    #[case::as_a_number("1")]
+    #[case::mode_as_an_object(r#"{"mode": {"free": null}, "statement": "current"}"#)]
+    #[case::kind_as_an_object(r#"{"mode": "free", "statement": {"idea": null}}"#)]
+    #[case::null_mode(r#"{"mode": null, "statement": "current"}"#)]
+    #[case::no_mode(r#"{"statement": "current"}"#)]
+    #[case::no_kind(r#"{"mode": "free"}"#)]
+    #[case::empty("{}")]
+    #[case::unknown_field(r#"{"mode": "free", "statement": "current", "preset": "current"}"#)]
+    #[case::mode_twice(r#"{"mode": "free", "mode": "mirrored", "statement": "idea"}"#)]
+    fn rejects_any_other_zone_in_a_board_file(#[case] zone: &str) {
+        let text = format!(
+            r#"{{"format": 1, "id": "main", "title": "t", "zone": {zone}, "placements": []}}"#
+        );
+
+        let error = Board::from_json(&board_id("main"), &text).unwrap_err();
+
+        assert!(matches!(error, BoardError::Invalid { .. }), "{error}");
+        assert!(error.to_string().starts_with("board main: "), "{error}");
+    }
+
+    #[test]
+    fn rejects_a_zone_given_twice() {
+        let zone = r#"{"mode": "free", "statement": "idea"}"#;
+        let text = format!(
+            r#"{{"format": 1, "id": "main", "title": "t", "zone": {zone}, "zone": {zone}, "placements": []}}"#
+        );
+
+        assert!(matches!(
+            Board::from_json(&board_id("main"), &text),
+            Err(BoardError::Invalid { .. })
+        ));
+    }
+
+    #[test]
+    fn shows_no_raw_control_character_of_an_unknown_kind() {
+        let text = r#"{"format": 1, "id": "main", "title": "t",
+            "zone": {"mode": "free", "statement": "x\n\u001b[31m"}, "placements": []}"#;
+
+        let error = Board::from_json(&board_id("main"), text)
+            .unwrap_err()
+            .to_string();
+
+        assert!(!error.chars().any(char::is_control), "{error:?}");
+    }
+
     #[rstest]
     #[case::invalid_json("{")]
     #[case::duplicate_id_key(
@@ -478,7 +618,7 @@ mod tests {
         r#"{"element": "a", "element": "b", "x": 0, "y": 0, "width": 1, "height": 1}"#
     ))]
     #[case::unknown_board_field(
-        r#"{"format": 1, "id": "main", "title": "t", "placements": [], "zone": {}}"#
+        r#"{"format": 1, "id": "main", "title": "t", "placements": [], "unexpected": {}}"#
     )]
     #[case::unknown_placement_field(&main_file(
         r#"{"element": "a", "x": 0, "y": 0, "width": 1, "height": 1, "pinned": true}"#

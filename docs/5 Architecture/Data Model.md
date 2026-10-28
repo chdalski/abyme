@@ -43,6 +43,7 @@ classDiagram
         title: String
         owner: Option~ElementId~
         summary: Option~String~
+        zone: Option~Zone~
     }
     class Frame {
         id: FrameId
@@ -60,9 +61,8 @@ classDiagram
         color: Option~Color~
     }
     class Zone {
-        preset: Option~ZonePreset~
-        mode: Option~Mode~
-        statement: Option~StatementKind~
+        mode: Mode
+        statement: StatementKind
         anchor: Option~Anchor~
     }
     class ChangeRequest {
@@ -125,7 +125,7 @@ pub struct Board {
     pub title: String,
     pub owner: Option<ElementId>,            // whose inside this board is
     pub summary: Option<String>,
-    pub zone: Zone,
+    pub zone: Option<Zone>,                  // a board without one is no zone
     pub frames: Vec<Frame>,
     pub placements: Vec<Placement>,
 }
@@ -134,7 +134,7 @@ pub struct Frame {
     pub id: FrameId,
     pub title: String,
     pub rect: Rect,
-    pub zone: Zone,
+    pub zone: Option<Zone>,
 }
 
 pub struct Placement {
@@ -149,14 +149,13 @@ pub struct Placement {
 }
 
 pub struct Zone {
-    pub preset: Option<ZonePreset>,          // Current, Target, Brainstorm, Archive
-    pub mode: Option<Mode>,                  // overrides the preset
-    pub statement: Option<StatementKind>,    // overrides the preset
+    pub mode: Mode,
+    pub statement: StatementKind,
     pub anchor: Option<Anchor>,              // e.g. a Current frame anchored on crates
 }
 
-pub enum Mode { Free, Synced, Mirrored, Locked }
-pub enum StatementKind { Current, Target, Decision, Idea, Knowledge, Question, Historic }
+pub enum Mode { Free, Mirrored }             // later Synced, Locked
+pub enum StatementKind { Current, Decision, Idea, Knowledge, Question, Target }   // later Historic
 pub enum Presentation { Box, Card, Note, Document, Image, Chart, Table }
 
 pub struct ChangeRequest {
@@ -177,6 +176,7 @@ pub struct Rect { pub x: i32, pub y: i32, pub width: NonZeroU32, pub height: Non
 - **Anchors are paths in the project,** relative to its root, covering the path and everything below it. An anchor is kept as written, never normalized, and rejected when it is empty, starts or ends with `/`, has an empty, `.`, or `..` segment, holds a backslash, a colon, or a character a reader cannot see, is longer than 4096 bytes or has a segment longer than 255 bytes, or lies in `abyme` or `.abyme` at the project root or in a `.git` folder (case does not count for these names).
 - **A verification stamp** names a full commit ID (40 or 64 lowercase hex digits) of the repository the element's anchor lies in, a nested one or the project's, and who verified, `ai` or `person`. An element without an anchor can carry one too, a commit of the project's repository.
 - **Inner boards:** A board's `owner` names the element whose inside it is. An element owns at most one board, and no board lies inside itself: the board above a board is the home board of its owner, and going up from a board never reaches it again. An owner needs no home; its board then has nothing above it. Merges and hand edits can still break these rules, so readers show such boards instead of failing.
+- **Zones:** A board's zone names its mode and its statement kind, both required. The file stores these two, never a preset: a [[Boards and Zones#Zone Presets|zone preset]] is a named pair, such as Current for mirrored and current. Abyme knows the modes free and mirrored and the kinds current, decision, idea, knowledge, question, and target so far; any other value is rejected.
 - **Home:** Every element has exactly one `Placement` with `is_reference = false`. All others are references (see [[Board Graph]]). An element without a home, for example freshly created by the AI, is allowed and reported as a hint.
 - **Arrows are not stored.** They follow from the relations. Deleting an arrow means deleting the relation.
 - **One relation per kind and target:** an element has at most one relation of a kind to a target, and none to itself. A relation to an element whose file is missing is read like any other (see [[Checks#Structural (Deterministic)|structural checks]]).
@@ -211,9 +211,9 @@ A request is a list of operations, each a JSON object with the field `op`:
 ]
 ```
 
-- **`create_element`** takes a key, `type_ref`, `name`, and optionally `summary`, `body`, and `anchor`; **`create_board`** takes a key, `title`, and optionally `summary` and `owner`, the element whose inside the board is; **`place_element`** gives an element its home on a board; **`move_element`** sets the position of an element on a board where it lies, with `x` and `y` from -1,000,000 to 1,000,000, and keeps its size. Other fields are rejected.
+- **`create_element`** takes a key, `type_ref`, `name`, and optionally `summary`, `body`, and `anchor`; **`create_board`** takes a key, `title`, and optionally `summary`, `owner`, the element whose inside the board is, and `zone`, such as `{"mode": "mirrored", "statement": "current"}`; **`place_element`** gives an element its home on a board; **`move_element`** sets the position of an element on a board where it lies, with `x` and `y` from -1,000,000 to 1,000,000, and keeps its size. Other fields are rejected.
 - **`update_element`** changes only the fields it names among `name`, `type_ref`, `summary`, `body`, and `anchor`; `"summary": null` and `"anchor": null` remove them, and `null` is rejected for the others. The element keeps its ID and its relations, also when its name changes, and an update that names no field is rejected. Text is stored exactly as sent.
-- **`update_board`** changes only the fields it names among `title`, `summary`, and `owner`; `"summary": null` and `"owner": null` remove them, and `null` is rejected for the title. The board keeps its ID and its placements, and an update that names no field is rejected.
+- **`update_board`** changes only the fields it names among `title`, `summary`, `owner`, and `zone`; `"summary": null`, `"owner": null`, and `"zone": null` remove them, and `null` is rejected for the title. The board keeps its ID and its placements, and an update that names no field is rejected.
 - **Inner boards in a request:** `create_board`, `update_board`, and `place_element` are rejected when, as the request stands, they would make an element own a second board or a board lie inside itself, or name an owner that is no element. A breach that the files already hold rejects nothing else, so a request can repair it step by step.
 - **`delete_element`** removes an element's file, its placement on every board, and its own relations. It is rejected while other elements still relate to it, or while a board names it as its owner, as the request stands at that operation; the error names each source and the relation's kind, or the board. It also takes an ID that a board places although its file is missing, and then removes only the placements. A deleted element cannot be named again in the same request, and its ID stays taken there.
 - **A content change removes the verification stamp:** `update_element`, `create_relation`, and `delete_relation` remove the stamp of the element they change, also when an update leaves every value as it was. No operation sets a stamp: only the tool `verify` does, with the commit it reads itself (see [[Checks#Verification Stamp]]). An anchor passes the [[#Rules|rules]] above; whether its path exists is not checked.

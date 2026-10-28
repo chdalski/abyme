@@ -32,6 +32,7 @@ fn board(id: &str, owner: Option<&str>, elements: &[&str]) -> (BoardId, Board) {
             title: id.to_owned(),
             owner: owner.map(element_id),
             summary: None,
+            zone: None,
             placements: elements
                 .iter()
                 .map(|element| (element_id(element), rect))

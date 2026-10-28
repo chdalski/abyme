@@ -3,7 +3,7 @@
 use super::*;
 use std::num::NonZeroU32;
 
-use abyme_model::{Rect, hides_or_breaks_text};
+use abyme_model::{Mode, Rect, StatementKind, hides_or_breaks_text};
 use rstest::rstest;
 
 use crate::operation::Operations;
@@ -54,6 +54,7 @@ fn snapshot() -> Snapshot {
         title: "Main".to_owned(),
         owner: None,
         summary: None,
+        zone: None,
         placements: BTreeMap::from([
             (element_id("orders-db"), rect(0, 0)),
             (element_id("ghost"), rect(220, 0)),
@@ -213,6 +214,7 @@ fn snapshot_with_two_boards() -> Snapshot {
             title: "Side".to_owned(),
             owner: None,
             summary: None,
+            zone: None,
             placements: BTreeMap::from([(element_id("loose"), rect(0, 0))]),
         },
     );
@@ -640,6 +642,7 @@ fn accepts_exactly_the_most_operations() {
             title: "B".to_owned(),
             owner: None,
             summary: None,
+            zone: None,
         })
         .collect();
 
@@ -654,6 +657,7 @@ fn rejects_one_operation_more_than_the_most() {
             title: "B".to_owned(),
             owner: None,
             summary: None,
+            zone: None,
         })
         .collect();
 
@@ -1148,6 +1152,7 @@ fn snapshot_for_deletion() -> Snapshot {
         title: "Side".to_owned(),
         owner: None,
         summary: None,
+        zone: None,
         placements: BTreeMap::from([(element_id("orders-db"), rect(0, 0))]),
     };
     snapshot.boards.insert(side.id.clone(), side);
@@ -1657,6 +1662,7 @@ fn owned_board(id: &str, owner: Option<&str>, elements: &[&str]) -> (BoardId, Bo
             title: id.to_owned(),
             owner: owner.map(element_id),
             summary: None,
+            zone: None,
             placements,
         },
     )
@@ -1957,6 +1963,72 @@ fn removes_a_summary_and_an_owner_with_null() {
 
     let board = written_board(&applied, "components");
     assert_eq!((&board.summary, &board.owner), (&None, &None));
+}
+
+#[test]
+fn creates_a_board_with_a_zone() {
+    let json = r#"[{"op": "create_board", "key": "b", "title": "Ideas",
+        "zone": {"mode": "free", "statement": "idea"}}]"#;
+
+    let applied = apply(&snapshot(), &operations(json)).unwrap();
+
+    assert_eq!(
+        written_board(&applied, "ideas").zone,
+        Some(Zone {
+            mode: Mode::Free,
+            statement: StatementKind::Idea,
+        })
+    );
+}
+
+#[test]
+fn sets_changes_and_removes_a_zone_and_keeps_every_other_field() {
+    let set = r#"[{"op": "update_board", "board": {"existing": "components"},
+        "zone": {"mode": "free", "statement": "target"}}]"#;
+    let change = r#"[{"op": "update_board", "board": {"existing": "components"},
+        "zone": {"mode": "mirrored", "statement": "current"}}]"#;
+    let remove = r#"[{"op": "update_board", "board": {"existing": "components"}, "zone": null}]"#;
+    let before = hierarchy().boards[&board_id("components")].clone();
+    let mut snapshot = hierarchy();
+    let mut zones = Vec::new();
+
+    for json in [set, change, remove] {
+        let applied = apply(&snapshot, &operations(json)).unwrap();
+        let board = written_board(&applied, "components").clone();
+        assert_eq!(
+            (
+                &board.id,
+                &board.title,
+                &board.summary,
+                &board.owner,
+                &board.placements
+            ),
+            (
+                &before.id,
+                &before.title,
+                &before.summary,
+                &before.owner,
+                &before.placements
+            )
+        );
+        zones.push(board.zone);
+        snapshot.boards.insert(board.id.clone(), board);
+    }
+
+    assert_eq!(
+        zones,
+        [
+            Some(Zone {
+                mode: Mode::Free,
+                statement: StatementKind::Target,
+            }),
+            Some(Zone {
+                mode: Mode::Mirrored,
+                statement: StatementKind::Current,
+            }),
+            None,
+        ]
+    );
 }
 
 #[test]

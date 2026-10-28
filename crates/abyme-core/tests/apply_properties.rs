@@ -5,8 +5,8 @@ use std::num::NonZeroU32;
 
 use abyme_core::{Applied, Created, LocalKey, Operation, Ref, Snapshot, Write, apply};
 use abyme_model::{
-    Anchor, Board, BoardId, CommitId, Element, ElementFields, ElementId, Rect, RelationKind,
-    Relations, TypeRef, Verification, Verifier,
+    Anchor, Board, BoardId, CommitId, Element, ElementFields, ElementId, Mode, Rect, RelationKind,
+    Relations, StatementKind, TypeRef, Verification, Verifier, Zone,
 };
 use proptest::prelude::*;
 
@@ -35,6 +35,15 @@ fn element_id() -> impl Strategy<Value = ElementId> {
 
 fn board_id() -> impl Strategy<Value = BoardId> {
     prop::sample::select(BOARD_IDS.to_vec()).prop_filter_map("valid ID", |id| id.parse().ok())
+}
+
+/// Any zone, every mode and kind among them.
+fn zone() -> impl Strategy<Value = Zone> {
+    (
+        prop::sample::select(Mode::ALL.as_slice()),
+        prop::sample::select(StatementKind::ALL.as_slice()),
+    )
+        .prop_map(|(mode, statement)| Zone { mode, statement })
 }
 
 fn relation_kind() -> impl Strategy<Value = RelationKind> {
@@ -102,6 +111,7 @@ fn snapshot() -> impl Strategy<Value = Snapshot> {
             title,
             owner: None,
             summary: None,
+            zone: None,
             placements,
         });
     let boards = prop::collection::vec(board, 0..=2).prop_map(|boards| {
@@ -187,25 +197,33 @@ fn operation() -> impl Strategy<Value = Operation> {
             name(),
             proptest::option::of(element_ref()),
             proptest::option::of(any::<String>()),
+            proptest::option::of(zone()),
         )
-            .prop_map(|(key, title, owner, summary)| Operation::CreateBoard {
-                key,
-                title,
-                owner,
-                summary,
-            }),
+            .prop_map(
+                |(key, title, owner, summary, zone)| Operation::CreateBoard {
+                    key,
+                    title,
+                    owner,
+                    summary,
+                    zone,
+                }
+            ),
         (
             board_ref(),
             proptest::option::of(name()),
             proptest::option::of(proptest::option::of(any::<String>())),
             proptest::option::of(proptest::option::of(element_ref())),
+            proptest::option::of(proptest::option::of(zone())),
         )
-            .prop_map(|(board, title, summary, owner)| Operation::UpdateBoard {
-                board,
-                title,
-                summary,
-                owner,
-            }),
+            .prop_map(
+                |(board, title, summary, owner, zone)| Operation::UpdateBoard {
+                    board,
+                    title,
+                    summary,
+                    owner,
+                    zone,
+                },
+            ),
         (element_ref(), board_ref())
             .prop_map(|(element, board)| Operation::PlaceElement { element, board }),
         (
@@ -415,6 +433,7 @@ fn well_formed_request() -> impl Strategy<Value = Vec<Operation>> {
                 title,
                 owner: None,
                 summary: None,
+                zone: None,
             }];
             for (index, (name, summary, body)) in elements.into_iter().enumerate() {
                 let key = LocalKey::try_from(format!("e{index}")).ok()?;
@@ -655,6 +674,7 @@ fn check(
                         prop_assert_eq!(&board.title, &before.title);
                         prop_assert_eq!(&board.owner, &before.owner);
                         prop_assert_eq!(&board.summary, &before.summary);
+                        prop_assert_eq!(&board.zone, &before.zone);
                     }
                     for (id, rect) in &before.placements {
                         // A placement disappears only through delete_element.

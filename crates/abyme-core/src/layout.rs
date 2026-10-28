@@ -155,6 +155,7 @@ mod tests {
             title: String::new(),
             owner: None,
             summary: None,
+            zone: None,
             placements: placements
                 .iter()
                 .map(|(id, rect)| (id.parse::<ElementId>().unwrap(), *rect))

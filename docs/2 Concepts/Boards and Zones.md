@@ -51,10 +51,12 @@ Nobody should have to maintain settings per element. For a board or a frame, you
 
 | Preset | Mode | Statement kind |
 |---|---|---|
-| Current | mirrored or synced | current |
+| Current | mirrored | current |
 | Target | free | target |
 | Brainstorm | free | idea |
 | Archive / snapshot | locked | historic |
+
+A zone stores its mode and its statement kind, never the preset's name: a preset only names a usual pair. The AI gives a board the Current preset as `"zone": {"mode": "mirrored", "statement": "current"}` (see [[Storage in Git#Board File]]). Abyme knows the modes free and mirrored and every kind but historic so far, so Archive comes with locked, and a Current zone may also be synced once synced zones exist.
 
 Some element types bring their own kind: question, ADR (= decision), and knowledge note (= knowledge). The AI sets the settings itself when it creates something, because it knows which zone it writes to. Overriding them by hand is rarely necessary.
 

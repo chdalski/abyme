@@ -48,7 +48,7 @@ board refuse the drags a person makes in the canvas.
 
 ## Steps
 
-- [ ] Zones in the board file and in `apply`
+- [x] Zones in the board file and in `apply`
 - [ ] Each element's statement kind, shown wherever the AI reads elements
 - [ ] Search filtered by statement kind
 - [ ] Mirrored boards in the canvas
@@ -62,31 +62,31 @@ so that every later task reads one closed set of modes and kinds.
 
 Review path: Security-Hybrid
 
-- [ ] A board file holds an optional `zone` with a `mode`, `free` or
+- [x] A board file holds an optional `zone` with a `mode`, `free` or
       `mirrored`, and a `statement`, one of `current`, `target`,
       `decision`, `idea`, `knowledge`, and `question`, both required. A
       board without a zone reads and writes byte for byte as before, and a
       board with one writes it on a line of its own. A zone with another
       mode or kind, a missing or unknown field, or an array in its place
       is rejected as other invalid fields are.
-- [ ] `create_board` takes an optional `zone`, and `update_board` takes
+- [x] `create_board` takes an optional `zone`, and `update_board` takes
       `zone`, where `null` removes it; an update that names only `zone`
       names a field. A zone in a request is rejected by the same rules as
       in a file.
-- [ ] Unit and property tests cover the file and the operations,
+- [x] Unit and property tests cover the file and the operations,
       including a zone without its mode or its kind. The tests of unknown
       fields in a board file, in `create_board`, in `update_board`, and in
       the arguments of the MCP tool `apply` each still use a field that
       stays unknown. An integration test through the MCP tool `apply`
       creates a board with a zone, changes and removes it, and reads the
       board file back after each step.
-- [ ] A reader of Data Model, Storage in Git, Boards and Zones, First
+- [x] A reader of Data Model, Storage in Git, Boards and Zones, First
       Slice, and the Decisions table, and the AI reading the `apply` tool's
       description or the MCP README, can give a board each of the presets
       Current (mirrored, current), Target (free, target), and Brainstorm
       (free, idea), and knows that the board file stores mode and kind,
       never a preset.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
       and `cargo fmt --all --check` pass.
 
 ### Task 2: Each element's statement kind, shown wherever the AI reads elements

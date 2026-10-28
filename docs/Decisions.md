@@ -15,6 +15,7 @@ What is settled, briefly and with a reason. Details are in the linked note. A ch
 | Every element has a home and appears elsewhere as a reference. Each one can have an inner board. | No copies, no drift, unambiguous deletion. C4 levels come from zooming in. | [[Board Graph]] |
 | Removing something from the board means deleting it, namely what you click. For representations in synced zones, this becomes a change request. | There is no hidden hiding. | [[Board Graph#Deleting]] |
 | Zones have a mode: free, synced, mirrored, or locked. Sticky notes are allowed in every mode. | The mode determines who may change things and whether reconciliation happens. | [[Boards and Zones#Modes]] |
+| A zone stores its mode and its statement kind, never a preset; a zone preset only names a usual pair, such as Current for mirrored and current. | A stored preset would need resolving on every read and would change its meaning once a Current zone may be synced. | [[Boards and Zones#Zone Presets]] |
 | The statement kind is inherited through zone presets. The AI sets it itself when creating content. | Nobody should have to maintain it per element. | [[Boards and Zones#Statement Kind]] |
 | Relations are typed. Only certain types trigger checks. | Otherwise every change would cause a flood of warnings. | [[Relations]] |
 | How something is presented is part of the board's content. | All outputs show the same thing, as faithfully as they can. | [[Presentation]] |

@@ -1,9 +1,8 @@
 //! Properties of the board file that hold for any board and any input.
 
-use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 
-use abyme_model::{Board, BoardId, ElementId, Rect};
+use abyme_model::{Board, BoardId, ElementId, Mode, Rect, StatementKind, Zone};
 use proptest::prelude::*;
 
 /// Valid IDs: hyphen-joined words of lowercase letters and digits that pass
@@ -33,29 +32,32 @@ fn rect() -> impl Strategy<Value = Rect> {
     })
 }
 
+/// Any zone, every mode and kind among them.
+fn zone() -> impl Strategy<Value = Zone> {
+    (
+        prop::sample::select(Mode::ALL.as_slice()),
+        prop::sample::select(StatementKind::ALL.as_slice()),
+    )
+        .prop_map(|(mode, statement)| Zone { mode, statement })
+}
+
 fn board() -> impl Strategy<Value = Board> {
     (
         board_id(),
         any::<String>(),
         proptest::option::of(element_id()),
         proptest::option::of(any::<String>()),
+        proptest::option::of(zone()),
         proptest::collection::btree_map(element_id(), rect(), 0..8),
     )
-        .prop_map(
-            |(id, title, owner, summary, placements): (
-                BoardId,
-                String,
-                Option<ElementId>,
-                Option<String>,
-                BTreeMap<ElementId, Rect>,
-            )| Board {
-                id,
-                title,
-                owner,
-                summary,
-                placements,
-            },
-        )
+        .prop_map(|(id, title, owner, summary, zone, placements)| Board {
+            id,
+            title,
+            owner,
+            summary,
+            zone,
+            placements,
+        })
 }
 
 proptest! {
@@ -76,7 +78,8 @@ proptest! {
             .count();
         let frame_lines = if board.placements.is_empty() { 6 } else { 7 }
             + usize::from(board.owner.is_some())
-            + usize::from(board.summary.is_some());
+            + usize::from(board.summary.is_some())
+            + usize::from(board.zone.is_some());
         prop_assert_eq!(placement_lines, board.placements.len());
         prop_assert_eq!(json.lines().count(), board.placements.len() + frame_lines);
     }

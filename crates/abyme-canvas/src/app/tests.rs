@@ -87,6 +87,7 @@ fn project_with_boards(root: &Path, titles: &[&str]) {
             title: (*title).to_owned(),
             owner: None,
             summary: None,
+            zone: None,
         })
         .collect();
     Project::discover(root).unwrap().apply(&operations).unwrap();

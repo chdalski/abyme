@@ -344,7 +344,7 @@ async fn answers_arguments_that_do_not_fit_with_tool_errors_and_keeps_serving() 
         ("apply", json!({"operations": [], "extra": 1})),
         (
             "apply",
-            json!({"operations": [{"op": "create_board", "key": "k", "title": "t", "zone": {}}]}),
+            json!({"operations": [{"op": "create_board", "key": "k", "title": "t", "unexpected": {}}]}),
         ),
         ("apply", json!({"operations": [["create_board", "k", "t"]]})),
         ("apply", json!({"operations": "create_board"})),
@@ -498,6 +498,58 @@ async fn apply_builds_an_element_s_inner_board_and_refuses_a_board_inside_itself
         text(&rejected),
         "operation 1: board context would lie inside itself"
     );
+    assert_eq!(files(directory.path())?, before);
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+#[tokio::test]
+async fn apply_sets_changes_and_removes_a_board_s_zone_and_refuses_another_one() -> TestResult {
+    let directory = project()?;
+    let session = start(directory.path()).await?;
+    let file = directory.path().join("abyme/boards/ideas.board.json");
+    let board_file = |zone: &str| {
+        format!(
+            "{{\n  \"format\": 1,\n  \"id\": \"ideas\",\n  \"title\": \"Ideas\",\n{zone}  \
+             \"placements\": []\n}}\n"
+        )
+    };
+    let mut written = Vec::new();
+
+    for operation in [
+        json!({"op": "create_board", "key": "b", "title": "Ideas",
+               "zone": {"mode": "free", "statement": "idea"}}),
+        json!({"op": "update_board", "board": {"existing": "ideas"},
+               "zone": {"mode": "mirrored", "statement": "current"}}),
+        json!({"op": "update_board", "board": {"existing": "ideas"}, "zone": null}),
+    ] {
+        let applied = call(&session, "apply", json!({"operations": [operation]})).await??;
+        assert_eq!(applied.is_error, Some(false), "{applied:?}");
+        written.push(fs::read_to_string(&file)?);
+    }
+    let before = files(directory.path())?;
+    let refused = call(
+        &session,
+        "apply",
+        json!({"operations": [{"op": "update_board", "board": {"existing": "ideas"},
+               "zone": {"mode": {"mirrored": null}, "statement": "historic\n\u{1b}[31m"}}]}),
+    )
+    .await??;
+
+    assert_eq!(
+        written,
+        [
+            board_file("  \"zone\": {\"mode\": \"free\", \"statement\": \"idea\"},\n"),
+            board_file("  \"zone\": {\"mode\": \"mirrored\", \"statement\": \"current\"},\n"),
+            board_file(""),
+        ]
+    );
+    assert_eq!(refused.is_error, Some(true), "{refused:?}");
+    assert!(
+        text(&refused).starts_with("invalid arguments: "),
+        "{refused:?}"
+    );
+    assert!(!text(&refused).chars().any(char::is_control), "{refused:?}");
     assert_eq!(files(directory.path())?, before);
     assert_only_protocol_messages(&finish(session).await?);
     Ok(())

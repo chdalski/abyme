@@ -17,6 +17,7 @@ mod schema;
 mod ts;
 mod untrusted;
 mod verification;
+mod zone;
 
 pub use anchor::{Anchor, AnchorRule, MAX_ANCHOR_BYTES, MAX_SEGMENT_BYTES};
 pub use board::{BOARD_FORMAT, Board, BoardError, Rect};
@@ -28,3 +29,4 @@ pub use object_only::ObjectOnly;
 pub use relation::RelationKind;
 pub use untrusted::{FORMAT_AND_SEPARATORS, hides_or_breaks_text, shown};
 pub use verification::{CommitId, Verification, Verifier};
+pub use zone::{Mode, StatementKind, Zone};

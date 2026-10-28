@@ -51,6 +51,7 @@ fn snapshot(title: &str, elements: Vec<Element>, missing: &[&str]) -> Snapshot {
         title: title.to_owned(),
         owner: None,
         summary: None,
+        zone: None,
         placements: placed.map(|id| (id, rect())).collect(),
     };
     Snapshot {
@@ -785,6 +786,7 @@ fn detail_snapshot() -> Snapshot {
         title: "Onboarding".to_owned(),
         owner: None,
         summary: None,
+        zone: None,
         placements: BTreeMap::from([("payment".parse().unwrap(), rect())]),
     };
     snapshot.boards.insert(onboarding.id.clone(), onboarding);
@@ -1344,6 +1346,7 @@ fn hierarchy_board(id: &str, owner: Option<&str>, placed: &[&str]) -> Board {
         title: id.to_owned(),
         owner: owner.map(|owner| owner.parse().unwrap()),
         summary: None,
+        zone: None,
         placements: placed
             .iter()
             .map(|element| (element.parse().unwrap(), rect()))

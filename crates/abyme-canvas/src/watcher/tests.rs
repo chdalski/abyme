@@ -36,6 +36,7 @@ fn create_board(title: &str) -> Operation {
         title: title.to_owned(),
         owner: None,
         summary: None,
+        zone: None,
     }
 }
 

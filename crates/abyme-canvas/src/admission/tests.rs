@@ -114,6 +114,7 @@ fn the_first_refused_operation_is_named() {
         title: "Context".to_owned(),
         owner: None,
         summary: None,
+        zone: None,
     };
 
     assert_eq!(
