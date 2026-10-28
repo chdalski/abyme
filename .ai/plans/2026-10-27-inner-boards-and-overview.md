@@ -36,7 +36,7 @@ summaries and open review flags.
 - [x] One view of the boards as a request stands
 - [x] Inner boards and board summaries in the files and in `apply`
 - [x] Inner boards in the board outline and the element detail
-- [ ] The `overview` tool
+- [x] The `overview` tool
 
 ## Tasks
 
@@ -151,28 +151,28 @@ insides, so a session starts there instead of guessing board IDs.
 
 Review path: Security-Hybrid
 
-- [ ] The MCP tool `overview` takes no argument and lists every board once,
+- [x] The MCP tool `overview` takes no argument and lists every board once,
       depth-first from the boards without a parent, each level indented
       two spaces further: its ID, title, summary, the number of elements
       whose home it is, without placements whose element file is missing,
       and the open review flags of those elements by priority.
-- [ ] A board in a cycle, or whose owner has no home or no file, is listed
+- [x] A board in a cycle, or whose owner has no home or no file, is listed
       at the top level with the marker the outline gives it.
-- [ ] At most 50 boards are listed, followed by how many more there are.
-- [ ] When the project lies in no Git repository, `git` cannot be run, or
+- [x] At most 50 boards are listed, followed by how many more there are.
+- [x] When the project lies in no Git repository, `git` cannot be run, or
       Git fails, the answer starts with the line `Review flags
       unavailable:` and the reason, and lists the boards without flag
       counts.
-- [ ] `overview` takes the hierarchy from the board tree of Task 2.
-- [ ] The server's instructions tell the AI to start a session with
+- [x] `overview` takes the hierarchy from the board tree of Task 2.
+- [x] The server's instructions tell the AI to start a session with
       `overview`.
-- [ ] Integration tests through the MCP tool cover a tree of three levels,
+- [x] Integration tests through the MCP tool cover a tree of three levels,
       flag counts, the cap, a project without Git, and a cycle from a
       hand-edited file.
-- [ ] The tool's description, the server's module documentation, the MCP
+- [x] The tool's description, the server's module documentation, the MCP
       README, MCP Server, and the root `CLAUDE.md` Components table name
       `overview` and describe it as delivered.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
       and `cargo fmt --all --check` pass.
 
 ## Decisions
@@ -207,6 +207,10 @@ Review path: Security-Hybrid
   sees which element to open.
 - **`overview` counts the flags of each board's own elements** and caps
   its list at 50 boards like `status`.
+- **`overview` cuts titles after 80 and summaries after 160 characters,**
+  ending in `…`: the user chose this at the review of Task 4 over letting
+  one huge title or summary make the whole overview fail at the reply
+  limit; `read_board` still shows them in full.
 - **`contains` passes no review flags:** the hierarchy shows in the
   outline and the overview, and a container's anchor usually covers its
   components' paths already.

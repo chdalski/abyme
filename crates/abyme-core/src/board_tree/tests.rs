@@ -1,9 +1,10 @@
 //! Tests of the board hierarchy.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU32;
 
 use abyme_model::Rect;
+use proptest::prelude::*;
 use rstest::rstest;
 
 use super::*;
@@ -209,4 +210,178 @@ fn builds_the_same_tree_from_boards_in_any_order() {
         BoardTree::of(BTreeMap::<BoardId, Board>::new().iter()),
         BoardTree::default()
     );
+}
+
+fn depth_first_of(tree: &BoardTree) -> Vec<(usize, &str)> {
+    tree.depth_first(|_| true)
+        .into_iter()
+        .map(|(depth, board)| (depth, board.as_str()))
+        .collect()
+}
+
+#[test]
+fn lists_every_board_depth_first_with_the_inner_boards_by_id() {
+    let mut boards = three_levels();
+    boards.extend([
+        board("deployment", Some("shop"), &[]),
+        board("archive", None, &[]),
+    ]);
+    let tree = tree(&boards);
+
+    assert_eq!(
+        depth_first_of(&tree),
+        [
+            (0, "archive"),
+            (0, "context"),
+            (1, "containers"),
+            (2, "components"),
+            (1, "deployment"),
+        ]
+    );
+}
+
+#[test]
+fn puts_a_board_below_the_lowest_board_its_owner_lies_on() {
+    let tree = tree(&[
+        board("zeta", None, &["x"]),
+        board("alpha", None, &["x"]),
+        board("inside", Some("x"), &[]),
+    ]);
+
+    assert_eq!(
+        depth_first_of(&tree),
+        [(0, "alpha"), (1, "inside"), (0, "zeta")]
+    );
+}
+
+#[test]
+fn lists_boards_out_of_the_tree_at_the_top_level_and_what_lies_below_them_inside() {
+    // `left` and `right` lie inside each other, and `below` lies inside
+    // `left`; `self` lies inside itself; `homeless` belongs to an element no
+    // board places; `fileless` to `ghost`, which `top` places but which has
+    // no file; `first` and `second` both belong to `twice`, on `top`.
+    let tree = tree(&[
+        board("left", Some("r"), &["l", "w"]),
+        board("right", Some("l"), &["r"]),
+        board("below", Some("w"), &[]),
+        board("self", Some("s"), &["s"]),
+        board("homeless", Some("loner"), &[]),
+        board("top", None, &["ghost", "twice"]),
+        board("fileless", Some("ghost"), &[]),
+        board("first", Some("twice"), &[]),
+        board("second", Some("twice"), &[]),
+    ]);
+
+    let order: Vec<(usize, &str)> = tree
+        .depth_first(|owner| owner.as_str() != "ghost")
+        .into_iter()
+        .map(|(depth, board)| (depth, board.as_str()))
+        .collect();
+
+    assert_eq!(
+        order,
+        [
+            (0, "fileless"),
+            (0, "homeless"),
+            (0, "left"),
+            (1, "below"),
+            (0, "right"),
+            (0, "self"),
+            (0, "top"),
+            (1, "first"),
+            (1, "second"),
+        ]
+    );
+}
+
+/// Board `b{n}` is the inside of `e{n}`, which lies on `b{n+1}`. When the
+/// chain is `closed`, `e9999` lies on `b0`, which makes it a cycle.
+fn ten_thousand_boards(closed: bool) -> Vec<(BoardId, Board)> {
+    (0..10_000_usize)
+        .map(|index| {
+            let placed: Vec<String> = match index.checked_sub(1) {
+                Some(below) => vec![format!("e{below}")],
+                None if closed => vec!["e9999".to_owned()],
+                None => Vec::new(),
+            };
+            let placed: Vec<&str> = placed.iter().map(String::as_str).collect();
+            board(&format!("b{index}"), Some(&format!("e{index}")), &placed)
+        })
+        .collect()
+}
+
+#[test]
+fn lists_a_chain_and_a_cycle_of_ten_thousand_boards_without_recursion() {
+    let chain = tree(&ten_thousand_boards(false));
+    let cycle = tree(&ten_thousand_boards(true));
+
+    let chain_order = chain.depth_first(|_| true);
+    let cycle_order = cycle.depth_first(|_| true);
+
+    assert_eq!(chain_order.len(), 10_000);
+    assert_eq!(chain_order.first(), Some(&(0, &board_id("b9999"))));
+    assert_eq!(chain_order.last(), Some(&(9_999, &board_id("b0"))));
+    assert_eq!(cycle_order.len(), 10_000);
+    assert!(cycle_order.iter().all(|&(depth, _)| depth == 0));
+    assert!(cycle.lies_inside_itself(&board_id("b0")));
+    assert!(!chain.lies_inside_itself(&board_id("b0")));
+}
+
+/// Up to eight boards `b0`… with any owner among `e0` to `e5` or none, each
+/// placing any of those elements.
+fn arbitrary_boards() -> impl Strategy<Value = Vec<(BoardId, Board)>> {
+    proptest::collection::vec(
+        (
+            proptest::option::of(0..6_usize),
+            proptest::collection::btree_set(0..6_usize, 0..3),
+        ),
+        0..9,
+    )
+    .prop_map(|specs| {
+        specs
+            .into_iter()
+            .enumerate()
+            .map(|(index, (owner, placed))| {
+                let owner = owner.map(|owner| format!("e{owner}"));
+                let placed: Vec<String> =
+                    placed.iter().map(|placed| format!("e{placed}")).collect();
+                let placed: Vec<&str> = placed.iter().map(String::as_str).collect();
+                board(&format!("b{index}"), owner.as_deref(), &placed)
+            })
+            .collect()
+    })
+}
+
+proptest! {
+    #[test]
+    fn lists_every_board_once_below_the_board_above_it_unless_it_is_out_of_the_tree(
+        boards in arbitrary_boards(),
+        with_file in proptest::collection::btree_set(0..6_usize, 0..7),
+    ) {
+        let with_file: BTreeSet<String> = with_file.iter().map(|index| format!("e{index}")).collect();
+        let has_file = |owner: &ElementId| with_file.contains(owner.as_str());
+        let tree = tree(&boards);
+
+        let order = tree.depth_first(has_file);
+
+        let listed: BTreeSet<&BoardId> = order.iter().map(|&(_, board)| board).collect();
+        let all: BTreeSet<&BoardId> = boards.iter().map(|(id, _)| id).collect();
+        prop_assert_eq!(order.len(), boards.len());
+        prop_assert_eq!(listed, all);
+        let depths: BTreeMap<&BoardId, usize> =
+            order.iter().map(|&(depth, board)| (board, depth)).collect();
+        for (id, _) in &boards {
+            let walked = tree.parent(id).is_some_and(|parent| tree.lies_inside(parent, id));
+            prop_assert_eq!(tree.lies_inside_itself(id), walked, "{}", id);
+            let top_level = tree.parent(id).is_none()
+                || walked
+                || tree.owner(id).is_some_and(|owner| !has_file(owner));
+            let expected = if top_level {
+                Some(0)
+            } else {
+                tree.parent(id).and_then(|parent| depths.get(parent)).map(|depth| depth + 1)
+            };
+            prop_assert_eq!(depths.get(id).copied(), expected, "{}", id);
+        }
+    }
 }

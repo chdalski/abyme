@@ -32,7 +32,7 @@ The AI describes *what* it wants, and Abyme decides *where* it goes. Instead of 
 | `checks` / `resolve_check` | fetch review flags and change requests, resolve change requests |
 | `verify` | resolve a review flag and set a new verification stamp |
 
-The server offers `apply`, `read_board`, `read_element`, `search`, `status`, and `verify` so far; the other tools come with the slices that need them. `status` counts the elements to review by their highest priority and lists them as in `search`, those with a task first, at most 50; when Git cannot be asked, it answers with an error that names the reason. `verify` takes an element ID and stamps the element as verified by the AI against the commit HEAD names in the repository its anchor lies in, nested or the project's; it refuses while files under the element's anchor differ from HEAD or are untracked, so the AI asks for a commit first, and it refuses an element whose anchor lies in a [[Reconciliation#Nested Repositories|nested repository]] that Abyme cannot read.
+The server offers `apply`, `overview`, `read_board`, `read_element`, `search`, `status`, and `verify` so far; the other tools come with the slices that need them. Its instructions tell the AI to start a session with `overview`. `status` counts the elements to review by their highest priority and lists them as in `search`, those with a task first, at most 50; when Git cannot be asked, it answers with an error that names the reason. `verify` takes an element ID and stamps the element as verified by the AI against the commit HEAD names in the repository its anchor lies in, nested or the project's; it refuses while files under the element's anchor differ from HEAD or are untracked, so the AI asks for a commit first, and it refuses an element whose anchor lies in a [[Reconciliation#Nested Repositories|nested repository]] that Abyme cannot read.
 
 Every writing response contains the consequences of the change, that is affected elements and new review flags (see [[Checks#Reports]]). For visual collaboration, tools like `get_selection` and `focus` would be added, see [[Ideas#Visual Collaboration with the AI]].
 
@@ -42,9 +42,22 @@ Abyme gives the AI three detail levels in a compact text format instead of JSON:
 
 | Level | Content | Size |
 |---|---|---|
-| **Overview** | all boards with a one-line summary, zone preset, and open checks | a few hundred tokens, the entry point of every session |
+| **Overview** | all boards as a tree, each with its summary, how many elements have their home on it, and their open review flags | a few hundred tokens, the entry point of every session |
 | **Board outline** | elements and relations as lines, inner boards as links, notes shortened | depends on the board size |
 | **Element detail** | name, type, anchor, verification stamp, review flags, summary, the boards that place it, its inner boards, outgoing and incoming relations, and the full description; references come with their slice | per element |
+
+Example of an overview, as `overview` returns it:
+
+```
+context                 Context             The web shop and its users  1 element
+  container-level       Container Level     Containers of the shop      4 elements  ⚠ 1 task
+    payment-components  Payment Components                              3 elements  ⚠ 1 task, 2 hints
+drafts                  Drafts                                          2 elements
+```
+
+- **One line per board,** depth first: each board's inner boards follow it, indented two spaces further, ordered by ID. A line shows the board's ID, title, and summary, how many elements with a file have their home on it, and how many of those have a task or only a hint. A title longer than 80 characters and a summary longer than 160 are cut and end in `…`, so one long text cannot make the overview too large to answer; `read_board` shows them in full.
+- **Boards out of the tree:** a board that lies inside itself, or whose owner has no file or no home, stands at the top level with the `Inside of:` line of its outline, markers included, so no board is left out and none is listed twice.
+- **At most 50 boards,** then how many more there are.
 
 Example of a board outline:
 

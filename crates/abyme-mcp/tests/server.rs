@@ -292,6 +292,7 @@ async fn applies_operations_and_reads_the_board_back() -> TestResult {
         names,
         [
             "apply",
+            "overview",
             "read_board",
             "read_element",
             "search",
@@ -1327,6 +1328,166 @@ async fn status_names_why_review_flags_are_unavailable_and_takes_no_argument() -
 }
 
 #[tokio::test]
+async fn overview_lists_the_boards_as_a_tree_also_from_hand_edited_files() -> TestResult {
+    let directory = project()?;
+    let root = directory.path();
+    let session = start(root).await?;
+    let applied = call(
+        &session,
+        "apply",
+        json!({"operations": [
+            {"op": "create_board", "key": "ctx", "title": "Context", "summary": "The shop"},
+            {"op": "create_element", "key": "shop", "type_ref": "c4/system", "name": "Shop"},
+            {"op": "place_element", "element": {"new": "shop"}, "board": {"new": "ctx"}},
+            {"op": "create_board", "key": "inside", "title": "Shop Containers",
+             "owner": {"new": "shop"}, "summary": "Runs"},
+            {"op": "create_element", "key": "pay", "type_ref": "c4/container", "name": "Payments"},
+            {"op": "place_element", "element": {"new": "pay"}, "board": {"new": "inside"}},
+            {"op": "create_board", "key": "parts", "title": "Payment Parts", "owner": {"new": "pay"}}
+        ]}),
+    )
+    .await??;
+    assert_eq!(applied.is_error, Some(false), "{applied:?}");
+    // Hand edits make `loop-a` and `loop-b` lie inside each other, with a
+    // title that tries to clear the screen and break the line.
+    write_element(root, "ia", None, None)?;
+    write_element(root, "ib", None, None)?;
+    for (id, title, owner, placed) in [
+        ("loop-a", "Loop\\u001b[2J\\nA", "ib", "ia"),
+        ("loop-b", "Loop B", "ia", "ib"),
+    ] {
+        fs::write(
+            root.join(format!("abyme/boards/{id}.board.json")),
+            format!(
+                "{{\"format\": 1, \"id\": \"{id}\", \"title\": \"{title}\", \"owner\": \"{owner}\", \
+                 \"placements\": [{{\"element\": \"{placed}\", \"x\": 0, \"y\": 0, \"width\": 180, \
+                 \"height\": 90}}]}}"
+            ),
+        )?;
+    }
+
+    let overview = call(&session, "overview", json!({})).await??;
+    let with_argument = call(&session, "overview", json!({"x": 1})).await??;
+
+    assert_eq!(overview.is_error, Some(false), "{overview:?}");
+    assert_eq!(
+        text(&overview),
+        [
+            "Review flags unavailable: the project lies in no Git repository".to_owned(),
+            format!(
+                "context{}Context{}The shop  1 element",
+                " ".repeat(12),
+                " ".repeat(11)
+            ),
+            format!(
+                "  shop-containers  Shop Containers{}Runs{}1 element",
+                " ".repeat(3),
+                " ".repeat(6)
+            ),
+            format!(
+                "    payment-parts  Payment Parts{}0 elements",
+                " ".repeat(15)
+            ),
+            format!(
+                "loop-a{}Loop\\u{{1b}}[2J\\nA{}1 element    Inside of: ib · Above: loop-b ⚠ cycle",
+                " ".repeat(13),
+                " ".repeat(12)
+            ),
+            format!(
+                "loop-b{}Loop B{}1 element    Inside of: ia · Above: loop-a ⚠ cycle",
+                " ".repeat(13),
+                " ".repeat(22)
+            ),
+            String::new(),
+        ]
+        .join("\n")
+    );
+    assert_eq!(with_argument.is_error, Some(true), "{with_argument:?}");
+    assert!(
+        text(&with_argument).starts_with("invalid arguments: "),
+        "{with_argument:?}"
+    );
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+#[tokio::test]
+async fn overview_counts_the_flags_of_each_board_s_own_elements() -> TestResult {
+    let directory = repository_with_marked_elements()?;
+    let config = tempfile::tempdir()?;
+    let session = start_with(
+        directory.path(),
+        &[("XDG_CONFIG_HOME", config.path().as_os_str())],
+    )
+    .await?;
+
+    let overview = call(&session, "overview", json!({})).await??;
+
+    // `ghost` has no file, so four elements count.
+    assert_eq!(text(&overview), "b  B    4 elements  ⚠ 1 task, 1 hint\n");
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+#[tokio::test]
+async fn overview_lists_at_most_fifty_boards() -> TestResult {
+    let directory = project()?;
+    let boards = directory.path().join("abyme/boards");
+    fs::create_dir_all(&boards)?;
+    for index in 0..53 {
+        fs::write(
+            boards.join(format!("b{index:02}.board.json")),
+            format!(
+                "{{\"format\": 1, \"id\": \"b{index:02}\", \"title\": \"T\", \"placements\": []}}"
+            ),
+        )?;
+    }
+    let session = start(directory.path()).await?;
+
+    let overview = call(&session, "overview", json!({})).await??;
+
+    let text = text(&overview);
+    let lines: Vec<&str> = text.lines().collect();
+    assert_eq!(lines.len(), 1 + 50 + 1, "{text}");
+    assert_eq!(lines.get(1), Some(&"b00  T    0 elements"));
+    assert_eq!(lines.get(50), Some(&"b49  T    0 elements"));
+    assert_eq!(lines.last(), Some(&"… and 3 more boards"));
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+#[tokio::test]
+async fn overview_answers_whatever_the_size_of_a_title() -> TestResult {
+    let directory = project()?;
+    let boards = directory.path().join("abyme/boards");
+    fs::create_dir_all(&boards)?;
+    // Escaped in full, this title would take 2.4 MB, more than a reply may
+    // hold.
+    fs::write(
+        boards.join("big.board.json"),
+        format!(
+            "{{\"format\": 1, \"id\": \"big\", \"title\": \"{}\", \"placements\": []}}",
+            "\u{202e}".repeat(300_000)
+        ),
+    )?;
+    let session = start(directory.path()).await?;
+
+    let overview = call(&session, "overview", json!({})).await??;
+
+    assert_eq!(overview.is_error, Some(false), "{overview:?}");
+    assert_eq!(
+        text(&overview),
+        format!(
+            "Review flags unavailable: the project lies in no Git repository\n\
+             big  {}…    0 elements\n",
+            "\\u{202e}".repeat(80)
+        )
+    );
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+#[tokio::test]
 async fn read_element_asks_the_project_repository_whatever_git_variables_say() -> TestResult {
     let directory = repository_with_a_changed_anchor()?;
     let other = tempfile::tempdir()?;
@@ -1845,7 +2006,7 @@ async fn no_tool_takes_a_path() -> TestResult {
             "read_board" => &["board", "coordinates"],
             "read_element" | "verify" => &["element"],
             "search" => &["query"],
-            "status" => &[],
+            "overview" | "status" => &[],
             other => return Err(format!("unexpected tool {other}").into()),
         };
         assert_eq!(properties, expected, "{}", tool.name);

@@ -1,5 +1,7 @@
-//! The MCP tools `apply`, `read_board`, `read_element`, `search`, `status`,
-//! and `verify`, on the project that the server's working directory lies in.
+//! The MCP tools `apply`, `overview`, `read_board`, `read_element`,
+//! `search`, `status`, and `verify`, on the project that the server's
+//! working directory lies in. The server's instructions send the AI to
+//! `overview` first.
 //!
 //! Arguments come from an AI, so each tool takes them as a raw JSON object
 //! and reads them itself: a request that does not fit becomes a tool error
@@ -11,7 +13,7 @@ use std::sync::Arc;
 
 use abyme_core::{
     Created, Geometry, LocalKey, Operations, Project, Review, Snapshot, Unavailable,
-    element_detail, element_list, outline, status_report,
+    element_detail, element_list, outline, overview, status_report,
 };
 use abyme_index::{Index, MAX_QUERY_CHARS, spec};
 use abyme_model::{BoardId, ElementId, Verifier, shown};
@@ -53,10 +55,11 @@ const NO_MATCH: &str = "No element matches the query.";
 
 /// What the server tells the AI about itself when a session starts.
 const INSTRUCTIONS: &str = "Abyme keeps project knowledge on boards stored in this repository. \
-    Call status at the start of a session to see which elements may no longer match the code. \
-    Call search with a query to find elements by the words they contain or by what they are \
-    about, read_board with a board ID to read the board as an outline, read_element with an \
-    element ID to read one element in detail with its relations and description, and apply \
+    Start a session with overview, which lists all boards as a tree with their summaries and how \
+    many of their elements are marked for review. Call status to list the elements that may no \
+    longer match the code, search with a query to find elements by the words they contain or by \
+    what they are about, read_board with a board ID to read the board as an outline, read_element \
+    with an element ID to read one element in detail with its relations and description, and apply \
     to create, change, and delete elements, create boards, place elements on boards, move them, \
     and create and delete relations between elements. Elements marked ⚠ task or ⚠ hint may no \
     longer match the code: read them and what changed, update them with apply, and only then call \
@@ -104,6 +107,11 @@ struct VerifyArguments {
 #[derive(Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct StatusArguments {}
+
+/// The arguments of `overview`: none.
+#[derive(Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct OverviewArguments {}
 
 /// The arguments of `search`.
 #[derive(Deserialize, schemars::JsonSchema)]
@@ -337,6 +345,43 @@ impl AbymeServer {
                 format!(
                     "{note}{}",
                     element_list(&snapshot, &found, review.as_ref().ok())
+                ),
+            )
+        })
+        .await
+    }
+
+    #[tool(
+        description = "Returns all boards of the Abyme project as a tree, the place to start a session: \
+            one line per board, each board's inner boards below it indented two spaces further, with its \
+            ID, title, summary, how many elements have their home on it, and how many of those are marked \
+            ⚠ task or ⚠ hint, as ⚠ 2 tasks, 1 hint; a title longer than 80 characters and a summary \
+            longer than 160 are cut and end in …, and read_board shows them in full. A board that a \
+            merge or a hand edit took out of the tree stands at the top level with its Inside of: line \
+            as read_board shows it, marked \
+            ⚠ missing, ⚠ no home, or ⚠ cycle. At most 50 boards, followed by how many more there are. \
+            Text from the repository is escaped onto one line. read_board opens a board by its ID. When \
+            Git cannot be asked, the reply starts with a line Review flags unavailable: and the reason, \
+            and no flags are counted.",
+        input_schema = schema_for_type::<OverviewArguments>()
+    )]
+    async fn overview(
+        &self,
+        Parameters(arguments): Parameters<JsonObject>,
+    ) -> Result<CallToolResult, ErrorData> {
+        if let Err(result) = parsed::<OverviewArguments>(arguments) {
+            return Ok(result);
+        }
+        let start = self.start.clone();
+        on_core(move || {
+            let (project, snapshot) = read_project(&start)?;
+            let review = project.review(&snapshot);
+            bounded(
+                "the overview",
+                format!(
+                    "{}{}",
+                    unavailable_line(&review),
+                    overview(&snapshot, review.as_ref().ok())
                 ),
             )
         })

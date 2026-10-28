@@ -1,11 +1,13 @@
-//! The detail levels as the AI reads them: a board as a compact text
-//! outline, and one element in detail.
+//! The detail levels as the AI reads them: all boards as an overview, a
+//! board as a compact text outline, and one element in detail.
 //!
 //! Titles, types, names, summaries, anchors, relation labels, and
 //! descriptions come from files that a clone or a pull request can bring
 //! in. Every value but the description is written on one line, and every
 //! character that could break a line or hide or reorder text is escaped;
 //! the description keeps its lines and tabs.
+
+use std::collections::BTreeMap;
 
 use abyme_model::{Board, BoardId, Element, ElementId, Rect, RelationKind, hides_or_breaks_text};
 
@@ -36,6 +38,17 @@ const SHOWN_CHANGED_FILES: usize = 10;
 /// How many elements [`status_report`] lists at most.
 const STATUS_LINES: usize = 50;
 
+/// How many boards [`overview`] lists at most.
+const OVERVIEW_LINES: usize = 50;
+
+/// How many characters of a board's title [`overview`] shows at most.
+/// Cutting titles and summaries keeps one long text from making the whole
+/// overview too large to answer.
+const OVERVIEW_TITLE_CHARS: usize = 80;
+
+/// How many characters of a board's summary [`overview`] shows at most.
+const OVERVIEW_SUMMARY_CHARS: usize = 160;
+
 /// Whether an outline shows where each element lies on its board.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Geometry {
@@ -55,6 +68,136 @@ pub struct UnknownBoard(pub BoardId);
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("no element has the ID {0}")]
 pub struct UnknownElement(pub ElementId);
+
+/// Renders all boards as an overview.
+///
+/// One line per board, depth first as [`BoardTree::depth_first`] orders
+/// them, each level indented two spaces further: the board's ID, title, and
+/// summary, each cut after [`OVERVIEW_TITLE_CHARS`] and
+/// [`OVERVIEW_SUMMARY_CHARS`] characters and then ending in `…`; how many
+/// elements with a file have their home on it; given a `review`, how many
+/// of those have a task and how many only a hint, as `⚠ 2 tasks, 1 hint`;
+/// and for a top-level board with an owner, the line
+/// [`outline`] names the owner with, markers included. Empty columns at the
+/// end of a line are left out. At most [`OVERVIEW_LINES`] boards are listed,
+/// then how many more there are. Without boards the overview is
+/// `No boards.`
+#[must_use]
+pub fn overview(snapshot: &Snapshot, review: Option<&Review>) -> String {
+    let tree = BoardTree::of(&snapshot.boards);
+    let order = tree.depth_first(|owner| snapshot.elements.contains_key(owner));
+    if order.is_empty() {
+        return "No boards.".to_owned();
+    }
+    let own = own_elements(snapshot, &tree, review);
+    // Only the boards shown are rendered, so no line costs a walk or a width
+    // beyond them.
+    let rows: Vec<Vec<String>> = order
+        .iter()
+        .take(OVERVIEW_LINES)
+        .filter_map(|&(depth, id)| {
+            let board = snapshot.boards.get(id)?;
+            let counts = own.get(id).copied().unwrap_or_default();
+            let mut columns = vec![
+                format!("{}{id}", "  ".repeat(depth)),
+                one_line(&cut(&board.title, OVERVIEW_TITLE_CHARS)),
+                board
+                    .summary
+                    .as_deref()
+                    .map(|summary| one_line(&cut(summary, OVERVIEW_SUMMARY_CHARS)))
+                    .unwrap_or_default(),
+                counted(counts.elements, "element"),
+                review
+                    .map(|_| flag_counts(counts.tasks, counts.hints))
+                    .unwrap_or_default(),
+                tree.owner(id)
+                    .filter(|_| depth == 0)
+                    .map(|owner| owner_line(snapshot, &tree, id, owner))
+                    .unwrap_or_default(),
+            ];
+            drop_empty_tail(&mut columns);
+            Some(columns)
+        })
+        .collect();
+    let more = order.len().saturating_sub(OVERVIEW_LINES);
+    let rest = match more {
+        0 => String::new(),
+        1 => "… and 1 more board\n".to_owned(),
+        _ => format!("… and {more} more boards\n"),
+    };
+    format!("{}{rest}", lines(&rows))
+}
+
+/// `text` up to `limit` characters, and `…` after it if it is longer. It is
+/// cut before it is escaped, so no escape is ever cut in two.
+fn cut(text: &str, limit: usize) -> String {
+    match text.char_indices().nth(limit) {
+        Some((end, _)) => format!("{}…", text.get(..end).unwrap_or(text)),
+        None => text.to_owned(),
+    }
+}
+
+/// What [`overview`] counts of the elements whose home is one board.
+#[derive(Debug, Default, Clone, Copy)]
+struct OwnElements {
+    elements: usize,
+    tasks: usize,
+    hints: usize,
+}
+
+/// The elements with a file counted by their home, and given a `review`,
+/// by the highest priority of their flags.
+fn own_elements<'a>(
+    snapshot: &Snapshot,
+    tree: &'a BoardTree,
+    review: Option<&Review>,
+) -> BTreeMap<&'a BoardId, OwnElements> {
+    snapshot
+        .elements
+        .keys()
+        .filter_map(|id| tree.home(id).map(|home| (home, id)))
+        .fold(BTreeMap::new(), |mut counts, (home, id)| {
+            let own: &mut OwnElements = counts.entry(home).or_default();
+            own.elements += 1;
+            match review.and_then(|review| review.priority(id)) {
+                Some(Priority::Task) => own.tasks += 1,
+                Some(Priority::Hint) => own.hints += 1,
+                None => {}
+            }
+            counts
+        })
+}
+
+/// `⚠` and the tasks and hints that are not zero, such as `⚠ 2 tasks,
+/// 1 hint`, or nothing.
+fn flag_counts(tasks: usize, hints: usize) -> String {
+    let counts: Vec<String> = [(tasks, "task"), (hints, "hint")]
+        .into_iter()
+        .filter(|&(count, _)| count > 0)
+        .map(|(count, noun)| counted(count, noun))
+        .collect();
+    if counts.is_empty() {
+        String::new()
+    } else {
+        format!("⚠ {}", counts.join(", "))
+    }
+}
+
+/// `count` and `noun`, plural unless the count is one.
+fn counted(count: usize, noun: &str) -> String {
+    if count == 1 {
+        format!("1 {noun}")
+    } else {
+        format!("{count} {noun}s")
+    }
+}
+
+/// Leaves out the empty columns at the end of `columns`.
+fn drop_empty_tail(columns: &mut Vec<String>) {
+    while columns.last().is_some_and(String::is_empty) {
+        columns.pop();
+    }
+}
 
 /// Renders `board` as an outline.
 ///
@@ -378,7 +521,7 @@ fn position(rect: &Rect) -> String {
 fn header(snapshot: &Snapshot, tree: &BoardTree, board: &Board) -> String {
     let owner = tree
         .owner(&board.id)
-        .map(|owner| owner_line(snapshot, tree, &board.id, owner))
+        .map(|owner| format!("{}\n", owner_line(snapshot, tree, &board.id, owner)))
         .unwrap_or_default();
     let summary = board
         .summary
@@ -397,7 +540,8 @@ fn header(snapshot: &Snapshot, tree: &BoardTree, board: &Board) -> String {
 /// owner, marked `⚠ missing` without an element file; then, if a board
 /// places the owner, `Above:` and the owner's home, marked `⚠ cycle` when
 /// `board` lies inside itself, and otherwise `⚠ no home` for an owner with a
-/// file. The markers add up, so no state hides another.
+/// file. The markers add up, so no state hides another. The line ends
+/// without a line feed.
 fn owner_line(snapshot: &Snapshot, tree: &BoardTree, board: &BoardId, owner: &ElementId) -> String {
     let has_file = snapshot.elements.contains_key(owner);
     let missing = if has_file {
@@ -411,7 +555,7 @@ fn owner_line(snapshot: &Snapshot, tree: &BoardTree, board: &BoardId, owner: &El
         None if has_file => format!(" {NO_HOME_MARKER}"),
         None => String::new(),
     };
-    format!("Inside of: {owner}{missing}{above}\n")
+    format!("Inside of: {owner}{missing}{above}")
 }
 
 /// The rows of the relations between elements on `board`: by source, then
@@ -472,9 +616,7 @@ fn row(
     .into_iter()
     .flatten()
     .collect();
-    while optional.last().is_some_and(String::is_empty) {
-        optional.pop();
-    }
+    drop_empty_tail(&mut optional);
     [
         id.to_string(),
         one_line(element.type_ref().as_str()),

@@ -5,8 +5,9 @@
 //! without touching the file system, so every decision can be tested on its
 //! own. [`Project`] finds the project a directory lies in, reads its files,
 //! writes a request's changes safely, and asks Git what changed, from which
-//! [`Review`] holds the review flags. [`outline`] renders a board as the
-//! compact text the AI reads, and [`element_detail`] one element in detail.
+//! [`Review`] holds the review flags. [`overview`] renders all boards as a
+//! tree, [`outline`] a board as the compact text the AI reads, and
+//! [`element_detail`] one element in detail.
 
 // A project is used only when it belongs to the user running Abyme, and the
 // owner check exists for Unix only.
@@ -30,7 +31,8 @@ pub use operation::{
     LocalKey, LocalKeyError, MAX_COORDINATE, MAX_KEY_LEN, Operation, Operations, Ref,
 };
 pub use outline::{
-    Geometry, UnknownBoard, UnknownElement, element_detail, element_list, outline, status_report,
+    Geometry, UnknownBoard, UnknownElement, element_detail, element_list, outline, overview,
+    status_report,
 };
 pub use project::{
     EmbeddingModel, EntryKind, Init, MAX_FILE_BYTES, MAX_PROJECT_FILE_BYTES, PROJECT_FORMAT,
