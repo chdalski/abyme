@@ -131,6 +131,18 @@ pub enum OperationProblem {
         /// The board.
         board: BoardId,
     },
+    /// The move does not say what becomes of the element's pin.
+    #[error(
+        "element {element} is pinned on board {board}: a person placed it there. Move it only \
+         after the person has said so, with pinned: true to keep it pinned or pinned: false to \
+         release it"
+    )]
+    Pinned {
+        /// The element.
+        element: ElementId,
+        /// The board.
+        board: BoardId,
+    },
     /// A move's position lies outside the range a move accepts.
     #[error("the position x {x}, y {y} lies outside -{MAX_COORDINATE} to {MAX_COORDINATE}")]
     OutOfRange {
@@ -335,7 +347,8 @@ impl<'snapshot> Draft<'snapshot> {
                 board,
                 x,
                 y,
-            } => self.move_element(element, board, *x, *y),
+                pinned,
+            } => self.move_element(element, board, *x, *y, *pinned),
             Operation::UpdateElement {
                 element,
                 name,
@@ -458,9 +471,13 @@ impl<'snapshot> Draft<'snapshot> {
         let rect = free_space
             .place(Size::DEFAULT)
             .ok_or_else(|| OperationProblem::BoardFull(board.clone()))?;
-        draft_board
-            .placements
-            .insert(element.clone(), Placement { rect });
+        draft_board.placements.insert(
+            element.clone(),
+            Placement {
+                rect,
+                pinned: false,
+            },
+        );
         self.homed.insert(element);
         Ok(())
     }
@@ -471,6 +488,7 @@ impl<'snapshot> Draft<'snapshot> {
         board: &Ref<BoardId>,
         x: i32,
         y: i32,
+        pinned: Option<bool>,
     ) -> Result<(), OperationProblem> {
         let element = self.resolve_element(element)?;
         let board = self.resolve_board(board)?;
@@ -485,8 +503,12 @@ impl<'snapshot> Draft<'snapshot> {
                 board: board.clone(),
             }
         })?;
+        if placement.pinned && pinned.is_none() {
+            return Err(OperationProblem::Pinned { element, board });
+        }
         placement.rect.x = x;
         placement.rect.y = y;
+        placement.pinned = pinned.unwrap_or(placement.pinned);
         free_space.occupy(&placement.rect);
         Ok(())
     }

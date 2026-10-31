@@ -18,3 +18,5 @@ target goes here only after the user has lowered the target.
 - `below` checks only the bottom edge, not the right, though `place` promises `None` when no position fits in `i32`; not reachable while the width stays 180: `crates/abyme-core/src/layout/free_space.rs` (Reviewer, auto-layout Task 3)
 - `#[derive(Clone, Copy)]` on `Cell` looks unused, and `raise_bottom` has one caller and could stand inline: `crates/abyme-core/src/layout/free_space.rs` (Reviewer, auto-layout Task 3)
 - The doc comment of `draft_board` is wrapped unevenly: `crates/abyme-core/src/apply.rs` (Reviewer, auto-layout Task 3)
+- The arrow-key test asserts element, x, and y but not `pinned`; `expect(move?.pinned).toBe(true)` would make it explicit: `crates/abyme-canvas/ui/src/main.test.tsx` (Reviewer, auto-layout Task 4)
+- "Boxes that lay on a board before pins existed are not pinned." reads as history; say "Only such a move pins a box; a box placed any other way is not pinned.": `docs/4 AI Interface/Placement and Layout.md`, Rules (Reviewer, auto-layout Task 4)

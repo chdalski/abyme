@@ -107,7 +107,8 @@ async fn open_board(start: State<'_, Start>, board: BoardId) -> Result<BoardView
 /// send every one of them and none moves an element on a mirrored board. The
 /// first check comes before any access to the project, the second reads the
 /// project the request goes to; a board that turns mirrored between it and
-/// the write lets that one move through, which changes only layout.
+/// the write lets that one move through, which changes only that element's
+/// position and pin.
 #[tauri::command]
 async fn apply(start: State<'_, Start>, operations: Operations) -> Result<(), String> {
     let operations = operations.into_vec();

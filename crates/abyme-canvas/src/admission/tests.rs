@@ -17,13 +17,48 @@ fn move_existing() -> Operation {
         "element": {"existing": "payments"},
         "board": {"existing": "context"},
         "x": 10,
-        "y": 20
+        "y": 20,
+        "pinned": true
     }))
 }
 
 #[test]
 fn a_move_of_an_existing_element_on_an_existing_board_is_admitted() {
     assert_eq!(admit(&[move_existing()]), Ok(()));
+}
+
+#[test]
+fn a_move_that_does_not_pin_is_refused_with_its_position() {
+    for without_a_pin in [
+        json!({"op": "move_element", "element": {"existing": "payments"}, "board": {"existing": "context"}, "x": 1, "y": 2}),
+        json!({"op": "move_element", "element": {"existing": "payments"}, "board": {"existing": "context"}, "x": 1, "y": 2, "pinned": false}),
+    ] {
+        let refusal = admit(&[move_existing(), operation(without_a_pin)]).unwrap_err();
+
+        assert_eq!(
+            refusal,
+            Refused::Operation {
+                position: 2,
+                kind: "move_element without pinned: true",
+            }
+        );
+    }
+}
+
+#[test]
+fn a_pin_does_not_admit_a_move_with_a_new_element_or_board() {
+    for with_a_new_ref in [
+        json!({"op": "move_element", "element": {"new": "e"}, "board": {"existing": "context"}, "x": 1, "y": 2, "pinned": true}),
+        json!({"op": "move_element", "element": {"existing": "payments"}, "board": {"new": "b"}, "x": 1, "y": 2, "pinned": true}),
+    ] {
+        assert_eq!(
+            admit(&[operation(with_a_new_ref)]),
+            Err(Refused::Operation {
+                position: 1,
+                kind: "move_element with a new element or board",
+            })
+        );
+    }
 }
 
 #[test]
@@ -167,7 +202,8 @@ fn a_move_on(board: &str) -> Operation {
         "element": {"existing": "payments"},
         "board": {"existing": board},
         "x": 10,
-        "y": 20
+        "y": 20,
+        "pinned": true
     }))
 }
 

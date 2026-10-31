@@ -52,7 +52,17 @@ fn snapshot(title: &str, elements: Vec<Element>, missing: &[&str]) -> Snapshot {
         owner: None,
         summary: None,
         zone: None,
-        placements: placed.map(|id| (id, Placement { rect: rect() })).collect(),
+        placements: placed
+            .map(|id| {
+                (
+                    id,
+                    Placement {
+                        rect: rect(),
+                        pinned: false,
+                    },
+                )
+            })
+            .collect(),
     };
     Snapshot {
         elements: elements
@@ -452,7 +462,13 @@ fn with_rect(mut snapshot: Snapshot, id: &str, rect: Rect) -> Snapshot {
         .get_mut(&"b".parse().unwrap())
         .unwrap()
         .placements
-        .insert(id.parse().unwrap(), Placement { rect });
+        .insert(
+            id.parse().unwrap(),
+            Placement {
+                rect,
+                pinned: false,
+            },
+        );
     snapshot
 }
 
@@ -507,6 +523,38 @@ fn shows_the_geometry_before_any_text_from_the_repository() {
     assert_eq!(
         outline_with_geometry(&snapshot),
         "Board: b · T\n\na  @5,6 7x8  t  @1,2 3x4\\nZ\\u{202e}\n"
+    );
+}
+
+#[test]
+fn shows_a_pin_after_the_size_only_with_the_geometry() {
+    let snapshot = snapshot("T", vec![element("a", "t", "n", None)], &[]);
+    let mut snapshot = with_rect(snapshot, "a", sized(5, 6, 7, 8));
+    let unpinned_without_geometry = outline_of(&snapshot);
+    snapshot
+        .boards
+        .get_mut(&"b".parse().unwrap())
+        .unwrap()
+        .placements
+        .get_mut(&"a".parse().unwrap())
+        .unwrap()
+        .pinned = true;
+
+    assert_eq!(
+        outline_with_geometry(&snapshot),
+        "Board: b · T\n\na  @5,6 7x8 pinned  t  n\n"
+    );
+    assert_eq!(outline_of(&snapshot), unpinned_without_geometry);
+}
+
+#[test]
+fn a_name_that_says_pinned_marks_no_position() {
+    let snapshot = snapshot("T", vec![element("a", "t", "pinned", None)], &[]);
+    let snapshot = with_rect(snapshot, "a", sized(5, 6, 7, 8));
+
+    assert_eq!(
+        outline_with_geometry(&snapshot),
+        "Board: b · T\n\na  @5,6 7x8  t  pinned\n"
     );
 }
 
@@ -787,7 +835,13 @@ fn detail_snapshot() -> Snapshot {
         owner: None,
         summary: None,
         zone: None,
-        placements: BTreeMap::from([("payment".parse().unwrap(), Placement { rect: rect() })]),
+        placements: BTreeMap::from([(
+            "payment".parse().unwrap(),
+            Placement {
+                rect: rect(),
+                pinned: false,
+            },
+        )]),
     };
     snapshot.boards.insert(onboarding.id.clone(), onboarding);
     snapshot
@@ -1354,7 +1408,15 @@ fn hierarchy_board(id: &str, owner: Option<&str>, placed: &[&str]) -> Board {
         zone: None,
         placements: placed
             .iter()
-            .map(|element| (element.parse().unwrap(), Placement { rect: rect() }))
+            .map(|element| {
+                (
+                    element.parse().unwrap(),
+                    Placement {
+                        rect: rect(),
+                        pinned: false,
+                    },
+                )
+            })
             .collect(),
     }
 }

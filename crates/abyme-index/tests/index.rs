@@ -918,7 +918,15 @@ fn zoned(
             }),
             placements: placed
                 .iter()
-                .map(|placed| Ok((placed.parse()?, Placement { rect })))
+                .map(|placed| {
+                    Ok((
+                        placed.parse()?,
+                        Placement {
+                            rect,
+                            pinned: false,
+                        },
+                    ))
+                })
                 .collect::<TestResult<_>>()?,
         };
         snapshot.boards.insert(board.id.clone(), board);

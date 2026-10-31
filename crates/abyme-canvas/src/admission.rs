@@ -7,7 +7,8 @@
 //! [`check_modes`] then decides from the project's files, also by name for
 //! each variant and each mode: a person does not move what lies on a mirrored
 //! board. That is a rule of this one client, not a boundary: the files stay
-//! open to the AI and to edits by hand.
+//! open to the AI and to edits by hand. A move the canvas sends pins the
+//! element, since a person placed it there.
 
 use std::fmt;
 
@@ -64,7 +65,7 @@ impl fmt::Display for Refused {
 }
 
 /// Checks that the canvas may send every operation of a request. Admitted
-/// today: moving an element that exists on a board that exists.
+/// today: moving and pinning an element that exists on a board that exists.
 ///
 /// Whatever page a debug build loads from the dev server's address can send
 /// every operation admitted here, so admitting another one needs a security
@@ -133,15 +134,28 @@ fn mirrored_board<'a>(snapshot: &Snapshot, operation: &'a Operation) -> Option<&
 }
 
 /// The kind of `operation`, if the canvas may not send it.
+#[expect(
+    clippy::unneeded_field_pattern,
+    reason = "naming every field of a move breaks the build when it gains one, until that field is admitted or refused here"
+)]
 const fn refused_kind(operation: &Operation) -> Option<&'static str> {
     match operation {
         Operation::CreateElement { .. } => Some("create_element"),
         Operation::CreateBoard { .. } => Some("create_board"),
         Operation::UpdateBoard { .. } => Some("update_board"),
         Operation::PlaceElement { .. } => Some("place_element"),
-        Operation::MoveElement { element, board, .. } => match (element, board) {
-            (Ref::Existing(_), Ref::Existing(_)) => None,
-            (Ref::New(_), Ref::Existing(_) | Ref::New(_)) | (Ref::Existing(_), Ref::New(_)) => {
+        Operation::MoveElement {
+            element,
+            board,
+            x: _,
+            y: _,
+            pinned,
+        } => match (element, board, pinned) {
+            (Ref::Existing(_), Ref::Existing(_), Some(true)) => None,
+            (Ref::Existing(_), Ref::Existing(_), None | Some(false)) => {
+                Some("move_element without pinned: true")
+            }
+            (Ref::New(_), ..) | (Ref::Existing(_), Ref::New(_), _) => {
                 Some("move_element with a new element or board")
             }
         },

@@ -230,6 +230,7 @@ fn sized(x: i32, y: i32, width: u32, height: u32) -> Placement {
             width: NonZeroU32::new(width).unwrap(),
             height: NonZeroU32::new(height).unwrap(),
         },
+        pinned: false,
     }
 }
 
@@ -685,7 +686,13 @@ fn reports_a_full_board() {
         .get_mut(&board_id("main"))
         .unwrap()
         .placements
-        .insert(element_id("huge"), Placement { rect: huge });
+        .insert(
+            element_id("huge"),
+            Placement {
+                rect: huge,
+                pinned: false,
+            },
+        );
     let json = r#"[{"op": "place_element", "element": {"existing": "loose"}, "board": {"existing": "main"}}]"#;
 
     assert_eq!(
@@ -2077,4 +2084,150 @@ fn shows_neither_title_nor_summary_when_it_rejects_a_board_operation(#[case] jso
     let message = problem(&hierarchy(), json).to_string();
 
     assert!(!message.contains("SECRET"), "{message}");
+}
+
+/// `snapshot()` with `orders-db` pinned on `main`.
+fn with_a_pin() -> Snapshot {
+    let mut snapshot = snapshot();
+    snapshot
+        .boards
+        .get_mut(&board_id("main"))
+        .unwrap()
+        .placements
+        .get_mut(&element_id("orders-db"))
+        .unwrap()
+        .pinned = true;
+    snapshot
+}
+
+/// A move of `orders-db` on `main` to 30, 40, with `pin` as its last fields.
+fn a_move_of_orders_db(pin: &str) -> String {
+    format!(
+        r#"{{"op": "move_element", "element": {{"existing": "orders-db"}}, "board": {{"existing": "main"}}, "x": 30, "y": 40{pin}}}"#
+    )
+}
+
+#[rstest]
+#[case::unpinned_without_a_pin(snapshot(), "", false)]
+#[case::unpinned_with_true(snapshot(), r#", "pinned": true"#, true)]
+#[case::unpinned_with_false(snapshot(), r#", "pinned": false"#, false)]
+#[case::pinned_with_true(with_a_pin(), r#", "pinned": true"#, true)]
+#[case::pinned_with_false(with_a_pin(), r#", "pinned": false"#, false)]
+fn a_move_sets_the_position_and_the_pin(
+    #[case] before: Snapshot,
+    #[case] pin: &str,
+    #[case] pinned: bool,
+) {
+    let json = format!("[{}]", a_move_of_orders_db(pin));
+
+    let applied = apply(&before, &operations(&json)).unwrap();
+
+    let moved = &written_board(&applied, "main").placements[&element_id("orders-db")];
+    assert_eq!((moved.rect.x, moved.rect.y), (30, 40));
+    assert_eq!(moved.pinned, pinned);
+}
+
+#[test]
+fn a_move_of_a_pinned_element_without_a_pin_is_refused_and_tells_the_ai_to_ask() {
+    let json = format!("[{}]", a_move_of_orders_db(""));
+
+    let refused = problem(&with_a_pin(), &json);
+
+    assert_eq!(
+        refused,
+        OperationProblem::Pinned {
+            element: element_id("orders-db"),
+            board: board_id("main"),
+        }
+    );
+    assert_eq!(
+        refused.to_string(),
+        "element orders-db is pinned on board main: a person placed it there. Move it only after \
+         the person has said so, with pinned: true to keep it pinned or pinned: false to release it"
+    );
+}
+
+#[test]
+fn a_pin_the_request_set_refuses_a_later_plain_move() {
+    let json = format!(
+        "[{}, {}]",
+        a_move_of_orders_db(r#", "pinned": true"#),
+        a_move_of_orders_db("")
+    );
+
+    assert!(matches!(
+        problem(&snapshot(), &json),
+        OperationProblem::Pinned { .. }
+    ));
+}
+
+#[test]
+fn a_pin_the_request_released_lets_a_later_plain_move_through() {
+    let json = format!(
+        "[{}, {}]",
+        a_move_of_orders_db(r#", "pinned": false"#),
+        a_move_of_orders_db("")
+    );
+
+    let applied = apply(&with_a_pin(), &operations(&json)).unwrap();
+
+    let moved = &written_board(&applied, "main").placements[&element_id("orders-db")];
+    assert_eq!((moved.rect.x, moved.pinned), (30, false));
+}
+
+#[test]
+fn a_refused_move_of_a_pinned_element_writes_nothing_of_the_request() {
+    let json = format!(
+        r#"[{{"op": "place_element", "element": {{"existing": "loose"}}, "board": {{"existing": "main"}}}}, {}]"#,
+        a_move_of_orders_db("")
+    );
+
+    assert!(matches!(
+        apply(&with_a_pin(), &operations(&json)),
+        Err(ApplyError::Operation { .. })
+    ));
+}
+
+#[test]
+fn a_pin_holds_for_one_board_only() {
+    let mut before = snapshot_for_deletion();
+    before
+        .boards
+        .get_mut(&board_id("main"))
+        .unwrap()
+        .placements
+        .get_mut(&element_id("orders-db"))
+        .unwrap()
+        .pinned = true;
+    let json = r#"[{"op": "move_element", "element": {"existing": "orders-db"}, "board": {"existing": "side"}, "x": 30, "y": 40}]"#;
+
+    let applied = apply(&before, &operations(json)).unwrap();
+
+    let moved = &written_board(&applied, "side").placements[&element_id("orders-db")];
+    assert_eq!((moved.rect.x, moved.pinned), (30, false));
+}
+
+#[test]
+fn deleting_a_pinned_element_removes_its_placement() {
+    let json = r#"[{"op": "delete_element", "element": {"existing": "orders-db"}}]"#;
+
+    let applied = apply(&with_a_pin(), &operations(json)).unwrap();
+
+    assert!(
+        !written_board(&applied, "main")
+            .placements
+            .contains_key(&element_id("orders-db"))
+    );
+}
+
+#[test]
+fn other_operations_on_the_board_keep_a_pin() {
+    let json = r#"[
+        {"op": "place_element", "element": {"existing": "loose"}, "board": {"existing": "main"}},
+        {"op": "update_board", "board": {"existing": "main"}, "title": "Renamed"}
+    ]"#;
+
+    let applied = apply(&with_a_pin(), &operations(json)).unwrap();
+
+    assert!(written_board(&applied, "main").placements[&element_id("orders-db")].pinned);
 }

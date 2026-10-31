@@ -35,7 +35,15 @@ fn board(id: &str, owner: Option<&str>, elements: &[&str]) -> (BoardId, Board) {
             zone: None,
             placements: elements
                 .iter()
-                .map(|element| (element_id(element), Placement { rect }))
+                .map(|element| {
+                    (
+                        element_id(element),
+                        Placement {
+                            rect,
+                            pinned: false,
+                        },
+                    )
+                })
                 .collect(),
         },
     )

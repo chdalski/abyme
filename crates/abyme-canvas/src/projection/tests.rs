@@ -23,6 +23,7 @@ fn placed(x: i32, y: i32, width: u32, height: u32) -> abyme_model::Placement {
             width: NonZeroU32::new(width).unwrap(),
             height: NonZeroU32::new(height).unwrap(),
         },
+        pinned: false,
     }
 }
 

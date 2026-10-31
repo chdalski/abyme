@@ -46,6 +46,9 @@ pub struct Board {
 pub struct Placement {
     /// Where the element lies and how large it is.
     pub rect: Rect,
+    /// Whether a person placed it by hand: a move must then say what it wants
+    /// with the pin, and a layout leaves it where it is.
+    pub pinned: bool,
 }
 
 /// A position and a size on a board.
@@ -150,6 +153,8 @@ struct PlacementLine {
     y: i32,
     width: NonZeroU32,
     height: NonZeroU32,
+    #[serde(default)]
+    pinned: bool,
 }
 
 impl Board {
@@ -251,7 +256,10 @@ fn collect_placements(
         };
         match placements.entry(line.element) {
             Entry::Vacant(slot) => {
-                slot.insert(Placement { rect });
+                slot.insert(Placement {
+                    rect,
+                    pinned: line.pinned,
+                });
             }
             Entry::Occupied(slot) => {
                 return Err(BoardError::DuplicatePlacement {
@@ -266,9 +274,10 @@ fn collect_placements(
 
 /// One placement as a line of the file.
 fn placement_line(element: &ElementId, placement: &Placement) -> String {
-    let Placement { rect } = placement;
+    let Placement { rect, pinned } = placement;
+    let pin = if *pinned { ", \"pinned\": true" } else { "" };
     format!(
-        "    {{\"element\": {}, \"x\": {}, \"y\": {}, \"width\": {}, \"height\": {}}}",
+        "    {{\"element\": {}, \"x\": {}, \"y\": {}, \"width\": {}, \"height\": {}{pin}}}",
         json_string(element.as_str()),
         rect.x,
         rect.y,
@@ -317,12 +326,14 @@ mod tests {
                     element_id("checkout-service"),
                     Placement {
                         rect: rect(80, 200),
+                        pinned: false,
                     },
                 ),
                 (
                     element_id("payment-service"),
                     Placement {
                         rect: rect(400, 200),
+                        pinned: false,
                     },
                 ),
             ]),
@@ -350,6 +361,71 @@ mod tests {
         assert_eq!(sample_board().to_json(), expected);
     }
 
+    /// `sample_board` with `payment-service` pinned.
+    fn board_with_a_pin() -> Board {
+        let mut board = sample_board();
+        if let Some(placement) = board.placements.get_mut(&element_id("payment-service")) {
+            placement.pinned = true;
+        }
+        board
+    }
+
+    #[test]
+    fn writes_a_pin_at_the_end_of_its_placement_line() {
+        let expected = r#"{
+  "format": 1,
+  "id": "container-level",
+  "title": "Container Level",
+  "placements": [
+    {"element": "checkout-service", "x": 80, "y": 200, "width": 180, "height": 90},
+    {"element": "payment-service", "x": 400, "y": 200, "width": 180, "height": 90, "pinned": true}
+  ]
+}
+"#;
+
+        assert_eq!(board_with_a_pin().to_json(), expected);
+    }
+
+    #[test]
+    fn reads_back_a_pin() {
+        let board = board_with_a_pin();
+
+        assert_eq!(Board::from_json(&board.id, &board.to_json()), Ok(board));
+    }
+
+    #[test]
+    fn reads_pinned_false_as_not_pinned_and_writes_nothing_for_it() {
+        let text = main_file(
+            r#"{"element": "a", "x": 0, "y": 0, "width": 1, "height": 1, "pinned": false}"#,
+        );
+
+        let board = Board::from_json(&board_id("main"), &text).unwrap();
+
+        assert_eq!(
+            board
+                .placements
+                .get(&element_id("a"))
+                .map(|placed| placed.pinned),
+            Some(false)
+        );
+        assert!(!board.to_json().contains("pinned"), "{}", board.to_json());
+    }
+
+    #[test]
+    fn pinning_one_placement_changes_exactly_one_line() {
+        let before = sample_board().to_json();
+        let after = board_with_a_pin().to_json();
+
+        let changed = before
+            .lines()
+            .zip(after.lines())
+            .filter(|(old, new)| old != new)
+            .count();
+
+        assert_eq!(before.lines().count(), after.lines().count());
+        assert_eq!(changed, 1);
+    }
+
     #[test]
     fn reads_back_what_it_writes() {
         let board = sample_board();
@@ -367,6 +443,7 @@ mod tests {
             element_id("payment-service"),
             Placement {
                 rect: rect(420, 240),
+                pinned: false,
             },
         );
 
@@ -665,7 +742,31 @@ mod tests {
         r#"{"format": 1, "id": "main", "title": "t", "placements": [], "unexpected": {}}"#
     )]
     #[case::unknown_placement_field(&main_file(
-        r#"{"element": "a", "x": 0, "y": 0, "width": 1, "height": 1, "pinned": true}"#
+        r#"{"element": "a", "x": 0, "y": 0, "width": 1, "height": 1, "pin": true}"#
+    ))]
+    #[case::pinned_null(&main_file(
+        r#"{"element": "a", "x": 0, "y": 0, "width": 1, "height": 1, "pinned": null}"#
+    ))]
+    #[case::pinned_zero(&main_file(
+        r#"{"element": "a", "x": 0, "y": 0, "width": 1, "height": 1, "pinned": 0}"#
+    ))]
+    #[case::pinned_one(&main_file(
+        r#"{"element": "a", "x": 0, "y": 0, "width": 1, "height": 1, "pinned": 1}"#
+    ))]
+    #[case::pinned_string(&main_file(
+        r#"{"element": "a", "x": 0, "y": 0, "width": 1, "height": 1, "pinned": "true"}"#
+    ))]
+    #[case::pinned_object(&main_file(
+        r#"{"element": "a", "x": 0, "y": 0, "width": 1, "height": 1, "pinned": {}}"#
+    ))]
+    #[case::pinned_array(&main_file(
+        r#"{"element": "a", "x": 0, "y": 0, "width": 1, "height": 1, "pinned": []}"#
+    ))]
+    #[case::pinned_twice(&main_file(
+        r#"{"element": "a", "x": 0, "y": 0, "width": 1, "height": 1, "pinned": true, "pinned": false}"#
+    ))]
+    #[case::pinned_capitalized(&main_file(
+        r#"{"element": "a", "x": 0, "y": 0, "width": 1, "height": 1, "Pinned": true}"#
     ))]
     #[case::two_documents(&format!("{}{}", main_file(""), main_file("")))]
     #[case::top_level_array("[]")]

@@ -106,7 +106,7 @@ fn snapshot() -> impl Strategy<Value = Snapshot> {
         any::<String>(),
         prop::collection::btree_map(
             element_id(),
-            rect().prop_map(|rect| Placement { rect }),
+            (rect(), any::<bool>()).prop_map(|(rect, pinned)| Placement { rect, pinned }),
             0..4,
         ),
     )
@@ -697,7 +697,101 @@ fn check(
     Ok(())
 }
 
+/// A board `main` placing `first` and `second`, pinned as given, and their
+/// element files.
+fn board_with_pins(
+    main: BoardId,
+    first: (ElementId, bool),
+    second: (ElementId, bool),
+) -> Option<Snapshot> {
+    let elements = [&first.0, &second.0]
+        .into_iter()
+        .map(|id| Some((id.clone(), element(id.clone(), Relations::new())?)))
+        .collect::<Option<BTreeMap<_, _>>>()?;
+    let placement = |pinned| Placement {
+        rect: Rect {
+            x: 0,
+            y: 0,
+            width: NonZeroU32::MIN,
+            height: NonZeroU32::MIN,
+        },
+        pinned,
+    };
+    let board = Board {
+        id: main,
+        title: "Main".to_owned(),
+        owner: None,
+        summary: None,
+        zone: None,
+        placements: BTreeMap::from([
+            (first.0, placement(first.1)),
+            (second.0, placement(second.1)),
+        ]),
+    };
+    Some(Snapshot {
+        elements,
+        boards: BTreeMap::from([(board.id.clone(), board)]),
+    })
+}
+
 proptest! {
+    #[test]
+    fn a_move_changes_a_pin_only_by_saying_so_and_a_pinned_box_only_with_a_pin(
+        pins in (any::<bool>(), any::<bool>()),
+        moves in prop::collection::vec(
+            (
+                prop::sample::select(vec!["orders-db", "checkout"]),
+                -1000..1000_i32,
+                proptest::option::of(any::<bool>()),
+            ),
+            0..8,
+        ),
+    ) {
+        let main: BoardId = "main".parse().unwrap();
+        let before = board_with_pins(
+            main.clone(),
+            ("orders-db".parse().unwrap(), pins.0),
+            ("checkout".parse().unwrap(), pins.1),
+        )
+        .unwrap();
+        let operations: Vec<Operation> = moves
+            .iter()
+            .map(|(element, x, pinned)| Operation::MoveElement {
+                element: Ref::Existing(element.parse().unwrap()),
+                board: Ref::Existing(main.clone()),
+                x: *x,
+                y: 0,
+                pinned: *pinned,
+            })
+            .collect();
+
+        // Replays the rule on the placements: the request is refused at the
+        // first plain move of an element pinned at that point.
+        let mut expected = before.boards[&main].placements.clone();
+        let mut refused = false;
+        for (element, x, pinned) in &moves {
+            let id: ElementId = element.parse().unwrap();
+            let placement = expected.get_mut(&id).unwrap();
+            if placement.pinned && pinned.is_none() {
+                refused = true;
+                break;
+            }
+            placement.rect.x = *x;
+            placement.pinned = pinned.unwrap_or(placement.pinned);
+        }
+
+        let applied = apply(&before, &operations);
+
+        prop_assert_eq!(applied.is_err(), refused);
+        if let Ok(applied) = applied {
+            let written = applied.writes.iter().find_map(|write| match write {
+                Write::Board(board) => Some(&board.placements),
+                Write::Element(_) | Write::RemoveElement(_) => None,
+            });
+            prop_assert_eq!(written.unwrap_or_else(|| &before.boards[&main].placements), &expected);
+        }
+    }
+
     #[test]
     fn writes_only_named_elements_and_readable_files(
         snapshot in snapshot(),

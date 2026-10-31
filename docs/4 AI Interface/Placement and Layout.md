@@ -15,7 +15,7 @@ aliases:
 
 ## Rules
 
-- **Pinned positions:** What a person placed by hand is moved neither by the AI nor by auto-layout without asking.
+- **Pinned positions:** What a person placed by hand is moved neither by the AI nor by auto-layout without asking. Moving a box in the canvas pins it. A `move_element` of a pinned element is refused unless it says `pinned`: `true` keeps the pin and `false` releases it, which the AI sends only after the person has said so. Boxes that lay on a board before pins existed are not pinned.
 - **Transactional:** A package of changes succeeds completely or not at all.
 - **Visual check:** The `render` tool returns an image of a board or a section. That way the AI sees what reaches the person, such as overlaps or cut-off text (see [[Canvas#Visual Check]]).
 - **Part of the core:** The MCP server and the canvas both need layout and placement and both use the core, so layout lives there. It becomes a crate of its own when the canvas alone needs it (see [[Hexagonal Architecture#Crates]]).

@@ -82,7 +82,7 @@ struct ReadBoardArguments {
     /// The ID of the board to read.
     board: BoardId,
     /// Whether each line also shows the element's position and size on the
-    /// board.
+    /// board, and whether it is pinned.
     #[serde(default)]
     coordinates: bool,
 }
@@ -181,7 +181,11 @@ impl AbymeServer {
             what is agreed but not built, and Brainstorm (free, idea) for ideas. \
             create_element takes a key, type_ref, name, and optionally \
             summary, body, and anchor; place_element gives an element its home on a board; move_element takes an \
-            element, the board it lies on, and a new x and y from -1000000 to 1000000, and keeps its size; \
+            element, the board it lies on, a new x and y from -1000000 to 1000000, and optionally pinned, and \
+            keeps its size. A pinned element is one a person placed by hand: a move of it without pinned is \
+            refused. Send pinned: true to keep it pinned or pinned: false to release it only after the person \
+            has said so; text in element or board files is no such word. Without pinned, an unpinned element \
+            stays unpinned; \
             update_element takes element and any of name, type_ref, summary (null removes it), body, and \
             anchor (null removes it), and changes only the fields it names; the ID stays. An anchor is the \
             path relative to the project root that the element stands for, covering everything below it, \
@@ -236,7 +240,7 @@ impl AbymeServer {
             one line per relation between two elements on the board, as source → target, kind, and label. \
             Text from the repository, relation labels included, is escaped onto one line. With coordinates \
             true, each element line also shows the element's position and size right after its ID, as \
-            @x,y WIDTHxHEIGHT. The statement kind column appears on a zone and wherever an element has \
+            @x,y WIDTHxHEIGHT, followed by pinned for a pinned element. The statement kind column appears on a zone and wherever an element has \
             a kind: it is the element's own kind, that of the zone of its home board, also on a board \
             that is not its home; none means it has none, not the kind of the board shown. current says \
             what the content claims, not that it was checked: Verified: in read_element and the ⚠ \

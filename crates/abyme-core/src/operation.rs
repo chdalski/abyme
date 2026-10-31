@@ -111,7 +111,8 @@ pub enum Operation {
         board: Ref<BoardId>,
     },
     /// Moves an element on a board where it lies: sets the position of its
-    /// placement there and keeps its size.
+    /// placement there and keeps its size. A pinned element moves only when
+    /// the operation says what becomes of the pin.
     MoveElement {
         /// The element to move.
         element: Ref<ElementId>,
@@ -129,6 +130,15 @@ pub enum Operation {
             schemars(range(min = -MAX_COORDINATE, max = MAX_COORDINATE))
         )]
         y: i32,
+        /// `true` moves and pins the element, `false` moves and releases it.
+        /// Without it, the pin stays as it is and a pinned element is refused.
+        #[serde(
+            default,
+            deserialize_with = "present",
+            skip_serializing_if = "Option::is_none"
+        )]
+        #[cfg_attr(feature = "json-schema", schemars(with = "bool"))]
+        pinned: Option<bool>,
     },
     /// Changes the fields it names of an element; the others stay as they
     /// are. The element keeps its ID, also when its name changes, and loses
@@ -397,6 +407,7 @@ mod tests {
                 board: Ref::New(LocalKey::try_from("b".to_owned()).unwrap()),
                 x: -40,
                 y: 1_000_000,
+                pinned: None,
             }]
         );
     }
@@ -653,6 +664,18 @@ mod tests {
     #[case::create_board_as_array(r#"[["create_board", "k", "t"]]"#)]
     #[case::create_element_as_array(r#"[["create_element", "k", "t", "n", null, ""]]"#)]
     #[case::place_element_as_array(r#"[["place_element", {"new": "a"}, {"new": "b"}]]"#)]
+    #[case::pinned_null(
+        r#"[{"op": "move_element", "element": {"new": "a"}, "board": {"new": "b"}, "x": 0, "y": 0, "pinned": null}]"#
+    )]
+    #[case::pinned_string(
+        r#"[{"op": "move_element", "element": {"new": "a"}, "board": {"new": "b"}, "x": 0, "y": 0, "pinned": "true"}]"#
+    )]
+    #[case::pinned_number(
+        r#"[{"op": "move_element", "element": {"new": "a"}, "board": {"new": "b"}, "x": 0, "y": 0, "pinned": 1}]"#
+    )]
+    #[case::pinned_twice(
+        r#"[{"op": "move_element", "element": {"new": "a"}, "board": {"new": "b"}, "x": 0, "y": 0, "pinned": true, "pinned": false}]"#
+    )]
     #[case::move_element_as_array(r#"[["move_element", {"new": "a"}, {"new": "b"}, 0, 0]]"#)]
     #[case::move_x_as_fraction(
         r#"[{"op": "move_element", "element": {"new": "a"}, "board": {"new": "b"}, "x": 1.5, "y": 0}]"#
@@ -1018,6 +1041,43 @@ mod tests {
                 "question",
                 "target"
             ]
+        );
+    }
+
+    #[cfg(feature = "json-schema")]
+    #[test]
+    fn schema_makes_the_pin_of_a_move_an_optional_boolean() {
+        let schema = serde_json::to_value(schemars::schema_for!(Operations)).unwrap();
+
+        let definitions = schema
+            .pointer("/$defs")
+            .and_then(serde_json::Value::as_object)
+            .unwrap();
+        let movement = definitions
+            .values()
+            .filter_map(|definition| definition.pointer("/oneOf")?.as_array())
+            .flatten()
+            .find(|variant| {
+                variant.pointer("/properties/op/const") == Some(&serde_json::json!("move_element"))
+            })
+            .unwrap();
+        assert_eq!(
+            movement.pointer("/properties/pinned/type"),
+            Some(&serde_json::json!("boolean")),
+            "{movement}"
+        );
+        let required = movement
+            .get("required")
+            .and_then(serde_json::Value::as_array)
+            .unwrap();
+        assert!(
+            !required.contains(&serde_json::json!("pinned")),
+            "{movement}"
+        );
+        assert_eq!(
+            movement.get("additionalProperties"),
+            Some(&serde_json::json!(false)),
+            "{movement}"
         );
     }
 

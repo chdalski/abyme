@@ -50,7 +50,7 @@ fn board() -> impl Strategy<Value = Board> {
         proptest::option::of(zone()),
         proptest::collection::btree_map(
             element_id(),
-            rect().prop_map(|rect| Placement { rect }),
+            (rect(), any::<bool>()).prop_map(|(rect, pinned)| Placement { rect, pinned }),
             0..8,
         ),
     )

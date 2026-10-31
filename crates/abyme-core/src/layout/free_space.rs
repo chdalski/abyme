@@ -184,7 +184,15 @@ mod tests {
             zone: None,
             placements: placements
                 .iter()
-                .map(|(id, rect)| (id.parse::<ElementId>().unwrap(), Placement { rect: *rect }))
+                .map(|(id, rect)| {
+                    (
+                        id.parse::<ElementId>().unwrap(),
+                        Placement {
+                            rect: *rect,
+                            pinned: false,
+                        },
+                    )
+                })
                 .collect::<BTreeMap<_, _>>(),
         }
     }

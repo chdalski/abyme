@@ -102,6 +102,7 @@ describe("BoardPane", () => {
           board: { existing: "context" },
           x: 40,
           y: -81,
+          pinned: true,
         },
       ],
     ]);
@@ -119,10 +120,15 @@ describe("BoardPane", () => {
 
     expect(client.applied).toHaveLength(1);
     expect(
-      client.applied[0]?.map((move) => [move.element.existing, move.x, move.y]),
+      client.applied[0]?.map((move) => [
+        move.element.existing,
+        move.x,
+        move.y,
+        move.pinned,
+      ]),
     ).toEqual([
-      ["payments", 40, 80],
-      ["orders", 340, 80],
+      ["payments", 40, 80, true],
+      ["orders", 340, 80, true],
     ]);
   });
 

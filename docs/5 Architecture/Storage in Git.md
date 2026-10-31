@@ -128,10 +128,10 @@ A board is a JSON file. Its structure follows JSON Canvas, so an export to `.can
 }
 ```
 
-- **Fields:** `format`, which is 1, `id`, which equals the file name, `title`, the optional `owner`, the element whose inside the board is (its [[Board Graph|inner board]]), the optional `summary`, the optional `zone` with its `mode` and `statement` (see [[Boards and Zones]]), and the placements with `element`, `x`, `y`, `width`, and `height`. The owner, the summary, and the zone each have a line of their own and are written only when present. Positions are integers, sizes positive integers. The file must be a JSON object; other fields and an element placed twice are rejected.
-- **One placement per line**, sorted by element ID. Moving a box changes exactly one line.
+- **Fields:** `format`, which is 1, `id`, which equals the file name, `title`, the optional `owner`, the element whose inside the board is (its [[Board Graph|inner board]]), the optional `summary`, the optional `zone` with its `mode` and `statement` (see [[Boards and Zones]]), and the placements with `element`, `x`, `y`, `width`, `height`, and, at the end of the line and only for a [[Placement and Layout#Rules|pinned]] element, `"pinned": true`. The owner, the summary, and the zone each have a line of their own and are written only when present. Positions are integers, sizes positive integers. The file must be a JSON object; other fields and an element placed twice are rejected.
+- **One placement per line**, sorted by element ID. Moving or pinning a box changes exactly one line.
 - **Arrows are not in the file.** They follow from the relations of the elements.
-- **Later fields:** `frames` on the board; `frame`, `presentation`, `pinned`, and `attached_to` on a placement. An attached sticky note's coordinates will be relative to the element it hangs on (see [[Presentation#Sticky Notes]]).
+- **Later fields:** `frames` on the board; `frame`, `presentation`, and `attached_to` on a placement. An attached sticky note's coordinates will be relative to the element it hangs on (see [[Presentation#Sticky Notes]]).
 
 ## Project File
 

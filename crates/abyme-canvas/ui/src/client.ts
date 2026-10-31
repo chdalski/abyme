@@ -5,8 +5,8 @@ import type { BoardEntry, BoardView } from "./bindings";
 
 /**
  * An operation the canvas may send: the operations `src/admission.rs`
- * admits, typed by hand. Today that is moving an element that exists on a
- * board that exists, to integer coordinates.
+ * admits, typed by hand. Today that is moving and pinning an element that
+ * exists on a board that exists, to integer coordinates.
  */
 export type AdmittedOperation = {
   op: "move_element";
@@ -14,6 +14,7 @@ export type AdmittedOperation = {
   board: { existing: string };
   x: number;
   y: number;
+  pinned: true;
 };
 
 /**

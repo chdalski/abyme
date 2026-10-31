@@ -1878,6 +1878,65 @@ async fn apply_moves_an_element_and_refuses_a_position_out_of_range() -> TestRes
 }
 
 #[tokio::test]
+async fn apply_moves_a_pinned_element_only_when_the_request_says_what_becomes_of_the_pin()
+-> TestResult {
+    let directory = project()?;
+    let session = start(directory.path()).await?;
+    call(&session, "apply", create_board_with_element()).await??;
+    let board_file = directory
+        .path()
+        .join("abyme/boards/container-level.board.json");
+    let move_with = |pin: Value| {
+        let mut operation = json!({"op": "move_element", "element": {"existing": "payment-service"},
+                                   "board": {"existing": "container-level"}, "x": 400, "y": 200});
+        if let (Value::Object(operation), Value::Bool(_)) = (&mut operation, &pin) {
+            operation.insert("pinned".to_owned(), pin);
+        }
+        json!({"operations": [operation]})
+    };
+    let line = |pin: &str| {
+        format!(
+            r#"{{"element": "payment-service", "x": 400, "y": 200, "width": 180, "height": 90{pin}}}"#
+        )
+    };
+
+    let pinned = call(&session, "apply", move_with(json!(true))).await??;
+
+    assert_eq!(pinned.is_error, Some(false), "{pinned:?}");
+    let board = fs::read_to_string(&board_file)?;
+    assert!(board.contains(&line(r#", "pinned": true"#)), "{board}");
+
+    let before = fs::read(&board_file)?;
+    let refused = call(&session, "apply", move_with(Value::Null)).await??;
+
+    assert_eq!(refused.is_error, Some(true), "{refused:?}");
+    assert!(
+        text(&refused).contains("is pinned on board container-level"),
+        "{refused:?}"
+    );
+    assert_eq!(fs::read(&board_file)?, before);
+
+    let coordinates = call(
+        &session,
+        "read_board",
+        json!({"board": "container-level", "coordinates": true}),
+    )
+    .await??;
+    assert!(
+        text(&coordinates).contains("@400,200 180x90 pinned"),
+        "{coordinates:?}"
+    );
+
+    let released = call(&session, "apply", move_with(json!(false))).await??;
+
+    assert_eq!(released.is_error, Some(false), "{released:?}");
+    let board = fs::read_to_string(&board_file)?;
+    assert!(board.contains(&line("")), "{board}");
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+#[tokio::test]
 async fn read_board_shows_coordinates_only_on_request() -> TestResult {
     let directory = project()?;
     let session = start(directory.path()).await?;

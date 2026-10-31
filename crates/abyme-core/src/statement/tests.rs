@@ -53,7 +53,15 @@ fn board(id: &str, kind: Option<StatementKind>, owner: Option<&str>, placed: &[&
         }),
         placements: placed
             .iter()
-            .map(|placed| (element_id(placed), Placement { rect }))
+            .map(|placed| {
+                (
+                    element_id(placed),
+                    Placement {
+                        rect,
+                        pinned: false,
+                    },
+                )
+            })
             .collect(),
     }
 }

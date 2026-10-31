@@ -109,7 +109,8 @@ fn a_move(x: i64, y: i64) -> Value {
         "element": {"existing": "payment-service"},
         "board": {"existing": "context"},
         "x": x,
-        "y": y
+        "y": y,
+        "pinned": true
     })
 }
 
@@ -307,7 +308,42 @@ fn apply_writes_a_move_into_the_board_file() {
     let (moved, was) = (&after[&payments].rect, &before[&payments].rect);
     assert_eq!((moved.x, moved.y), (400, -200));
     assert_eq!((moved.width, moved.height), (was.width, was.height));
+    assert!(after[&payments].pinned);
     assert_eq!(after[&orders], before[&orders]);
+}
+
+#[test]
+fn a_request_with_a_move_that_does_not_pin_writes_nothing() {
+    let root = tempfile::tempdir().unwrap();
+    project_with_a_board(root.path());
+    let before = project_files(root.path());
+    let (_app, window) = canvas(root.path());
+    let plain = json!({
+        "op": "move_element",
+        "element": {"existing": "payment-service"},
+        "board": {"existing": "context"},
+        "x": 1,
+        "y": 2
+    });
+    let releasing = json!({
+        "op": "move_element",
+        "element": {"existing": "payment-service"},
+        "board": {"existing": "context"},
+        "x": 1,
+        "y": 2,
+        "pinned": false
+    });
+
+    for not_pinning in [plain, releasing] {
+        let applied = apply_from(&window, &json!([a_move(400, 200), not_pinning]));
+
+        let error = applied.unwrap_err().to_string();
+        assert!(
+            error.contains("the canvas may not send move_element without pinned: true"),
+            "{error}"
+        );
+        assert_eq!(project_files(root.path()), before);
+    }
 }
 
 /// `root` as `project_with_a_board` leaves it, with the board `context` made
@@ -369,7 +405,8 @@ fn a_request_that_also_moves_on_a_mirrored_board_writes_nothing() {
         "element": {"existing": "payment-service"},
         "board": {"existing": "free-board"},
         "x": 1,
-        "y": 2
+        "y": 2,
+        "pinned": true
     });
 
     let applied = apply_from(&window, &json!([on_the_free_board, a_move(400, 200)]));
@@ -432,7 +469,8 @@ fn a_move_on_an_unknown_board_still_gets_the_core_s_answer() {
         "element": {"existing": "payment-service"},
         "board": {"existing": "nowhere"},
         "x": 1,
-        "y": 2
+        "y": 2,
+        "pinned": true
     });
 
     let applied = apply_from(&window, &json!([on_no_board]));

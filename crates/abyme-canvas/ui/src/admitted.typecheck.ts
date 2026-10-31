@@ -6,7 +6,17 @@ export function onlyAdmittedOperations(client: AbymeClient): void {
   const element = { existing: "payments" };
   const board = { existing: "context" };
 
-  void client.apply([{ op: "move_element", element, board, x: 1, y: 2 }]);
+  void client.apply([
+    { op: "move_element", element, board, x: 1, y: 2, pinned: true },
+  ]);
+  void client.apply([
+    // @ts-expect-error The canvas pins what a person moves.
+    { op: "move_element", element, board, x: 1, y: 2 },
+  ]);
+  void client.apply([
+    // @ts-expect-error The canvas may not release a pin.
+    { op: "move_element", element, board, x: 1, y: 2, pinned: false },
+  ]);
   void client.apply([
     // @ts-expect-error The canvas may not create elements.
     { op: "create_element", key: "e", type_ref: "c4/container", name: "E" },
@@ -20,11 +30,25 @@ export function onlyAdmittedOperations(client: AbymeClient): void {
     { op: "place_element", element, board },
   ]);
   void client.apply([
-    // @ts-expect-error The canvas may not move an element the request creates.
-    { op: "move_element", element: { new: "e" }, board, x: 1, y: 2 },
+    {
+      op: "move_element",
+      // @ts-expect-error The canvas may not move an element the request creates.
+      element: { new: "e" },
+      board,
+      x: 1,
+      y: 2,
+      pinned: true,
+    },
   ]);
   void client.apply([
-    // @ts-expect-error The canvas may not move an element on a board the request creates.
-    { op: "move_element", element, board: { new: "b" }, x: 1, y: 2 },
+    {
+      op: "move_element",
+      element,
+      // @ts-expect-error The canvas may not move an element on a board the request creates.
+      board: { new: "b" },
+      x: 1,
+      y: 2,
+      pinned: true,
+    },
   ]);
 }

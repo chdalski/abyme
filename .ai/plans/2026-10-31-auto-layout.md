@@ -35,7 +35,7 @@ person placed by hand where it is.
 - [x] `Rect` knows its edges and overlaps
 - [x] A board holds placements, not bare rectangles
 - [x] Free-space placement takes a size
-- [ ] Pinned placements
+- [x] Pinned placements
 - [ ] Box sizes from text
 - [ ] `layout_board`
 
@@ -104,32 +104,32 @@ the AI nor a layout moves it without saying so.
 
 Review path: Security-Hybrid
 
-- [ ] A placement line in a board file holds an optional `"pinned": true` at
+- [x] A placement line in a board file holds an optional `"pinned": true` at
       its end, written only when true, so a board without a pin reads and writes
       byte for byte as before. `false` reads as not pinned and is written as
       nothing; `null` or a value that is no boolean is rejected like other
       invalid fields. The test of an unknown placement field uses a field that
       stays unknown.
-- [ ] `move_element` takes an optional `pinned`. Without it, an unpinned
+- [x] `move_element` takes an optional `pinned`. Without it, an unpinned
       element moves and stays unpinned, and a pinned one is rejected with a
       message that tells the AI to ask first. `pinned: true` moves and pins,
       `pinned: false` moves and unpins.
-- [ ] The canvas admits `move_element` only with `pinned: true` and sends that
+- [x] The canvas admits `move_element` only with `pinned: true` and sends that
       for every drag and arrow key, also for several boxes at once; any other
       value is refused like an operation it may not send.
-- [ ] `read_board` with coordinates shows `pinned` with the position of a
+- [x] `read_board` with coordinates shows `pinned` with the position of a
       pinned element; without coordinates, and for an unpinned element, its output
       stays as it is.
-- [ ] Unit and property tests cover the file, each cell of the rule on
+- [x] Unit and property tests cover the file, each cell of the rule on
       `move_element`, and deleting a pinned element, whose placement goes with it;
       IPC and Vitest tests cover what the canvas sends and refuses;
       an integration test through the MCP tool `apply` moves a pinned element
       without and with `pinned` and reads the board file back.
-- [ ] Data Model, Storage in Git, Placement and Layout, Canvas, MCP Server, the
+- [x] Data Model, Storage in Git, Placement and Layout, Canvas, MCP Server, the
       Glossary, the `apply` and `read_board` descriptions, and the MCP README tell
       the reader what a pin does, how to set and clear one, and how `read_board`
       shows it.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
       `cargo fmt --all --check`, `pnpm --dir crates/abyme-canvas/ui check`, and
       `pnpm --dir crates/abyme-canvas/ui test` pass.
 
