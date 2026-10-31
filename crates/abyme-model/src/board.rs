@@ -57,6 +57,29 @@ pub struct Rect {
     pub height: NonZeroU32,
 }
 
+impl Rect {
+    /// The right edge; `i32` plus `u32` cannot overflow `i64`.
+    #[must_use]
+    pub fn right(&self) -> i64 {
+        i64::from(self.x) + i64::from(self.width.get())
+    }
+
+    /// The bottom edge; `i32` plus `u32` cannot overflow `i64`.
+    #[must_use]
+    pub fn bottom(&self) -> i64 {
+        i64::from(self.y) + i64::from(self.height.get())
+    }
+
+    /// Whether the two rectangles share any area; touching edges share none.
+    #[must_use]
+    pub fn overlaps(&self, other: &Self) -> bool {
+        i64::from(self.x) < other.right()
+            && i64::from(other.x) < self.right()
+            && i64::from(self.y) < other.bottom()
+            && i64::from(other.y) < self.bottom()
+    }
+}
+
 /// A board file that cannot be read.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum BoardError {
@@ -729,5 +752,34 @@ mod tests {
         let error = Board::from_json(&board_id("main"), text).unwrap_err();
 
         assert!(!error.to_string().contains('\n'), "{error}");
+    }
+
+    #[rstest]
+    #[case::same_place(rect(0, 0), true)]
+    #[case::one_unit_inside_the_right_edge(rect(179, 0), true)]
+    #[case::one_unit_inside_the_bottom_edge(rect(0, 89), true)]
+    #[case::touching_the_right_edge(rect(180, 0), false)]
+    #[case::touching_the_bottom_edge(rect(0, 90), false)]
+    #[case::touching_the_left_edge(rect(-180, 0), false)]
+    #[case::touching_the_top_edge(rect(0, -90), false)]
+    fn rectangles_overlap_only_when_they_share_area(#[case] other: Rect, #[case] expected: bool) {
+        let origin = rect(0, 0);
+
+        assert_eq!(origin.overlaps(&other), expected);
+        assert_eq!(other.overlaps(&origin), expected);
+    }
+
+    #[test]
+    fn edges_of_the_extreme_rectangle_do_not_overflow() {
+        let extreme = Rect {
+            x: i32::MAX,
+            y: i32::MAX,
+            width: NonZeroU32::MAX,
+            height: NonZeroU32::MAX,
+        };
+
+        let expected = i64::from(i32::MAX) + i64::from(u32::MAX);
+        assert_eq!(extreme.right(), expected);
+        assert_eq!(extreme.bottom(), expected);
     }
 }

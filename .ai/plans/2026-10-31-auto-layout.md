@@ -32,7 +32,7 @@ person placed by hand where it is.
 
 ## Steps
 
-- [ ] `Rect` knows its edges and overlaps
+- [x] `Rect` knows its edges and overlaps
 - [ ] A board holds placements, not bare rectangles
 - [ ] Free-space placement takes a size
 - [ ] Pinned placements
@@ -49,12 +49,12 @@ overlap property in `crates/abyme-core/tests/apply_properties.rs` pin it.
 
 Review path: Reviewer-only
 
-- [ ] `Rect` answers its right and bottom edge and whether it overlaps another
+- [x] `Rect` answers its right and bottom edge and whether it overlaps another
       rectangle, and no other definition of these remains in
       `crates/abyme-core/src/layout.rs` or
       `crates/abyme-core/tests/apply_properties.rs`.
-- [ ] Those tests pass with their assertions unchanged.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`, and
+- [x] Those tests pass with their assertions unchanged.
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`, and
       `cargo fmt --all --check` pass.
 
 ### Task 2: A board holds placements, not bare rectangles
@@ -250,6 +250,10 @@ Review path: Security-Hybrid
 - **`Placement` as the map's value:** a `pinned` field on `Rect` would mix
   geometry and state, and a separate set on the board would allow a pin without a
   placement.
+- **Task 1's assertions change in spelling only:** removing the free functions
+  turns `!overlaps(&a, &b)` into `!a.overlaps(&b)`, with the same arguments and
+  expected values. At the Reviewer's demand, the task also adds a test for a box
+  below the board whose bottom alone would overflow `i32`.
 
 ## Non-Goals
 

@@ -455,15 +455,6 @@ fn well_formed_request() -> impl Strategy<Value = Vec<Operation>> {
     )
 }
 
-fn overlaps(a: &Rect, b: &Rect) -> bool {
-    let right = |rect: &Rect| i64::from(rect.x) + i64::from(rect.width.get());
-    let bottom = |rect: &Rect| i64::from(rect.y) + i64::from(rect.height.get());
-    i64::from(a.x) < right(b)
-        && i64::from(b.x) < right(a)
-        && i64::from(a.y) < bottom(b)
-        && i64::from(b.y) < bottom(a)
-}
-
 /// The keys whose elements a request's operations delete again.
 fn deleted_keys(operations: &[Operation]) -> BTreeSet<&LocalKey> {
     operations
@@ -691,7 +682,7 @@ fn check(
                     }
                     for (other_id, other) in &board.placements {
                         prop_assert!(
-                            other_id == id || !overlaps(rect, other),
+                            other_id == id || !rect.overlaps(other),
                             "{id} overlaps {other_id}"
                         );
                     }

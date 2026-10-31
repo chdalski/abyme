@@ -40,11 +40,11 @@ impl Layout {
                     board
                         .placements
                         .values()
-                        .any(|rect| overlaps(rect, &candidate))
+                        .any(|rect| rect.overlaps(&candidate))
                 })
             })
             .collect();
-        let lowest_bottom = board.placements.values().map(bottom).max();
+        let lowest_bottom = board.placements.values().map(Rect::bottom).max();
         Self {
             occupied,
             lowest_bottom,
@@ -75,7 +75,7 @@ impl Layout {
     /// element left stay counted as occupied.
     pub fn occupy(&mut self, rect: &Rect) {
         for (cell, occupied) in self.occupied.iter_mut().enumerate() {
-            if cell_rect(cell).is_some_and(|candidate| overlaps(rect, &candidate)) {
+            if cell_rect(cell).is_some_and(|candidate| rect.overlaps(&candidate)) {
                 *occupied = true;
             }
         }
@@ -84,7 +84,7 @@ impl Layout {
 
     /// Takes `rect` into account for the space below the board's content.
     fn raise_bottom(&mut self, rect: &Rect) {
-        let new_bottom = bottom(rect);
+        let new_bottom = rect.bottom();
         self.lowest_bottom = Some(
             self.lowest_bottom
                 .map_or(new_bottom, |lowest| lowest.max(new_bottom)),
@@ -105,8 +105,8 @@ fn cell_rect(cell: usize) -> Option<Rect> {
 /// A rectangle of the skeleton's size below everything, if it fits in `i32`.
 fn below(lowest_bottom: i64) -> Option<Rect> {
     let y = i32::try_from(lowest_bottom + GAP).ok()?;
-    let fits = i64::from(y) + i64::from(HEIGHT.get()) <= i64::from(i32::MAX);
-    fits.then(|| sized_rect(0, y))
+    let rect = sized_rect(0, y);
+    (rect.bottom() <= i64::from(i32::MAX)).then_some(rect)
 }
 
 /// A rectangle of the skeleton's size at `x`, `y`.
@@ -117,20 +117,6 @@ const fn sized_rect(x: i32, y: i32) -> Rect {
         width: WIDTH,
         height: HEIGHT,
     }
-}
-
-/// The lower edge of `rect`; `i32` plus `u32` cannot overflow `i64`.
-fn bottom(rect: &Rect) -> i64 {
-    i64::from(rect.y) + i64::from(rect.height.get())
-}
-
-/// Whether two rectangles share any area.
-fn overlaps(a: &Rect, b: &Rect) -> bool {
-    let right = |rect: &Rect| i64::from(rect.x) + i64::from(rect.width.get());
-    i64::from(a.x) < right(b)
-        && i64::from(b.x) < right(a)
-        && i64::from(a.y) < bottom(b)
-        && i64::from(b.y) < bottom(a)
 }
 
 #[cfg(test)]
@@ -178,7 +164,7 @@ mod tests {
         let second = layout.place().unwrap();
 
         assert_eq!(second, rect(220, 0, 180, 90));
-        assert!(!overlaps(&first, &second));
+        assert!(!first.overlaps(&second));
     }
 
     #[test]
@@ -210,6 +196,16 @@ mod tests {
     }
 
     #[test]
+    fn reports_a_full_board_when_only_the_box_below_would_overflow() {
+        let mut layout = Layout::of(&board(&[
+            ("wall", rect(-10, -10, 1_000, 9_000)),
+            ("low", rect(0, i32::MAX - 100, 1, 1)),
+        ]));
+
+        assert_eq!(layout.place(), None);
+    }
+
+    #[test]
     fn handles_many_placements_and_extreme_rectangles() {
         let placements: Vec<(String, Rect)> = (0..10_000_i32)
             .map(|index| (format!("e{index}"), rect(index * 7, index * 3, u32::MAX, 5)))
@@ -225,12 +221,8 @@ mod tests {
         let all: Vec<Rect> = placed.iter().flatten().copied().collect();
         assert_eq!(all.len(), 100);
         for (index, new) in all.iter().enumerate() {
-            assert!(placements.iter().all(|(_, old)| !overlaps(old, new)));
-            assert!(
-                all.iter()
-                    .skip(index + 1)
-                    .all(|other| !overlaps(other, new))
-            );
+            assert!(placements.iter().all(|(_, old)| !old.overlaps(new)));
+            assert!(all.iter().skip(index + 1).all(|other| !other.overlaps(new)));
         }
     }
 }
