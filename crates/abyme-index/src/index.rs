@@ -6,12 +6,12 @@ use std::fs::{self, File};
 use std::io;
 use std::path::{Path, PathBuf};
 
-use abyme_core::Snapshot;
-use abyme_model::ElementId;
+use abyme_core::{Snapshot, statement_kinds};
+use abyme_model::{ElementId, StatementKind};
 use lancedb::Connection;
 
 use crate::cache::{self, CacheEntry, ProjectKey, UserCache};
-use crate::changes::changes;
+use crate::changes::{Row, changes};
 use crate::embedder::{EmbedError, Embedder};
 use crate::model::ModelSpec;
 use crate::table::{self, AddError, Loaded};
@@ -145,14 +145,16 @@ impl Index {
 
 impl IndexLock<'_> {
     /// Brings the index up to date with `snapshot`: embeds only elements
-    /// whose text changed and removes those that are gone. A table that
-    /// cannot be used is rebuilt.
+    /// whose text or statement kind changed and removes those that are gone.
+    /// A table that cannot be used is rebuilt.
     ///
     /// # Errors
     ///
     /// Returns an [`IndexError`] when the cache, `LanceDB`, or the embedder
     /// fails, or the embedder returns unusable vectors; then the index holds
-    /// no wrong rows, at most fewer.
+    /// no row with a wrong text, at most fewer rows, and rows can keep an old
+    /// statement kind, which [`search`](Self::search) checks against the
+    /// snapshot it is given.
     pub async fn refresh(
         &self,
         snapshot: &Snapshot,
@@ -163,13 +165,24 @@ impl IndexLock<'_> {
             Loaded::Ready(table, stored) => (table, stored),
             Loaded::Damaged => (self.rebuild(dimension).await?, BTreeMap::default()),
         };
+        let kinds = statement_kinds(snapshot);
         let wanted = snapshot
             .elements
             .iter()
-            .map(|(id, element)| (id.clone(), indexed_text(element)))
+            .map(|(id, element)| {
+                let row = Row {
+                    text: indexed_text(element),
+                    statement: kinds.get(id).map(|kind| kind.as_str().to_owned()),
+                };
+                (id.clone(), row)
+            })
             .collect();
         let changes = changes(&stored, &wanted);
-        let texts: Vec<String> = changes.add.iter().map(|(_, text)| text.clone()).collect();
+        let texts: Vec<String> = changes
+            .add
+            .iter()
+            .map(|(_, row)| row.text.clone())
+            .collect();
         let vectors = if texts.is_empty() {
             Vec::new()
         } else {
@@ -186,8 +199,10 @@ impl IndexLock<'_> {
     }
 
     /// The elements of `snapshot` that best match `query`, best first, at
-    /// most `limit` of them. The index only ranks: every returned ID names
-    /// an element of `snapshot`, and none appears twice.
+    /// most `limit` of them; given a `statement`, only elements of that kind,
+    /// ranked among themselves. The index only ranks: every returned ID names
+    /// an element of `snapshot`, of that kind in `snapshot`, and none appears
+    /// twice.
     ///
     /// # Errors
     ///
@@ -197,6 +212,7 @@ impl IndexLock<'_> {
         &self,
         snapshot: &Snapshot,
         query: &str,
+        statement: Option<StatementKind>,
         embedder: &mut (dyn Embedder + Send),
         limit: usize,
     ) -> Result<Vec<ElementId>, IndexError> {
@@ -224,13 +240,15 @@ impl IndexLock<'_> {
         .into_iter()
         .next()
         .unwrap_or_default();
-        let found = table::search(&table, query, vector, limit).await?;
+        let found = table::search(&table, query, vector, statement, limit).await?;
+        let kinds = statement_kinds(snapshot);
         let mut ids: Vec<ElementId> = Vec::new();
         for id in found {
             let Ok(id) = id.parse::<ElementId>() else {
                 continue;
             };
-            if snapshot.elements.contains_key(&id) && !ids.contains(&id) {
+            let of_the_kind = statement.is_none_or(|kind| kinds.get(&id) == Some(&kind));
+            if of_the_kind && snapshot.elements.contains_key(&id) && !ids.contains(&id) {
                 ids.push(id);
             }
         }

@@ -50,7 +50,7 @@ board refuse the drags a person makes in the canvas.
 
 - [x] Zones in the board file and in `apply`
 - [x] Each element's statement kind, shown wherever the AI reads elements
-- [ ] Search filtered by statement kind
+- [x] Search filtered by statement kind
 - [ ] Mirrored boards in the canvas
 
 ## Tasks
@@ -134,26 +134,26 @@ idea is never found as a fact.
 
 Review path: Security-Hybrid
 
-- [ ] `search` takes an optional `statement`, one of the six kinds. With
+- [x] `search` takes an optional `statement`, one of the six kinds. With
       it, it answers with the elements of that kind that match the query
       best, also when elements of other kinds match better and outnumber
       them; every element it answers with has that kind in the files at
       the time of the search. Without it, it answers as before. Any other
       value is rejected as invalid arguments.
-- [ ] A change of a board's zone, or of an element's home, changes the
+- [x] A change of a board's zone, or of an element's home, changes the
       kind an element is found under at the next search, with no other
       change to the element.
-- [ ] An index built before this task is rebuilt at the next search, and
+- [x] An index built before this task is rebuilt at the next search, and
       search works on the rebuilt index.
-- [ ] Tests in `crates/abyme-index` cover the filter with more matching
+- [x] Tests in `crates/abyme-index` cover the filter with more matching
       elements of other kinds than results, a changed kind, and the
       rebuild. Tests through the MCP tool `search` cover a search with
       `statement` that answers only with elements of that kind, and a
       rejected `statement`.
-- [ ] Search and Index, MCP Server, the MCP README, and the `search` tool
+- [x] Search and Index, MCP Server, the MCP README, and the `search` tool
       description describe the filter and the kind each result line
       shows.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
       and `cargo fmt --all --check` pass.
 
 ### Task 4: Mirrored boards in the canvas
@@ -217,3 +217,11 @@ Review path: Security-Hybrid
 - Review flags that depend on the statement kind.
 - Choosing a zone in the canvas.
 - Search filters by type or board.
+
+## Task Notes
+
+- **Task 3:** The index takes its kinds from `statement_kinds` of the
+  snapshot, and result lines keep showing the kind from the snapshot through
+  `element_list`, never from index data.
+- **Task 3:** The filter value comes only from `StatementKind::as_str`,
+  through a typed expression, never a formatted filter string.

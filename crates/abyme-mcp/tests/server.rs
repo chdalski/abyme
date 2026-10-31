@@ -2126,7 +2126,7 @@ async fn no_tool_takes_a_path() -> TestResult {
             "apply" => &["operations"],
             "read_board" => &["board", "coordinates"],
             "read_element" | "verify" => &["element"],
-            "search" => &["query"],
+            "search" => &["query", "statement"],
             "overview" | "status" => &[],
             other => return Err(format!("unexpected tool {other}").into()),
         };

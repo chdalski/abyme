@@ -9,3 +9,5 @@ This is no status log and no home for facts. A missed plan
 target goes here only after the user has lowered the target.
 
 ## Open
+- `RelationKind` also reads the object form (`"kind": {"uses": null}`), the differential closed for `Mode` and `StatementKind`; give it the same string-only reader: `crates/abyme-model/src/relation.rs` (security engineer, plan D Task 1, rated Low).
+- Consolidate the test files that grew across plans (`crates/abyme-core/src/apply/tests.rs`, `crates/abyme-core/src/outline/tests.rs`, `crates/abyme-mcp/tests/server.rs`) in a plan of its own before the dogfooding plan (plan reviewer, plan D; the user chose a later plan).

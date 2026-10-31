@@ -13,7 +13,7 @@ aliases:
 - **The index is derived.** It is brought up to date before each search and can be rebuilt from the data at any time. It is never the source of data and lives in the user's cache, not in the repository.
 - **Embeddings are computed locally** with fastembed, from a model that Abyme downloads once and checks itself (see [[#Embedding Model]]). After that, search works offline, and no text leaves the machine.
 - **What gets embedded** per element is its type, name, summary, and description. Coordinates are not part of it.
-- **Context joins later:** the path (e.g. “Shop › Payment › Stripe adapter”) and the [[Boards and Zones#Statement Kind|statement kind]]. The statement kind becomes a filter, so an idea is never found as a fact.
+- **The [[Boards and Zones#Statement Kind|statement kind]] is a filter:** `search` with a `statement` ranks only among the elements of that kind, so an idea is never found as a fact. An element without a kind matches no filter, and without a `statement` search finds every element.
 
 For a single project, structure and full text already go a long way. Embeddings pay off for fuzzy questions such as “Where did we have that rate-limiting thing?” and for many projects.
 
@@ -37,7 +37,7 @@ Search keeps its files in the user's cache: in `$XDG_CACHE_HOME/abyme/` when `XD
 
 The index is a LanceDB table per project and model. The crate `abyme-index` builds it (see [[Hexagonal Architecture#Crates]]).
 
-**Only the MCP process owns the index.** Neither `apply` nor the core touches it. Before each `search`, the MCP process computes the text it would embed for every element and compares it with the stored text. It embeds only what changed and removes what is gone. Edits in the canvas, checkouts, and edits by hand can happen while no MCP process is running, so this catch-up is needed anyway. Comparing the text rather than the element file also catches context that does not live in the file, such as a board path.
+**Only the MCP process owns the index.** Neither `apply` nor the core touches it. Before each `search`, the MCP process computes the text it would embed for every element and its [[Boards and Zones#Inheritance|statement kind]], and compares them with what is stored. It embeds only what changed and removes what is gone. Edits in the canvas, checkouts, and edits by hand can happen while no MCP process is running, so this catch-up is needed anyway. Comparing these rather than the element file also catches what does not live in the file, such as the statement kind, which comes from a board.
 
 Table `elements`:
 
@@ -45,12 +45,13 @@ Table `elements`:
 |---|---|---|
 | `id` | string | element ID from the [[Data Model]] |
 | `text` | string | type, name, summary, and description: searched in full text, embedded, and compared to find changes |
+| `statement` | string, or null | the element's statement kind: what a filtered search selects by, and compared to find changes |
 | `vector` | list of float32 | embedding of `text` |
 
-**Results come from the files.** The index only ranks. `search` shows the elements it found from the current element files, in the same lines as a [[MCP Server#Detail Levels|board outline]], never text from the index.
+**Results come from the files.** The index only ranks. `search` shows the elements it found from the current element files, in the same lines as a [[MCP Server#Detail Levels|board outline]], never text from the index. A filtered search also checks the kind of each result against the files, and each line shows the kind from the files.
 
 > [!question] Proposal
-> The board path and the statement kind become columns once the board graph and statement kinds exist, as filters. A second table for board summaries is conceivable.
+> The board path (e.g. “Shop › Payment › Stripe adapter”) becomes a column and a filter. A second table for board summaries is conceivable.
 
 ## Embedding Model
 

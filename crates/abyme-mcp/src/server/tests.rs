@@ -479,6 +479,134 @@ async fn a_failed_load_is_an_escaped_tool_error_and_the_next_search_loads_again(
     Ok(())
 }
 
+/// A zone of ideas with `Billing Idea`, a zone of current content with
+/// `Billing Fact`, and `Billing Loose`, which lies on no board.
+async fn create_billing_elements(client: &RunningService<RoleClient, ()>) -> TestResult {
+    let applied = call(
+        client,
+        "apply",
+        json!({"operations": [
+            {"op": "create_board", "key": "i", "title": "Ideas",
+             "zone": {"mode": "free", "statement": "idea"}},
+            {"op": "create_board", "key": "f", "title": "Facts",
+             "zone": {"mode": "mirrored", "statement": "current"}},
+            {"op": "create_element", "key": "a", "type_ref": "t", "name": "Billing Idea"},
+            {"op": "create_element", "key": "b", "type_ref": "t", "name": "Billing Fact"},
+            {"op": "create_element", "key": "c", "type_ref": "t", "name": "Billing Loose"},
+            {"op": "place_element", "element": {"new": "a"}, "board": {"new": "i"}},
+            {"op": "place_element", "element": {"new": "b"}, "board": {"new": "f"}}
+        ]}),
+    )
+    .await?;
+    assert_eq!(applied.is_error, Some(false), "{applied:?}");
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn search_with_a_statement_answers_only_with_elements_of_that_kind() -> TestResult {
+    let setup = Setup::new(true, 0, "")?;
+    let client = connect(setup.server()?).await?;
+    create_billing_elements(&client).await?;
+
+    let ideas = call(
+        &client,
+        "search",
+        json!({"query": "billing", "statement": "idea"}),
+    )
+    .await?;
+    let facts = call(
+        &client,
+        "search",
+        json!({"query": "billing", "statement": "current"}),
+    )
+    .await?;
+    let questions = call(
+        &client,
+        "search",
+        json!({"query": "billing", "statement": "question"}),
+    )
+    .await?;
+
+    assert_eq!(results(&ideas)?, "billing-idea  t  idea  Billing Idea\n");
+    assert_eq!(results(&facts)?, "billing-fact  t  current  Billing Fact\n");
+    assert_eq!(results(&questions)?, NO_MATCH);
+    client.cancel().await?;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn search_without_a_statement_answers_with_every_kind_and_shows_each() -> TestResult {
+    let setup = Setup::new(true, 0, "")?;
+    let client = connect(setup.server()?).await?;
+    create_billing_elements(&client).await?;
+
+    for arguments in [
+        json!({"query": "billing"}),
+        json!({"query": "billing", "statement": null}),
+    ] {
+        let found = call(&client, "search", arguments).await?;
+
+        let results = results(&found)?;
+        let mut lines: Vec<&str> = results.lines().collect();
+        lines.sort_unstable();
+        assert_eq!(
+            lines,
+            [
+                "billing-fact   t  current  Billing Fact",
+                "billing-idea   t  idea     Billing Idea",
+                "billing-loose  t  none     Billing Loose",
+            ]
+        );
+    }
+    client.cancel().await?;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn rejects_any_other_statement_before_loading_and_repeats_none_of_it() -> TestResult {
+    let setup = Setup::new(true, 0, "")?;
+    let client = connect(setup.server()?).await?;
+
+    for statement in [
+        json!("fact"),
+        json!("Idea"),
+        json!(""),
+        json!("historic"),
+        json!("idea' OR '1'='1"),
+        json!(5),
+        json!(["idea"]),
+        json!({"idea": null}),
+    ] {
+        let arguments = json!({"query": "billing", "statement": statement});
+
+        let result = call(&client, "search", arguments.clone()).await?;
+
+        assert_eq!(result.is_error, Some(true), "{arguments}: {result:?}");
+        assert!(
+            text(&result).starts_with("invalid arguments: "),
+            "{result:?}"
+        );
+        assert!(!text(&result).contains("OR '1'"), "{result:?}");
+    }
+    assert_eq!(setup.loads(), 0);
+    assert!(setup.cache_is_empty()?);
+    client.cancel().await?;
+    Ok(())
+}
+
+#[test]
+fn search_schema_names_every_statement_kind() {
+    let schema = Value::Object((*schema_for_type::<SearchArguments>()).clone()).to_string();
+
+    for kind in StatementKind::ALL {
+        assert!(
+            schema.contains(&format!("\"{}\"", kind.as_str())),
+            "{schema}"
+        );
+    }
+    assert!(!schema.contains("historic"), "{schema}");
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn answers_queries_it_cannot_search_with_tool_errors_before_loading() -> TestResult {
     let setup = Setup::new(true, 0, "")?;

@@ -16,7 +16,7 @@ use abyme_core::{
     element_detail, element_list, outline, overview, status_report,
 };
 use abyme_index::{Index, MAX_QUERY_CHARS, spec};
-use abyme_model::{BoardId, ElementId, Verifier, shown};
+use abyme_model::{BoardId, ElementId, StatementKind, Verifier, shown};
 use rmcp::handler::server::common::schema_for_type;
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
@@ -119,6 +119,10 @@ struct OverviewArguments {}
 struct SearchArguments {
     /// What to look for: words the elements contain, or what they are about.
     query: String,
+    /// Only elements of this statement kind, ranked among themselves. Without
+    /// it, elements of every kind and elements without one.
+    #[serde(default)]
+    statement: Option<StatementKind>,
 }
 
 /// The MCP server of one project.
@@ -310,6 +314,8 @@ impl AbymeServer {
             they are about, and returns the 10 that match the query best, best first: one line per element \
             with its ID, type, statement kind (when one of them has one; none for the others), name, \
             summary, ▸ and its inner boards, and the ⚠ task or ⚠ hint marker, as in a board outline. \
+            With statement, one of current, target, decision, idea, knowledge, or question, it returns \
+            only elements of that kind, the best among them; an element without a kind matches none. \
             Text from the repository is escaped onto one line. When Git cannot be asked, the reply starts \
             with a line Review flags unavailable: and the reason, and no line is marked. The first search \
             after the server starts, and the first after the project file names another embedding model, \
@@ -339,8 +345,14 @@ impl AbymeServer {
                     runtime
                         .block_on(async {
                             lock.refresh(&snapshot, embedder).await?;
-                            lock.search(&snapshot, &arguments.query, embedder, SEARCH_RESULTS)
-                                .await
+                            lock.search(
+                                &snapshot,
+                                &arguments.query,
+                                arguments.statement,
+                                embedder,
+                                SEARCH_RESULTS,
+                            )
+                            .await
                         })
                         .map_err(|error| error.to_string())
                 })

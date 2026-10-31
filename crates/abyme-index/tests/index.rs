@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::error::Error;
 use std::fs;
+use std::num::NonZeroU32;
 use std::os::unix::fs::PermissionsExt as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -15,13 +16,16 @@ use abyme_index::{
     EmbedError, Embedder, Index, IndexError, MAX_QUERY_CHARS, MAX_RESULTS, ModelFile, ModelFiles,
     ModelSpec, ProjectKey, UserCache, indexed_text,
 };
-use abyme_model::{Element, ElementFields, ElementId, Relations, TypeRef};
+use abyme_model::{
+    Board, Element, ElementFields, ElementId, Mode, Rect, Relations, StatementKind, TypeRef, Zone,
+};
 use fastembed::{Pooling, QuantizationMode};
 use futures::TryStreamExt as _;
 use lancedb::arrow::arrow_array::types::Float32Type;
-use lancedb::arrow::arrow_array::{Array, FixedSizeListArray, RecordBatch, StringArray};
+use lancedb::arrow::arrow_array::{Array, ArrayRef, FixedSizeListArray, RecordBatch, StringArray};
 use lancedb::arrow::arrow_schema::{DataType, Field, Schema};
 use lancedb::query::{ExecutableQuery as _, QueryBase as _, Select};
+use rstest::rstest;
 use tempfile::TempDir;
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
@@ -275,6 +279,75 @@ async fn stored_ids(cache: &Path) -> TestResult<Vec<String>> {
         .collect())
 }
 
+/// The database directory of `root`'s table for the fake model.
+fn fake_table_dir(cache: &Path, root: &Path) -> PathBuf {
+    cache
+        .join("abyme")
+        .join("index")
+        .join(ProjectKey::of(root).to_string())
+        .join("fake-r1-r1")
+}
+
+/// Writes a table of `elements`' rows directly. `statements` holds the value
+/// of each row's `statement`, by element ID; without it the table has no
+/// such column, as tables did before statement kinds.
+async fn write_table(
+    cache: &Path,
+    root: &Path,
+    elements: &Snapshot,
+    statements: Option<&[Option<&str>]>,
+) -> TestResult {
+    let dir = fake_table_dir(cache, root);
+    fs::create_dir_all(&dir)?;
+    let db = lancedb::connect(dir.to_str().ok_or("path")?)
+        .execute()
+        .await?;
+    let dimension = i32::try_from(DIMENSION)?;
+    let mut fields = vec![
+        Field::new("id", DataType::Utf8, false),
+        Field::new("text", DataType::Utf8, false),
+    ];
+    if statements.is_some() {
+        fields.push(Field::new("statement", DataType::Utf8, true));
+    }
+    fields.push(Field::new(
+        "vector",
+        DataType::FixedSizeList(
+            Arc::new(Field::new("item", DataType::Float32, true)),
+            dimension,
+        ),
+        false,
+    ));
+    let rows: Vec<(&ElementId, String)> = elements
+        .elements
+        .iter()
+        .map(|(id, element)| (id, indexed_text(element)))
+        .collect();
+    let mut columns: Vec<ArrayRef> = vec![
+        Arc::new(StringArray::from_iter_values(
+            rows.iter().map(|(id, _)| id.as_str()),
+        )),
+        Arc::new(StringArray::from_iter_values(
+            rows.iter().map(|(_, text)| text.as_str()),
+        )),
+    ];
+    if let Some(statements) = statements {
+        columns.push(Arc::new(StringArray::from(statements.to_vec())));
+    }
+    columns.push(Arc::new(FixedSizeListArray::from_iter_primitive::<
+        Float32Type,
+        _,
+        _,
+    >(
+        rows.iter()
+            .map(|(_, text)| Some(words_vector(text, DIMENSION).into_iter().map(Some))),
+        dimension,
+    )));
+    let batch = RecordBatch::try_new(Arc::new(Schema::new(fields)), columns)?;
+    db.create_table("elements", batch).execute().await?;
+    Ok(())
+}
+
 /// Refreshes the index of `root` and searches it once.
 async fn refresh_and_search(
     cache: &Path,
@@ -286,7 +359,9 @@ async fn refresh_and_search(
     let lock = index.lock()?;
     let mut embedder = WordsEmbedder::default();
     lock.refresh(snapshot, &mut embedder).await?;
-    Ok(lock.search(snapshot, query, &mut embedder, 10).await?)
+    Ok(lock
+        .search(snapshot, query, None, &mut embedder, 10)
+        .await?)
 }
 
 #[tokio::test]
@@ -322,7 +397,9 @@ async fn finds_an_element_by_its_vector_without_a_shared_word() -> TestResult {
     let lock = index.lock()?;
 
     lock.refresh(&snapshot, &mut embedder).await?;
-    let found = lock.search(&snapshot, "zzz", &mut embedder, 10).await?;
+    let found = lock
+        .search(&snapshot, "zzz", None, &mut embedder, 10)
+        .await?;
 
     assert_eq!(found.first(), Some(&id("near")?), "{found:?}");
     Ok(())
@@ -354,7 +431,7 @@ async fn full_text_ranks_a_word_match_first_although_its_vector_points_away() ->
 
     lock.refresh(&snapshot, &mut embedder).await?;
     let found = lock
-        .search(&snapshot, "postgres", &mut embedder, 10)
+        .search(&snapshot, "postgres", None, &mut embedder, 10)
         .await?;
 
     assert_eq!(found.first(), Some(&id("match")?), "{found:?}");
@@ -367,59 +444,15 @@ async fn completes_a_full_text_index_that_a_cut_off_refresh_left_out() -> TestRe
     let elements = three()?;
     // The state a refresh leaves when it stops after adding the rows and
     // before building the full-text index: every row stored, no index.
-    let dir = cache
-        .join("abyme")
-        .join("index")
-        .join(ProjectKey::of(&root).to_string())
-        .join("fake-r1-r1");
-    fs::create_dir_all(&dir)?;
-    let db = lancedb::connect(dir.to_str().ok_or("path")?)
-        .execute()
-        .await?;
-    let dimension = i32::try_from(DIMENSION)?;
-    let schema = Arc::new(Schema::new(vec![
-        Field::new("id", DataType::Utf8, false),
-        Field::new("text", DataType::Utf8, false),
-        Field::new(
-            "vector",
-            DataType::FixedSizeList(
-                Arc::new(Field::new("item", DataType::Float32, true)),
-                dimension,
-            ),
-            false,
-        ),
-    ]));
-    let rows: Vec<(&ElementId, String)> = elements
-        .elements
-        .iter()
-        .map(|(id, element)| (id, indexed_text(element)))
-        .collect();
-    let batch = RecordBatch::try_new(
-        Arc::clone(&schema),
-        vec![
-            Arc::new(StringArray::from_iter_values(
-                rows.iter().map(|(id, _)| id.as_str()),
-            )),
-            Arc::new(StringArray::from_iter_values(
-                rows.iter().map(|(_, text)| text.as_str()),
-            )),
-            Arc::new(
-                FixedSizeListArray::from_iter_primitive::<Float32Type, _, _>(
-                    rows.iter()
-                        .map(|(_, text)| Some(words_vector(text, DIMENSION).into_iter().map(Some))),
-                    dimension,
-                ),
-            ),
-        ],
-    )?;
-    db.create_table("elements", batch).execute().await?;
+    let statements = vec![None; elements.elements.len()];
+    write_table(&cache, &root, &elements, Some(&statements)).await?;
     let mut embedder = WordsEmbedder::default();
     let index = Index::new(self::cache(&cache)?, &root, &SPEC);
     let lock = index.lock()?;
 
     lock.refresh(&elements, &mut embedder).await?;
     let found = lock
-        .search(&elements, "postgres", &mut embedder, 10)
+        .search(&elements, "postgres", None, &mut embedder, 10)
         .await?;
 
     assert_eq!(embedder.embedded, 1, "only the query is embedded");
@@ -490,11 +523,11 @@ async fn never_returns_an_element_that_is_gone() -> TestResult {
     let index = Index::new(self::cache(&cache)?, &root, &SPEC);
     let lock = index.lock()?;
     let before_refresh = lock
-        .search(&fewer, "postgres", &mut WordsEmbedder::default(), 10)
+        .search(&fewer, "postgres", None, &mut WordsEmbedder::default(), 10)
         .await?;
     lock.refresh(&fewer, &mut WordsEmbedder::default()).await?;
     let after_refresh = lock
-        .search(&fewer, "postgres", &mut WordsEmbedder::default(), 10)
+        .search(&fewer, "postgres", None, &mut WordsEmbedder::default(), 10)
         .await?;
 
     assert!(
@@ -743,7 +776,7 @@ async fn answers_hostile_queries_with_results_or_an_error() -> TestResult {
         "?!.,;",
         &long,
     ] {
-        let result = lock.search(&elements, query, &mut embedder, 10).await;
+        let result = lock.search(&elements, query, None, &mut embedder, 10).await;
 
         assert!(
             result.is_ok() || matches!(result, Err(IndexError::Lance(_))),
@@ -752,15 +785,17 @@ async fn answers_hostile_queries_with_results_or_an_error() -> TestResult {
     }
     let too_long = "x".repeat(MAX_QUERY_CHARS + 1);
     assert!(matches!(
-        lock.search(&elements, &too_long, &mut embedder, 10).await,
+        lock.search(&elements, &too_long, None, &mut embedder, 10)
+            .await,
         Err(IndexError::QueryTooLong { .. })
     ));
     assert_eq!(
-        lock.search(&elements, "cart", &mut embedder, 0).await?,
+        lock.search(&elements, "cart", None, &mut embedder, 0)
+            .await?,
         Vec::new()
     );
     assert!(matches!(
-        lock.search(&elements, "cart", &mut embedder, MAX_RESULTS + 1)
+        lock.search(&elements, "cart", None, &mut embedder, MAX_RESULTS + 1)
             .await,
         Err(IndexError::TooManyResults { .. })
     ));
@@ -784,7 +819,7 @@ async fn holds_the_lock_only_for_one_operation() -> TestResult {
         .await?;
     let found = first
         .lock()?
-        .search(&elements, "cart", &mut WordsEmbedder::default(), 10)
+        .search(&elements, "cart", None, &mut WordsEmbedder::default(), 10)
         .await?;
 
     assert_eq!(found.first(), Some(&id("checkout")?), "{found:?}");
@@ -854,5 +889,451 @@ async fn two_processes_store_each_element_once() -> TestResult {
     let unique: BTreeSet<&String> = stored.iter().collect();
     assert_eq!(stored.len(), SHARED_ELEMENTS, "{stored:?}");
     assert_eq!(unique.len(), SHARED_ELEMENTS);
+    Ok(())
+}
+
+/// `elements` on boards given by ID, the kind of their zone if they are one,
+/// and the elements they place.
+fn zoned(
+    elements: Vec<Element>,
+    boards: &[(&str, Option<StatementKind>, &[&str])],
+) -> TestResult<Snapshot> {
+    let rect = Rect {
+        x: 0,
+        y: 0,
+        width: NonZeroU32::MIN,
+        height: NonZeroU32::MIN,
+    };
+    let mut snapshot = snapshot(elements);
+    for (board, statement, placed) in boards {
+        let board = Board {
+            id: board.parse()?,
+            title: (*board).to_owned(),
+            owner: None,
+            summary: None,
+            zone: statement.map(|statement| Zone {
+                mode: Mode::Free,
+                statement,
+            }),
+            placements: placed
+                .iter()
+                .map(|placed| Ok((placed.parse()?, rect)))
+                .collect::<TestResult<_>>()?,
+        };
+        snapshot.boards.insert(board.id.clone(), board);
+    }
+    Ok(snapshot)
+}
+
+/// A vector along one axis, so that vectors of other axes lie far from it.
+fn along(axis: usize) -> Vec<f32> {
+    let mut vector = vec![0.0; DIMENSION];
+    if let Some(slot) = vector.get_mut(axis) {
+        *slot = 1.0;
+    }
+    vector
+}
+
+/// The elements in `found`, for comparing with the expected ones.
+fn set(found: &[ElementId]) -> BTreeSet<&str> {
+    found.iter().map(ElementId::as_str).collect()
+}
+
+/// Six ideas that match the query `needle` best, by their word and by their
+/// vector; two current elements whose bodies are `fact_body` and whose
+/// vectors point away; a third current element that matches worst of all,
+/// with no word of the query and a vector pointing the opposite way; and an
+/// embedder that says so.
+fn ideas_ahead_of_facts(fact_body: &str) -> TestResult<(Snapshot, TableEmbedder)> {
+    let mut elements = Vec::new();
+    for number in 0..6 {
+        elements.push(element(
+            &format!("idea-{number}"),
+            "Idea",
+            "needle needle needle",
+        )?);
+    }
+    elements.push(element("fact-0", "Fact", fact_body)?);
+    elements.push(element("fact-1", "Fact", fact_body)?);
+    elements.push(element("fact-worst", "Worst", "unrelated")?);
+    let ideas = ["idea-0", "idea-1", "idea-2", "idea-3", "idea-4", "idea-5"];
+    let snapshot = zoned(
+        elements,
+        &[
+            ("ideas", Some(StatementKind::Idea), &ideas),
+            (
+                "facts",
+                Some(StatementKind::Current),
+                &["fact-0", "fact-1", "fact-worst"],
+            ),
+        ],
+    )?;
+    let mut vectors = BTreeMap::from([("needle".to_owned(), along(0))]);
+    for (id, element) in &snapshot.elements {
+        let vector = match id.as_str() {
+            "fact-worst" => along(0).iter().map(|value| -value).collect(),
+            "fact-0" | "fact-1" => along(1),
+            _ => along(0),
+        };
+        vectors.insert(indexed_text(element), vector);
+    }
+    Ok((snapshot, TableEmbedder(vectors)))
+}
+
+#[rstest]
+#[case::found_by_full_text_too("needle among many other words that dilute it")]
+#[case::found_by_vector_alone("nothing the query names")]
+#[tokio::test]
+async fn filters_before_ranking_so_elements_of_other_kinds_take_no_place(
+    #[case] fact_body: &str,
+) -> TestResult {
+    let (_directory, cache, root) = setup()?;
+    let (snapshot, mut embedder) = ideas_ahead_of_facts(fact_body)?;
+    let index = Index::new(self::cache(&cache)?, &root, &SPEC);
+    let lock = index.lock()?;
+    lock.refresh(&snapshot, &mut embedder).await?;
+
+    let unfiltered = lock
+        .search(&snapshot, "needle", None, &mut embedder, 2)
+        .await?;
+    let filtered = lock
+        .search(
+            &snapshot,
+            "needle",
+            Some(StatementKind::Current),
+            &mut embedder,
+            2,
+        )
+        .await?;
+
+    assert!(
+        unfiltered.iter().all(|id| id.as_str().starts_with("idea")),
+        "the ideas must fill the results without a filter: {unfiltered:?}"
+    );
+    assert_eq!(set(&filtered), BTreeSet::from(["fact-0", "fact-1"]));
+    Ok(())
+}
+
+#[rstest]
+#[case::a_word_elements_of_other_kinds_hold("needle")]
+#[case::a_word_no_element_holds("absent")]
+#[tokio::test]
+async fn answers_empty_when_no_element_has_the_kind(#[case] query: &str) -> TestResult {
+    let (_directory, cache, root) = setup()?;
+    let (snapshot, mut embedder) = ideas_ahead_of_facts("other words")?;
+    let index = Index::new(self::cache(&cache)?, &root, &SPEC);
+    let lock = index.lock()?;
+    lock.refresh(&snapshot, &mut embedder).await?;
+
+    let found = lock
+        .search(
+            &snapshot,
+            query,
+            Some(StatementKind::Question),
+            &mut embedder,
+            3,
+        )
+        .await?;
+
+    assert_eq!(found, Vec::<ElementId>::new());
+    Ok(())
+}
+
+/// `thing` and `other`: `thing` lies on the zone `ideas`, `other` on no zone.
+fn with_and_without_a_kind() -> TestResult<Snapshot> {
+    zoned(
+        vec![
+            element("thing", "Thing", "shared word")?,
+            element("other", "Other", "shared word")?,
+        ],
+        &[("ideas", Some(StatementKind::Idea), &["thing"])],
+    )
+}
+
+#[tokio::test]
+async fn embeds_nothing_again_when_elements_without_a_kind_did_not_change() -> TestResult {
+    let (_directory, cache, root) = setup()?;
+    let snapshot = with_and_without_a_kind()?;
+    let index = Index::new(self::cache(&cache)?, &root, &SPEC);
+    let lock = index.lock()?;
+    let mut embedder = WordsEmbedder::default();
+
+    lock.refresh(&snapshot, &mut embedder).await?;
+    lock.refresh(&snapshot, &mut embedder).await?;
+
+    assert_eq!(embedder.embedded, 2);
+    Ok(())
+}
+
+#[tokio::test]
+async fn no_filter_finds_an_element_without_a_kind() -> TestResult {
+    let (_directory, cache, root) = setup()?;
+    let mixed = with_and_without_a_kind()?;
+    let index = Index::new(self::cache(&cache)?, &root, &SPEC);
+    let lock = index.lock()?;
+    let mut embedder = WordsEmbedder::default();
+    lock.refresh(&mixed, &mut embedder).await?;
+
+    for kind in StatementKind::ALL {
+        let found = lock
+            .search(&mixed, "shared", Some(kind), &mut embedder, 10)
+            .await?;
+
+        let expected = if kind == StatementKind::Idea {
+            BTreeSet::from(["thing"])
+        } else {
+            BTreeSet::new()
+        };
+        assert_eq!(set(&found), expected, "{kind:?}");
+    }
+    let found = lock
+        .search(&mixed, "shared", None, &mut embedder, 10)
+        .await?;
+    assert_eq!(set(&found), BTreeSet::from(["other", "thing"]));
+    Ok(())
+}
+
+#[tokio::test]
+async fn finds_nothing_under_a_filter_when_no_element_of_the_project_has_a_kind() -> TestResult {
+    let (_directory, cache, root) = setup()?;
+    let elements = three()?;
+    let index = Index::new(self::cache(&cache)?, &root, &SPEC);
+    let lock = index.lock()?;
+    let mut embedder = WordsEmbedder::default();
+    lock.refresh(&elements, &mut embedder).await?;
+
+    let filtered = lock
+        .search(
+            &elements,
+            "cart",
+            Some(StatementKind::Current),
+            &mut embedder,
+            10,
+        )
+        .await?;
+    let unfiltered = lock
+        .search(&elements, "cart", None, &mut embedder, 10)
+        .await?;
+
+    assert_eq!(filtered, Vec::<ElementId>::new());
+    assert_eq!(unfiltered.first(), Some(&id("checkout")?));
+    Ok(())
+}
+
+#[tokio::test]
+async fn finds_an_element_under_its_new_kind_only_after_a_change_on_a_board() -> TestResult {
+    let (_directory, cache, root) = setup()?;
+    let thing = || element("thing", "Thing", "shared word");
+    let states: Vec<(Snapshot, Option<StatementKind>)> = vec![
+        (
+            zoned(
+                vec![thing()?],
+                &[("board", Some(StatementKind::Idea), &["thing"])],
+            )?,
+            Some(StatementKind::Idea),
+        ),
+        // The zone of its home changes.
+        (
+            zoned(
+                vec![thing()?],
+                &[("board", Some(StatementKind::Current), &["thing"])],
+            )?,
+            Some(StatementKind::Current),
+        ),
+        // Its home moves to a board with a lower ID.
+        (
+            zoned(
+                vec![thing()?],
+                &[
+                    ("alpha", Some(StatementKind::Target), &["thing"]),
+                    ("board", Some(StatementKind::Current), &["thing"]),
+                ],
+            )?,
+            Some(StatementKind::Target),
+        ),
+        // Its new home is no zone.
+        (
+            zoned(
+                vec![thing()?],
+                &[
+                    ("alpha", None, &["thing"]),
+                    ("board", Some(StatementKind::Current), &["thing"]),
+                ],
+            )?,
+            None,
+        ),
+    ];
+    let index = Index::new(self::cache(&cache)?, &root, &SPEC);
+    let lock = index.lock()?;
+    let mut embedder = WordsEmbedder::default();
+
+    for (snapshot, expected) in &states {
+        lock.refresh(snapshot, &mut embedder).await?;
+
+        for kind in StatementKind::ALL {
+            let found = lock
+                .search(snapshot, "shared", Some(kind), &mut embedder, 10)
+                .await?;
+            let wanted = if *expected == Some(kind) {
+                BTreeSet::from(["thing"])
+            } else {
+                BTreeSet::new()
+            };
+            assert_eq!(set(&found), wanted, "{expected:?}, filter {kind:?}");
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn takes_the_kind_from_the_snapshot_when_a_refresh_failed() -> TestResult {
+    let (_directory, cache, root) = setup()?;
+    let before = zoned(
+        vec![element("thing", "Thing", "shared word")?],
+        &[("board", Some(StatementKind::Idea), &["thing"])],
+    )?;
+    let after = zoned(
+        vec![element("thing", "Thing", "shared word")?],
+        &[("board", Some(StatementKind::Current), &["thing"])],
+    )?;
+    let index = Index::new(self::cache(&cache)?, &root, &SPEC);
+    let lock = index.lock()?;
+    let mut embedder = WordsEmbedder::default();
+    lock.refresh(&before, &mut embedder).await?;
+    assert!(
+        lock.refresh(&after, &mut BrokenEmbedder::TooFew)
+            .await
+            .is_err()
+    );
+
+    let found = lock
+        .search(
+            &after,
+            "shared",
+            Some(StatementKind::Idea),
+            &mut embedder,
+            10,
+        )
+        .await?;
+
+    assert_eq!(found, Vec::<ElementId>::new());
+    Ok(())
+}
+
+/// The columns of the only table in the cache, and each row's statement.
+async fn stored_statements(
+    cache: &Path,
+) -> TestResult<(Vec<String>, BTreeMap<String, Option<String>>)> {
+    let dirs = table_dirs(cache)?;
+    let [dir] = dirs.as_slice() else {
+        return Err(format!("expected one table, found {dirs:?}").into());
+    };
+    let db = lancedb::connect(dir.to_str().ok_or("path")?)
+        .execute()
+        .await?;
+    let table = db.open_table("elements").execute().await?;
+    let columns = table
+        .schema()
+        .await?
+        .fields()
+        .iter()
+        .map(|field| field.name().clone())
+        .collect();
+    let batches: Vec<RecordBatch> = table
+        .query()
+        .select(Select::columns(&["id", "statement"]))
+        .execute()
+        .await?
+        .try_collect()
+        .await?;
+    let mut statements = BTreeMap::new();
+    for batch in &batches {
+        let strings = |name: &str| -> TestResult<Vec<Option<String>>> {
+            let column = batch.column_by_name(name).ok_or("missing column")?;
+            let array = column
+                .as_any()
+                .downcast_ref::<StringArray>()
+                .ok_or("not strings")?;
+            Ok(array.iter().map(|value| value.map(str::to_owned)).collect())
+        };
+        for (id, statement) in strings("id")?.into_iter().zip(strings("statement")?) {
+            statements.insert(id.ok_or("no ID")?, statement);
+        }
+    }
+    Ok((columns, statements))
+}
+
+#[tokio::test]
+async fn rebuilds_a_table_from_before_statement_kinds() -> TestResult {
+    let (_directory, cache, root) = setup()?;
+    let snapshot = with_and_without_a_kind()?;
+    write_table(&cache, &root, &snapshot, None).await?;
+    let index = Index::new(self::cache(&cache)?, &root, &SPEC);
+    let lock = index.lock()?;
+    let mut embedder = WordsEmbedder::default();
+
+    lock.refresh(&snapshot, &mut embedder).await?;
+    let after_the_rebuild = embedder.embedded;
+    lock.refresh(&snapshot, &mut embedder).await?;
+    let found = lock
+        .search(
+            &snapshot,
+            "shared",
+            Some(StatementKind::Idea),
+            &mut embedder,
+            10,
+        )
+        .await?;
+
+    assert_eq!(after_the_rebuild, 2, "every element is embedded anew");
+    assert_eq!(embedder.embedded, 3, "then only the query");
+    assert_eq!(set(&found), BTreeSet::from(["thing"]));
+    let (columns, _) = stored_statements(&cache).await?;
+    assert_eq!(columns, ["id", "text", "statement", "vector"]);
+    let mode = fs::metadata(fake_table_dir(&cache, &root))?
+        .permissions()
+        .mode()
+        & 0o777;
+    assert_eq!(mode, 0o700);
+    Ok(())
+}
+
+#[tokio::test]
+async fn replaces_stored_values_that_are_no_kind() -> TestResult {
+    let (_directory, cache, root) = setup()?;
+    let snapshot = zoned(
+        vec![
+            element("empty-value", "Empty", "shared word")?,
+            element("unknown-value", "Unknown", "shared word")?,
+        ],
+        &[("facts", Some(StatementKind::Current), &["empty-value"])],
+    )?;
+    // By element ID: `empty-value` holds "", `unknown-value` holds "fact".
+    write_table(&cache, &root, &snapshot, Some(&[Some(""), Some("fact")])).await?;
+    let index = Index::new(self::cache(&cache)?, &root, &SPEC);
+    let lock = index.lock()?;
+    let mut embedder = WordsEmbedder::default();
+
+    lock.refresh(&snapshot, &mut embedder).await?;
+    let found = lock
+        .search(
+            &snapshot,
+            "shared",
+            Some(StatementKind::Current),
+            &mut embedder,
+            10,
+        )
+        .await?;
+
+    assert_eq!(embedder.embedded, 3, "both rows, then the query");
+    assert_eq!(set(&found), BTreeSet::from(["empty-value"]));
+    let (_, statements) = stored_statements(&cache).await?;
+    assert_eq!(
+        statements,
+        BTreeMap::from([
+            ("empty-value".to_owned(), Some("current".to_owned())),
+            ("unknown-value".to_owned(), None),
+        ])
+    );
     Ok(())
 }
