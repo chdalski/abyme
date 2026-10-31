@@ -9,6 +9,9 @@ This is no status log and no home for facts. A missed plan
 target goes here only after the user has lowered the target.
 
 ## Open
-- `RelationKind` also reads the object form (`"kind": {"uses": null}`), the differential closed for `Mode` and `StatementKind`; give it the same string-only reader: `crates/abyme-model/src/relation.rs` (security engineer, plan D Task 1, rated Low).
+- `apply` requests accept `RelationKind` in the object form (`"kind": {"uses": null}`), unlike `Mode` and `StatementKind`; files read only the string and get the normal form, so this is about consistency: `crates/abyme-model/src/relation.rs` (security engineer, plan D Task 1, rated Low; fix with a later change there).
 - Consolidate the test files that grew across plans (`crates/abyme-core/src/apply/tests.rs`, `crates/abyme-core/src/outline/tests.rs`, `crates/abyme-mcp/tests/server.rs`) in a plan of its own before the dogfooding plan (plan reviewer, plan D; the user chose a later plan).
 - A full `cargo test --workspace` once ended the test process `element_properties` with SIGKILL; it did not recur alone or in later full runs, cause unknown: `crates/abyme-model/tests/element_properties.rs` (plan D Task 4).
+- Remaining MVP plans, in this order: a statement kind on the element, starting with a refactor of the positional dispatch of `update_element` in `crates/abyme-core/src/apply.rs`, which is at clippy's argument limit; the canvas for the MVP (arrows, breadcrumb, review flags, pinning, sticky notes, maybe two plans); dogfooding on Abyme and the rlsp replay (MVP roadmap the user approved; plan D's Non-Goals).
+- Move `toml` to 1.x in a small plan of its own; it parses repository files, so Security-Hybrid: root `Cargo.toml` (user decision while building the skeleton).
+- Make `RECIPE_VERSION` and maybe `ProjectKey` crate-private if nothing outside needs them: `crates/abyme-index/src/lib.rs` (reviewer, search skeleton).
