@@ -15,3 +15,6 @@ target goes here only after the user has lowered the target.
 - Remaining MVP plans, in this order: a statement kind on the element, starting with a refactor of the positional dispatch of `update_element` in `crates/abyme-core/src/apply.rs`, which is at clippy's argument limit; the canvas for the MVP (arrows, breadcrumb, review flags, pinning, sticky notes, maybe two plans); dogfooding on Abyme and the rlsp replay (MVP roadmap the user approved; plan D's Non-Goals).
 - Move `toml` to 1.x in a small plan of its own; it parses repository files, so Security-Hybrid: root `Cargo.toml` (user decision while building the skeleton).
 - Make `RECIPE_VERSION` and maybe `ProjectKey` crate-private if nothing outside needs them: `crates/abyme-index/src/lib.rs` (reviewer, search skeleton).
+- `below` checks only the bottom edge, not the right, though `place` promises `None` when no position fits in `i32`; not reachable while the width stays 180: `crates/abyme-core/src/layout/free_space.rs` (Reviewer, auto-layout Task 3)
+- `#[derive(Clone, Copy)]` on `Cell` looks unused, and `raise_bottom` has one caller and could stand inline: `crates/abyme-core/src/layout/free_space.rs` (Reviewer, auto-layout Task 3)
+- The doc comment of `draft_board` is wrapped unevenly: `crates/abyme-core/src/apply.rs` (Reviewer, auto-layout Task 3)

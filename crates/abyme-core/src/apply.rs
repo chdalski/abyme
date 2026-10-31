@@ -14,7 +14,8 @@ use abyme_model::{
 };
 
 use crate::board_tree::BoardTree;
-use crate::layout::Layout;
+use crate::layout::Size;
+use crate::layout::free_space::FreeSpace;
 use crate::operation::{LocalKey, MAX_COORDINATE, Operation, Ref};
 use crate::slug::free_slug;
 
@@ -226,7 +227,7 @@ struct Draft<'snapshot> {
     taken_elements: BTreeSet<ElementId>,
     taken_boards: BTreeSet<BoardId>,
     homed: BTreeSet<ElementId>,
-    boards: BTreeMap<BoardId, (Board, Layout)>,
+    boards: BTreeMap<BoardId, (Board, FreeSpace)>,
 }
 
 /// Applies `operations` to `snapshot` and returns the files to write.
@@ -425,9 +426,9 @@ impl<'snapshot> Draft<'snapshot> {
             zone,
             placements: BTreeMap::new(),
         };
-        let layout = Layout::of(&board);
+        let free_space = FreeSpace::of(&board);
         self.taken_boards.insert(id.clone());
-        self.boards.insert(id.clone(), (board, layout));
+        self.boards.insert(id.clone(), (board, free_space));
         self.record(key, Created::Board(id));
         Ok(())
     }
@@ -453,9 +454,9 @@ impl<'snapshot> Draft<'snapshot> {
                 return Err(OperationProblem::InsideItself(owned.clone()));
             }
         }
-        let (draft_board, layout) = self.draft_board(&board)?;
-        let rect = layout
-            .place()
+        let (draft_board, free_space) = self.draft_board(&board)?;
+        let rect = free_space
+            .place(Size::DEFAULT)
             .ok_or_else(|| OperationProblem::BoardFull(board.clone()))?;
         draft_board
             .placements
@@ -477,7 +478,7 @@ impl<'snapshot> Draft<'snapshot> {
         if !range.contains(&x) || !range.contains(&y) {
             return Err(OperationProblem::OutOfRange { x, y });
         }
-        let (draft_board, layout) = self.draft_board(&board)?;
+        let (draft_board, free_space) = self.draft_board(&board)?;
         let placement = draft_board.placements.get_mut(&element).ok_or_else(|| {
             OperationProblem::NotOnBoard {
                 element: element.clone(),
@@ -486,7 +487,7 @@ impl<'snapshot> Draft<'snapshot> {
         })?;
         placement.rect.x = x;
         placement.rect.y = y;
-        layout.occupy(&placement.rect);
+        free_space.occupy(&placement.rect);
         Ok(())
     }
 
@@ -674,9 +675,9 @@ impl<'snapshot> Draft<'snapshot> {
             });
         }
         for board in self.boards_placing(&id) {
-            let (draft_board, layout) = self.draft_board(&board)?;
+            let (draft_board, free_space) = self.draft_board(&board)?;
             draft_board.placements.remove(&id);
-            *layout = Layout::of(draft_board);
+            *free_space = FreeSpace::of(draft_board);
         }
         self.homed.remove(&id);
         self.elements.remove(&id);
@@ -805,10 +806,13 @@ impl<'snapshot> Draft<'snapshot> {
         Ok(())
     }
 
-    /// The board as the request has changed it so far, with the layout of
-    /// its free space. A board the request has not touched yet is loaded
+    /// The board as the request has changed it so far, with its free space.
+    /// A board the request has not touched yet is loaded
     /// from the snapshot on first use.
-    fn draft_board(&mut self, board: &BoardId) -> Result<&mut (Board, Layout), OperationProblem> {
+    fn draft_board(
+        &mut self,
+        board: &BoardId,
+    ) -> Result<&mut (Board, FreeSpace), OperationProblem> {
         match self.boards.entry(board.clone()) {
             Entry::Occupied(entry) => Ok(entry.into_mut()),
             Entry::Vacant(entry) => {
@@ -817,7 +821,7 @@ impl<'snapshot> Draft<'snapshot> {
                     .boards
                     .get(board)
                     .ok_or_else(|| OperationProblem::UnknownBoard(board.clone()))?;
-                Ok(entry.insert((existing.clone(), Layout::of(existing))))
+                Ok(entry.insert((existing.clone(), FreeSpace::of(existing))))
             }
         }
     }

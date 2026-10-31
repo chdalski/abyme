@@ -34,7 +34,7 @@ person placed by hand where it is.
 
 - [x] `Rect` knows its edges and overlaps
 - [x] A board holds placements, not bare rectangles
-- [ ] Free-space placement takes a size
+- [x] Free-space placement takes a size
 - [ ] Pinned placements
 - [ ] Box sizes from text
 - [ ] `layout_board`
@@ -88,13 +88,13 @@ it is; the tests in `crates/abyme-core/src/layout.rs`, the placement tests in
 
 Review path: Reviewer-only
 
-- [ ] Free-space placement lives in a module of its own under `layout/`, under
+- [x] Free-space placement lives in a module of its own under `layout/`, under
       a name that says free space, and takes the size of the box.
-- [ ] A box taller than one grid row takes a cell whose column has enough free
+- [x] A box taller than one grid row takes a cell whose column has enough free
       rows below it, and no placement overlaps it; a new test covers this.
-- [ ] The named tests pass with their assertions unchanged, changed only
+- [x] The named tests pass with their assertions unchanged, changed only
       mechanically for the new name.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`, and
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`, and
       `cargo fmt --all --check` pass.
 
 ### Task 4: Pinned placements
