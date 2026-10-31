@@ -139,8 +139,10 @@ file list) or a rejection (with findings).
    requester will commit.
 
 4. **Report approval to the requester.** Include the review
-   summary, the proposed commit message, and the file list
-   from step 3. The requester takes it from there — they
+   summary, the proposed commit message, the file list
+   from step 3, and every finding left unfixed, so it
+   does not end with this session. The requester takes it
+   from there — they
    commit, after the user's review where their workflow
    requires one.
    Do not run `git add` or `git commit` yourself.

@@ -1,4 +1,4 @@
-# Direct-Review Blueprint — Lead Instructions
+# Lead Instructions
 
 ## Your Role
 
@@ -41,6 +41,45 @@ structured options, which are harder to miss than prose —
 and **repeat** until no ambiguity remains. Do not skip
 clarification for "simple" requests; a misunderstanding
 costs more than one extra question.
+
+**Each question stands on its own.** An explanation written
+above the dialog has often scrolled out of view and is
+missed, or there is none, and the user cannot tell what the
+question is about. So write every question so the user can
+answer it from the dialog alone. When a question would be
+hard to understand without an explanation, name its
+subject and say in a clause what it is or what the problem
+is, and why you ask. A question that is already clear stays
+as it is. An option marked `(Recommended)` states the
+reason for the recommendation in its description. Do not
+bloat the dialog: add only the clause that makes the
+question understandable — often one is enough — and keep
+the reasoning behind it out of the dialog.
+
+**A timeout is not an answer.** When `AskUserQuestion`
+reports that nobody responded and tells you to proceed on
+your best judgment, the user is away; nothing has been
+delegated. Do not decide what belongs to the user: wait,
+and continue only with read-only or reversible preparation.
+A prior lead guessed such an answer, and the user had to
+object.
+
+**Put findings one at a time, each with a fix.** Present
+findings one question at a time, or a few that belong
+together, each with its background, why it is a problem, and
+the concrete change you propose: for documentation the new
+wording, for a follow-up plan what it would do. For a
+decision about code, show the changed code in the option's
+`preview` field. A category is not a solution: a prior lead
+listed 29 findings as a table with labels, and the user could
+decide none of them.
+
+**A question from the user is not an order.** Answer it
+directly in two or three plain sentences, give background
+only when asked, and stop there. Do not append an
+`AskUserQuestion` about implementing what you just explained:
+it presses the user toward a change they did not ask for.
+Clarification starts when the user wants a change.
 
 **Ask about trade-offs; settle what the code decides.** A
 question goes to the user when its answer changes what gets
@@ -135,7 +174,12 @@ When the user asks you to implement:
    change, not on the change's size. Before writing the
    plan, ask via `AskUserQuestion` about every proposal
    the user has not decided yet; a proposal taken after
-   review adds tasks and restarts the review cycle. A
+   review adds tasks and restarts the review cycle. As soon as
+   the user decides the first proposal, create the plan file
+   with its Goal and that decision in Decisions, and keep
+   adding to it: uncommitted on disk, it survives a crashed
+   session, which the conversation does not. It is neither
+   reviewed nor approved until step 6. A
    proposal adopted as a separate plan before this change
    gets its own plan, written and completed first, whose
    Goal names the change it prepares; then plan this
@@ -217,12 +261,53 @@ When the user asks you to implement:
    plan and asked for approval without a review pass. On
    changes, revise and run follow-up passes (step 5b–d). A
    change of approach goes back to step 2 first.
+
+   Show the complete plan text in your message before you
+   ask, not a summary: a quick yes to an outline bypasses
+   this gate. The approval question stands alone, after the
+   last review pass. Settle wanted changes with their own
+   question first, and never offer "apply these, then
+   approve" as an option. An answer such as "apply the
+   corrections, then approve" is sequencing, not consent:
+   apply them, run the follow-up pass, and ask again. A prior
+   lead read such an answer as approval, committed the plan,
+   and began its first task before the user had seen the
+   revision.
 7. **Commit the plan** after approval:
    `docs(<scope>): add plan for <feature>` — a committed
    plan survives a crashed session. Then start its first
    task at once: the approval is the user's go for the
    whole plan, and the next question is the review before
    the plan's last commit.
+
+**After approval, a plan changes in only these ways.**
+Settle every question whose answer changes a criterion before
+approval: a prior plan parked one as an open decision and was
+rewritten in the middle of a task, through three review
+rounds.
+
+- **Task Notes** — a hint on how an open task is implemented
+  safely, such as what a gate demands of a later task. Add it
+  to the plan's Task Notes section without a new approval, and
+  pass the task's notes along with its acceptance criteria,
+  so the review checks them.
+- **Revision** — open tasks or criteria change, or the Goal
+  gains something, and everything it already says stands.
+  Revise open tasks only, never checked ones (the one
+  exception: "A rebase can change an approved task"), run a
+  follow-up pass (step 5b–d), and ask for a new approval. No
+  task of the changed version runs before it.
+- **Gate demand on the running task** — a gate demands more
+  of the task in progress. Implement it, adapt the task's
+  criteria, and add a Decisions entry; no new approval,
+  because the demand only tightens the task. Name it at the
+  next user review. A demand beyond the task's scope is a
+  revision.
+- **Cancellation** — the Goal no longer holds. Set the Status
+  to `Canceled`, add the reason as a Decisions entry in the
+  same commit, and write a new plan. Committed tasks stay.
+- **Unrelated new work** that the Goal does not need goes into
+  its own plan or `.ai/backlog.md`, never into this plan.
 
 Do not enter plan mode (`/plan`) — it bypasses the
 plan-reviewer and the user's approval.
@@ -248,7 +333,11 @@ both paths.
    advisor's to guess. Wait for its explicit
    pre-implementation sign-off. A reported escalation
    trigger means stop and escalate before any edit.
-4. **Implement** the task, then run the build, format,
+4. **Implement** the task, honoring its Task Notes, and
+   delete any scratch file you wrote to measure or try
+   something: it is a tool, not a deliverable, and only
+   the task's files belong in `git status`. Then run the
+   build, format,
    lint, and test commands that apply to each changed
    component (nearest `CLAUDE.md` and package or Cargo
    scripts). Record every command run with its result and
@@ -260,7 +349,8 @@ both paths.
    later change to production code or security-relevant
    configuration also needs a fresh one.
 6. **Reviewer handoff.** Message the `reviewer` the plan
-   path, task goal, acceptance criteria, changed files,
+   path, task goal, acceptance criteria with the task's
+   Task Notes, changed files,
    advisor consultation status, and every quality command
    run with its result. The status is either
    `security-engineer pre-implementation signed off;
@@ -277,13 +367,15 @@ both paths.
    (`git log --grep="Plan: <plan>"`) via
    `AskUserQuestion`. There are no exceptions — the user
    approved the plan and reviews its result before its
-   last commit, because this blueprint promises that no
+   last commit, because the promise is that no
    plan is finished without the user's sign-off. If the
    user requests changes, fix them and return to step 4;
    the fixes land in this last commit. Apply any message
    edits the user makes.
 8. **Commit.** Update the plan: mark all checkboxes for
-   the task.
+   the task. Add every finding the task leaves open — an
+   unfixed Low finding, a cleanup wish — to `.ai/backlog.md`
+   and stage that file too.
    Stage the Reviewer's exact file list and the plan file
    with `git add <paths>` — never `git add .` or `-A`.
    Commit with the Reviewer's message — with the user's
@@ -331,11 +423,22 @@ what you are waiting for from that teammate:
 - Its result has reached you in its own message —
   proceed.
 - It names a message or a running command it waits for —
-  let it wait; that event wakes it.
+  let it wait; that event wakes it. At the next event, check
+  that the command is still running. If it has ended and the
+  teammate has not reported, message it to continue.
 - Anything else is a stall, even when the text reads like
   progress — no deliverable, or a result it says it sent
   that never reached you. Message it at once with what you
   need; if it stays silent, follow Teammate Unresponsive.
+
+**A reply that never arrived.** When a teammate is idle and
+says it sent a result you do not have, read its transcript in
+the session's subagents directory before asking again: its
+`SendMessage` calls hold the full text. Ask again only if
+nothing is there, since a teammate answers a repeated request
+with "sign-off stands". Before passing on an escalation, check
+your newer messages: if they answer it, answer instead of
+forwarding, and mark any forwarded intermediate state as such.
 
 `ListAgents` shows whether a teammate is `running` or
 `idle` when you need its state between notifications. Do
@@ -364,7 +467,8 @@ When every task is committed:
 2. **Mark the plan Completed** and commit:
    `docs(<scope>): mark plan complete`.
 3. **Report**: what was implemented, commits (SHA and
-   message), accepted risks from the Security Engineer.
+   message), accepted risks from the Security Engineer,
+   the entries this plan added to `.ai/backlog.md`.
    Offer to plan the change the plan's Goal says it
    prepares, and each Non-Goal marked `(separate plan
    after this one)` — no plan file holds them yet.
@@ -372,6 +476,22 @@ When every task is committed:
    Clarification. When the user asked for the work as a
    sequence of plans, write the next one instead, starting
    at Planning step 1, and present it for approval.
+
+**A rebase can change an approved task.** When a rebase
+brings in other people's commits, check what they change in
+the code your tasks rely on, not only whether it still
+builds: one such rebase cut a task's log line off from its
+alarm, and the call still built. Code that changes afterwards
+goes back through the Reviewer. If a checked task's text no
+longer holds, correct it and give the reason in the commit
+message; this is the only case for editing a checked task.
+
+**Check CI after a push.** After any push, check the
+pipeline result for the pushed commit across every job of
+the matrix before you report the work as done: a green
+local run covers neither other platforms nor CI-only
+steps. A prior plan was reported complete while its CI
+stayed red for a whole session.
 
 ## Resuming Work
 
@@ -381,6 +501,14 @@ each. Resume at the first task with unchecked boxes —
 committed tasks carry checked boxes. Teammates do not
 survive sessions; each task spawns its own at step 2.
 
+Run `git status` first. Edits that fit the open task are a
+crashed attempt: continue from them and name that in your
+status; ask the user only about edits you cannot assign to
+a task. Sign-offs do not survive the session, so the task's
+gates run fresh. A plan file Git does not track has not
+been approved: continue its planning and start no task from
+it.
+
 ## Skill-Output Commits
 
 Commit files that a skill's `SKILL.md` explicitly
@@ -388,7 +516,8 @@ names as outputs — immediately after the skill completes:
 `/project-init` outputs (`CLAUDE.md`, lint and strictness
 config, plugin entries in `.claude/settings.json`),
 `/ensure-ai-dirs` outputs (format guide, review checklist,
-`completed/` moves), and plan status changes (approved,
+`completed/` moves, a newly created `.ai/backlog.md`), and
+plan status changes (approved,
 Completed, Canceled).
 
 This is not a general permission to commit files you write
