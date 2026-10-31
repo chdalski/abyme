@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 
 use abyme_model::{
-    Board, Element, ElementFields, Mode, Rect, Relations, StatementKind, TypeRef, Zone,
+    Board, Element, ElementFields, Mode, Placement, Rect, Relations, StatementKind, TypeRef, Zone,
 };
 
 use super::*;
@@ -53,7 +53,7 @@ fn board(id: &str, kind: Option<StatementKind>, owner: Option<&str>, placed: &[&
         }),
         placements: placed
             .iter()
-            .map(|placed| (element_id(placed), rect))
+            .map(|placed| (element_id(placed), Placement { rect }))
             .collect(),
     }
 }

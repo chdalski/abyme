@@ -5,8 +5,8 @@ use std::num::NonZeroU32;
 
 use abyme_core::{Applied, Created, LocalKey, Operation, Ref, Snapshot, Write, apply};
 use abyme_model::{
-    Anchor, Board, BoardId, CommitId, Element, ElementFields, ElementId, Mode, Rect, RelationKind,
-    Relations, StatementKind, TypeRef, Verification, Verifier, Zone,
+    Anchor, Board, BoardId, CommitId, Element, ElementFields, ElementId, Mode, Placement, Rect,
+    RelationKind, Relations, StatementKind, TypeRef, Verification, Verifier, Zone,
 };
 use proptest::prelude::*;
 
@@ -104,7 +104,11 @@ fn snapshot() -> impl Strategy<Value = Snapshot> {
     let board = (
         board_id(),
         any::<String>(),
-        prop::collection::btree_map(element_id(), rect(), 0..4),
+        prop::collection::btree_map(
+            element_id(),
+            rect().prop_map(|rect| Placement { rect }),
+            0..4,
+        ),
     )
         .prop_map(|(id, title, placements)| Board {
             id,
@@ -667,22 +671,22 @@ fn check(
                         prop_assert_eq!(&board.summary, &before.summary);
                         prop_assert_eq!(&board.zone, &before.zone);
                     }
-                    for (id, rect) in &before.placements {
+                    for (id, placement) in &before.placements {
                         // A placement disappears only through delete_element.
-                        let expected = (!deleted.contains(id)).then_some(rect);
+                        let expected = (!deleted.contains(id)).then_some(placement);
                         prop_assert_eq!(board.placements.get(id), expected);
                     }
                 }
-                let old: BTreeMap<&ElementId, &Rect> = before
+                let old: BTreeMap<&ElementId, &Placement> = before
                     .map(|before| before.placements.iter().collect())
                     .unwrap_or_default();
-                for (id, rect) in &board.placements {
+                for (id, placement) in &board.placements {
                     if old.contains_key(id) {
                         continue;
                     }
                     for (other_id, other) in &board.placements {
                         prop_assert!(
-                            other_id == id || !rect.overlaps(other),
+                            other_id == id || !placement.rect.overlaps(&other.rect),
                             "{id} overlaps {other_id}"
                         );
                     }

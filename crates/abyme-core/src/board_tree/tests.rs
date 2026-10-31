@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU32;
 
-use abyme_model::Rect;
+use abyme_model::{Placement, Rect};
 use proptest::prelude::*;
 use rstest::rstest;
 
@@ -35,7 +35,7 @@ fn board(id: &str, owner: Option<&str>, elements: &[&str]) -> (BoardId, Board) {
             zone: None,
             placements: elements
                 .iter()
-                .map(|element| (element_id(element), rect))
+                .map(|element| (element_id(element), Placement { rect }))
                 .collect(),
         },
     )

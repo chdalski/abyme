@@ -51,7 +51,6 @@ classDiagram
         rect: Rect
     }
     class Placement {
-        element: ElementId
         is_reference: bool
         frame: Option~FrameId~
         rect: Rect
@@ -127,7 +126,7 @@ pub struct Board {
     pub summary: Option<String>,
     pub zone: Option<Zone>,                  // a board without one is no zone
     pub frames: Vec<Frame>,
-    pub placements: Vec<Placement>,
+    pub placements: BTreeMap<ElementId, Placement>,   // at most one per element, ordered by ID
 }
 
 pub struct Frame {
@@ -138,7 +137,6 @@ pub struct Frame {
 }
 
 pub struct Placement {
-    pub element: ElementId,
     pub is_reference: bool,                  // false: home, true: reference
     pub frame: Option<FrameId>,
     pub rect: Rect,

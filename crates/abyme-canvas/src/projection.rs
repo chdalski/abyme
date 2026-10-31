@@ -81,7 +81,9 @@ pub fn project(snapshot: &Snapshot, board: &BoardId) -> Result<BoardView, Unknow
         placements: found
             .placements
             .iter()
-            .map(|(element, rect)| placement(element, rect, snapshot.elements.get(element)))
+            .map(|(element, placed)| {
+                placement(element, &placed.rect, snapshot.elements.get(element))
+            })
             .collect(),
     })
 }

@@ -304,7 +304,7 @@ fn apply_writes_a_move_into_the_board_file() {
 
     assert_eq!(applied, Ok(Value::Null));
     let after = placements(&project);
-    let (moved, was) = (&after[&payments], &before[&payments]);
+    let (moved, was) = (&after[&payments].rect, &before[&payments].rect);
     assert_eq!((moved.x, moved.y), (400, -200));
     assert_eq!((moved.width, moved.height), (was.width, was.height));
     assert_eq!(after[&orders], before[&orders]);

@@ -2,8 +2,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU32;
 
 use abyme_model::{
-    Anchor, CommitId, ElementFields, FORMAT_AND_SEPARATORS, Mode, Rect, Relations, TypeRef,
-    Verification, Verifier,
+    Anchor, CommitId, ElementFields, FORMAT_AND_SEPARATORS, Mode, Placement, Rect, Relations,
+    TypeRef, Verification, Verifier,
 };
 use proptest::prelude::*;
 use rstest::rstest;
@@ -52,7 +52,7 @@ fn snapshot(title: &str, elements: Vec<Element>, missing: &[&str]) -> Snapshot {
         owner: None,
         summary: None,
         zone: None,
-        placements: placed.map(|id| (id, rect())).collect(),
+        placements: placed.map(|id| (id, Placement { rect: rect() })).collect(),
     };
     Snapshot {
         elements: elements
@@ -452,7 +452,7 @@ fn with_rect(mut snapshot: Snapshot, id: &str, rect: Rect) -> Snapshot {
         .get_mut(&"b".parse().unwrap())
         .unwrap()
         .placements
-        .insert(id.parse().unwrap(), rect);
+        .insert(id.parse().unwrap(), Placement { rect });
     snapshot
 }
 
@@ -787,7 +787,7 @@ fn detail_snapshot() -> Snapshot {
         owner: None,
         summary: None,
         zone: None,
-        placements: BTreeMap::from([("payment".parse().unwrap(), rect())]),
+        placements: BTreeMap::from([("payment".parse().unwrap(), Placement { rect: rect() })]),
     };
     snapshot.boards.insert(onboarding.id.clone(), onboarding);
     snapshot
@@ -1354,7 +1354,7 @@ fn hierarchy_board(id: &str, owner: Option<&str>, placed: &[&str]) -> Board {
         zone: None,
         placements: placed
             .iter()
-            .map(|element| (element.parse().unwrap(), rect()))
+            .map(|element| (element.parse().unwrap(), Placement { rect: rect() }))
             .collect(),
     }
 }

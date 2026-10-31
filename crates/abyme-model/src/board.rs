@@ -36,12 +36,19 @@ pub struct Board {
     /// The board's mode and the statement kind of its content, if it is a
     /// zone.
     pub zone: Option<Zone>,
-    /// The rectangle of each element on the board. A map, so an element
+    /// The placement of each element on the board. A map, so an element
     /// lies on a board at most once and the order is always by element ID.
-    pub placements: BTreeMap<ElementId, Rect>,
+    pub placements: BTreeMap<ElementId, Placement>,
 }
 
-/// Where an element lies on a board and how large it is.
+/// An element's place on a board.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Placement {
+    /// Where the element lies and how large it is.
+    pub rect: Rect,
+}
+
+/// A position and a size on a board.
 ///
 /// Positions fit in `i32` and sizes in `u32`, so a position plus a size
 /// cannot overflow `i64`, and every value survives a JavaScript number.
@@ -193,7 +200,7 @@ impl Board {
         let lines: Vec<String> = self
             .placements
             .iter()
-            .map(|(element, rect)| placement_line(element, rect))
+            .map(|(element, placement)| placement_line(element, placement))
             .collect();
         let placements = if lines.is_empty() {
             "[]".to_owned()
@@ -233,7 +240,7 @@ fn optional_line(key: &str, value: Option<String>) -> String {
 fn collect_placements(
     board: &BoardId,
     lines: Vec<ObjectOnly<PlacementLine>>,
-) -> Result<BTreeMap<ElementId, Rect>, BoardError> {
+) -> Result<BTreeMap<ElementId, Placement>, BoardError> {
     let mut placements = BTreeMap::new();
     for ObjectOnly(line) in lines {
         let rect = Rect {
@@ -244,7 +251,7 @@ fn collect_placements(
         };
         match placements.entry(line.element) {
             Entry::Vacant(slot) => {
-                slot.insert(rect);
+                slot.insert(Placement { rect });
             }
             Entry::Occupied(slot) => {
                 return Err(BoardError::DuplicatePlacement {
@@ -258,7 +265,8 @@ fn collect_placements(
 }
 
 /// One placement as a line of the file.
-fn placement_line(element: &ElementId, rect: &Rect) -> String {
+fn placement_line(element: &ElementId, placement: &Placement) -> String {
+    let Placement { rect } = placement;
     format!(
         "    {{\"element\": {}, \"x\": {}, \"y\": {}, \"width\": {}, \"height\": {}}}",
         json_string(element.as_str()),
@@ -305,8 +313,18 @@ mod tests {
             summary: None,
             zone: None,
             placements: BTreeMap::from([
-                (element_id("checkout-service"), rect(80, 200)),
-                (element_id("payment-service"), rect(400, 200)),
+                (
+                    element_id("checkout-service"),
+                    Placement {
+                        rect: rect(80, 200),
+                    },
+                ),
+                (
+                    element_id("payment-service"),
+                    Placement {
+                        rect: rect(400, 200),
+                    },
+                ),
             ]),
         }
     }
@@ -345,9 +363,12 @@ mod tests {
     fn moving_one_placement_changes_exactly_one_line() {
         let before = sample_board();
         let mut after = before.clone();
-        after
-            .placements
-            .insert(element_id("payment-service"), rect(420, 240));
+        after.placements.insert(
+            element_id("payment-service"),
+            Placement {
+                rect: rect(420, 240),
+            },
+        );
 
         let before_json = before.to_json();
         let after_json = after.to_json();

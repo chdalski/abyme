@@ -1,5 +1,5 @@
 **Repository:** root
-**Status:** NotStarted
+**Status:** InProgress
 **Created:** 2026-10-31
 
 ## Goal
@@ -33,7 +33,7 @@ person placed by hand where it is.
 ## Steps
 
 - [x] `Rect` knows its edges and overlaps
-- [ ] A board holds placements, not bare rectangles
+- [x] A board holds placements, not bare rectangles
 - [ ] Free-space placement takes a size
 - [ ] Pinned placements
 - [ ] Box sizes from text
@@ -68,12 +68,12 @@ the tests in `crates/abyme-model/src/board.rs` and
 
 Review path: Security-Hybrid
 
-- [ ] `Board.placements` holds a `Placement` per element, and every reader and
+- [x] `Board.placements` holds a `Placement` per element, and every reader and
       writer goes through it.
-- [ ] Those tests pass, changed only mechanically to reach the rectangle
+- [x] Those tests pass, changed only mechanically to reach the rectangle
       through the placement.
-- [ ] Data Model and the rustdoc of `Board` describe the type as delivered.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`, and
+- [x] Data Model and the rustdoc of `Board` describe the type as delivered.
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`, and
       `cargo fmt --all --check` pass.
 
 ### Task 3: Free-space placement takes a size

@@ -40,11 +40,15 @@ impl Layout {
                     board
                         .placements
                         .values()
-                        .any(|rect| rect.overlaps(&candidate))
+                        .any(|placement| placement.rect.overlaps(&candidate))
                 })
             })
             .collect();
-        let lowest_bottom = board.placements.values().map(Rect::bottom).max();
+        let lowest_bottom = board
+            .placements
+            .values()
+            .map(|placement| placement.rect.bottom())
+            .max();
         Self {
             occupied,
             lowest_bottom,
@@ -124,7 +128,7 @@ mod tests {
     use super::*;
     use std::collections::BTreeMap;
 
-    use abyme_model::{BoardId, ElementId};
+    use abyme_model::{BoardId, ElementId, Placement};
 
     fn rect(x: i32, y: i32, width: u32, height: u32) -> Rect {
         Rect {
@@ -144,7 +148,7 @@ mod tests {
             zone: None,
             placements: placements
                 .iter()
-                .map(|(id, rect)| (id.parse::<ElementId>().unwrap(), *rect))
+                .map(|(id, rect)| (id.parse::<ElementId>().unwrap(), Placement { rect: *rect }))
                 .collect::<BTreeMap<_, _>>(),
         }
     }

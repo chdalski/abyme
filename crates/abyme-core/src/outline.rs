@@ -287,9 +287,9 @@ pub fn outline(
     )
     .into_iter()
     .zip(found.placements.values())
-    .map(|(mut columns, rect)| {
+    .map(|(mut columns, placement)| {
         if geometry == Geometry::Shown {
-            columns.insert(1, position(rect));
+            columns.insert(1, position(&placement.rect));
         }
         columns
     })

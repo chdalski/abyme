@@ -15,12 +15,14 @@ fn board_id(value: &str) -> BoardId {
     value.parse().unwrap()
 }
 
-fn rect(x: i32, y: i32, width: u32, height: u32) -> Rect {
-    Rect {
-        x,
-        y,
-        width: NonZeroU32::new(width).unwrap(),
-        height: NonZeroU32::new(height).unwrap(),
+fn placed(x: i32, y: i32, width: u32, height: u32) -> abyme_model::Placement {
+    abyme_model::Placement {
+        rect: Rect {
+            x,
+            y,
+            width: NonZeroU32::new(width).unwrap(),
+            height: NonZeroU32::new(height).unwrap(),
+        },
     }
 }
 
@@ -50,8 +52,8 @@ fn snapshot() -> Snapshot {
         summary: None,
         zone: None,
         placements: BTreeMap::from([
-            (element_id("payments"), rect(40, 80, 180, 90)),
-            (element_id("orders"), rect(-20, 300, 200, 100)),
+            (element_id("payments"), placed(40, 80, 180, 90)),
+            (element_id("orders"), placed(-20, 300, 200, 100)),
         ]),
     };
     let payments = element(
@@ -116,7 +118,7 @@ fn extreme_rects_pass_unchanged() {
     let board = snapshot.boards.get_mut(&board_id("context")).unwrap();
     board.placements = BTreeMap::from([(
         element_id("payments"),
-        rect(i32::MIN, i32::MAX, u32::MAX, u32::MAX),
+        placed(i32::MIN, i32::MAX, u32::MAX, u32::MAX),
     )]);
 
     let view = project(&snapshot, &board_id("context")).unwrap();

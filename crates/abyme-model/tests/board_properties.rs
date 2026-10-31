@@ -2,7 +2,7 @@
 
 use std::num::NonZeroU32;
 
-use abyme_model::{Board, BoardId, ElementId, Mode, Rect, StatementKind, Zone};
+use abyme_model::{Board, BoardId, ElementId, Mode, Placement, Rect, StatementKind, Zone};
 use proptest::prelude::*;
 
 /// Valid IDs: hyphen-joined words of lowercase letters and digits that pass
@@ -48,7 +48,11 @@ fn board() -> impl Strategy<Value = Board> {
         proptest::option::of(element_id()),
         proptest::option::of(any::<String>()),
         proptest::option::of(zone()),
-        proptest::collection::btree_map(element_id(), rect(), 0..8),
+        proptest::collection::btree_map(
+            element_id(),
+            rect().prop_map(|rect| Placement { rect }),
+            0..8,
+        ),
     )
         .prop_map(|(id, title, owner, summary, zone, placements)| Board {
             id,

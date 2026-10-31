@@ -9,8 +9,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use abyme_model::{
-    Anchor, Board, BoardId, Element, ElementFields, ElementId, ElementProblem, RelationKind,
-    Relations, TypeRef, Zone,
+    Anchor, Board, BoardId, Element, ElementFields, ElementId, ElementProblem, Placement,
+    RelationKind, Relations, TypeRef, Zone,
 };
 
 use crate::board_tree::BoardTree;
@@ -457,7 +457,9 @@ impl<'snapshot> Draft<'snapshot> {
         let rect = layout
             .place()
             .ok_or_else(|| OperationProblem::BoardFull(board.clone()))?;
-        draft_board.placements.insert(element.clone(), rect);
+        draft_board
+            .placements
+            .insert(element.clone(), Placement { rect });
         self.homed.insert(element);
         Ok(())
     }
@@ -482,9 +484,9 @@ impl<'snapshot> Draft<'snapshot> {
                 board: board.clone(),
             }
         })?;
-        placement.x = x;
-        placement.y = y;
-        layout.occupy(placement);
+        placement.rect.x = x;
+        placement.rect.y = y;
+        layout.occupy(&placement.rect);
         Ok(())
     }
 

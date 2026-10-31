@@ -17,7 +17,8 @@ use abyme_index::{
     ModelSpec, ProjectKey, UserCache, indexed_text,
 };
 use abyme_model::{
-    Board, Element, ElementFields, ElementId, Mode, Rect, Relations, StatementKind, TypeRef, Zone,
+    Board, Element, ElementFields, ElementId, Mode, Placement, Rect, Relations, StatementKind,
+    TypeRef, Zone,
 };
 use fastembed::{Pooling, QuantizationMode};
 use futures::TryStreamExt as _;
@@ -917,7 +918,7 @@ fn zoned(
             }),
             placements: placed
                 .iter()
-                .map(|placed| Ok((placed.parse()?, rect)))
+                .map(|placed| Ok((placed.parse()?, Placement { rect })))
                 .collect::<TestResult<_>>()?,
         };
         snapshot.boards.insert(board.id.clone(), board);

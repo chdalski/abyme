@@ -20,13 +20,8 @@ fn board_id(value: &str) -> BoardId {
     value.parse().unwrap()
 }
 
-fn rect(x: i32, y: i32) -> Rect {
-    Rect {
-        x,
-        y,
-        width: NonZeroU32::new(180).unwrap(),
-        height: NonZeroU32::new(90).unwrap(),
-    }
+fn placed(x: i32, y: i32) -> Placement {
+    sized(x, y, 180, 90)
 }
 
 fn element(id: &str) -> Element {
@@ -56,8 +51,8 @@ fn snapshot() -> Snapshot {
         summary: None,
         zone: None,
         placements: BTreeMap::from([
-            (element_id("orders-db"), rect(0, 0)),
-            (element_id("ghost"), rect(220, 0)),
+            (element_id("orders-db"), placed(0, 0)),
+            (element_id("ghost"), placed(220, 0)),
         ]),
     };
     Snapshot {
@@ -111,7 +106,7 @@ fn creates_and_places_in_one_request() {
     let board = written_board(&applied, "container-level");
     assert_eq!(
         board.placements.get(&element_id("payment-service")),
-        Some(&rect(0, 0))
+        Some(&placed(0, 0))
     );
 }
 
@@ -193,8 +188,14 @@ fn places_two_elements_of_one_request_without_overlap() {
     let applied = apply(&snapshot(), &operations(json)).unwrap();
 
     let board = written_board(&applied, "main");
-    assert_eq!(board.placements.get(&element_id("a")), Some(&rect(440, 0)));
-    assert_eq!(board.placements.get(&element_id("b")), Some(&rect(660, 0)));
+    assert_eq!(
+        board.placements.get(&element_id("a")),
+        Some(&placed(440, 0))
+    );
+    assert_eq!(
+        board.placements.get(&element_id("b")),
+        Some(&placed(660, 0))
+    );
 }
 
 /// `snapshot()` with `orders-db` sized 300 × 50 and a second board `side`
@@ -215,18 +216,20 @@ fn snapshot_with_two_boards() -> Snapshot {
             owner: None,
             summary: None,
             zone: None,
-            placements: BTreeMap::from([(element_id("loose"), rect(0, 0))]),
+            placements: BTreeMap::from([(element_id("loose"), placed(0, 0))]),
         },
     );
     snapshot
 }
 
-fn sized(x: i32, y: i32, width: u32, height: u32) -> Rect {
-    Rect {
-        x,
-        y,
-        width: NonZeroU32::new(width).unwrap(),
-        height: NonZeroU32::new(height).unwrap(),
+fn sized(x: i32, y: i32, width: u32, height: u32) -> Placement {
+    Placement {
+        rect: Rect {
+            x,
+            y,
+            width: NonZeroU32::new(width).unwrap(),
+            height: NonZeroU32::new(height).unwrap(),
+        },
     }
 }
 
@@ -260,7 +263,7 @@ fn accepts_a_move_to_the_ends_of_the_range(#[case] x: i32, #[case] y: i32) {
     let board = written_board(&applied, "main");
     assert_eq!(
         board.placements.get(&element_id("orders-db")),
-        Some(&rect(x, y))
+        Some(&placed(x, y))
     );
 }
 
@@ -278,7 +281,7 @@ fn moves_an_element_that_the_request_creates_and_places() {
     let board = written_board(&applied, "b");
     assert_eq!(
         board.placements.get(&element_id("e")),
-        Some(&rect(1000, -50))
+        Some(&placed(1000, -50))
     );
 }
 
@@ -294,7 +297,7 @@ fn keeps_the_later_of_two_moves() {
     let board = written_board(&applied, "main");
     assert_eq!(
         board.placements.get(&element_id("orders-db")),
-        Some(&rect(30, 40))
+        Some(&placed(30, 40))
     );
 }
 
@@ -310,11 +313,11 @@ fn places_no_element_on_a_free_cell_that_a_move_took() {
     let board = written_board(&applied, "main");
     assert_eq!(
         board.placements.get(&element_id("orders-db")),
-        Some(&rect(440, 0))
+        Some(&placed(440, 0))
     );
     assert_eq!(
         board.placements.get(&element_id("loose")),
-        Some(&rect(660, 0))
+        Some(&placed(660, 0))
     );
 }
 
@@ -339,7 +342,7 @@ fn places_no_element_where_a_move_went_below_the_content() {
     let board = written_board(&applied, "main");
     assert_eq!(
         board.placements.get(&element_id("loose")),
-        Some(&rect(0, 8360 + 90 + 40))
+        Some(&placed(0, 8360 + 90 + 40))
     );
 }
 
@@ -682,7 +685,7 @@ fn reports_a_full_board() {
         .get_mut(&board_id("main"))
         .unwrap()
         .placements
-        .insert(element_id("huge"), huge);
+        .insert(element_id("huge"), Placement { rect: huge });
     let json = r#"[{"op": "place_element", "element": {"existing": "loose"}, "board": {"existing": "main"}}]"#;
 
     assert_eq!(
@@ -1153,7 +1156,7 @@ fn snapshot_for_deletion() -> Snapshot {
         owner: None,
         summary: None,
         zone: None,
-        placements: BTreeMap::from([(element_id("orders-db"), rect(0, 0))]),
+        placements: BTreeMap::from([(element_id("orders-db"), placed(0, 0))]),
     };
     snapshot.boards.insert(side.id.clone(), side);
     snapshot
@@ -1653,7 +1656,7 @@ fn owned_board(id: &str, owner: Option<&str>, elements: &[&str]) -> (BoardId, Bo
     let placements = elements
         .iter()
         .zip(0..)
-        .map(|(element, column)| (element_id(element), rect(column * 220, 0)))
+        .map(|(element, column)| (element_id(element), placed(column * 220, 0)))
         .collect();
     (
         board_id(id),

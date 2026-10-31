@@ -20,7 +20,7 @@ mod verification;
 mod zone;
 
 pub use anchor::{Anchor, AnchorRule, MAX_ANCHOR_BYTES, MAX_SEGMENT_BYTES};
-pub use board::{BOARD_FORMAT, Board, BoardError, Rect};
+pub use board::{BOARD_FORMAT, Board, BoardError, Placement, Rect};
 pub use element::{
     Element, ElementError, ElementFields, ElementProblem, MAX_FRONTMATTER_BYTES, Relations, TypeRef,
 };
