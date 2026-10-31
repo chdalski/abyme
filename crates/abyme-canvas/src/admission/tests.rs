@@ -1,8 +1,10 @@
 //! Tests of which operations the canvas may send.
 
 use super::*;
+use std::collections::BTreeMap;
 
 use abyme_core::LocalKey;
+use abyme_model::{Board, StatementKind, Zone};
 use serde_json::{Value, json};
 
 fn operation(value: Value) -> Operation {
@@ -141,4 +143,92 @@ fn a_request_with_more_operations_than_the_core_takes_is_refused() {
 #[test]
 fn a_request_with_as_many_operations_as_the_core_takes_is_admitted() {
     assert_eq!(admit(&vec![move_existing(); MAX_OPERATIONS]), Ok(()));
+}
+
+/// A board `id` that is a zone of `mode`, if one is given.
+fn board(id: &str, mode: Option<Mode>) -> Board {
+    Board {
+        id: id.parse().unwrap(),
+        title: id.to_owned(),
+        owner: None,
+        summary: None,
+        zone: mode.map(|mode| Zone {
+            mode,
+            statement: StatementKind::Current,
+        }),
+        placements: BTreeMap::new(),
+    }
+}
+
+/// A move of `payments` on the existing board `board`.
+fn a_move_on(board: &str) -> Operation {
+    operation(json!({
+        "op": "move_element",
+        "element": {"existing": "payments"},
+        "board": {"existing": board},
+        "x": 10,
+        "y": 20
+    }))
+}
+
+/// The boards `free`, `plain`, and `mirrored`, each a zone of its name, or
+/// none for `plain`.
+fn snapshot() -> Snapshot {
+    Snapshot {
+        elements: BTreeMap::new(),
+        boards: [
+            board("free", Some(Mode::Free)),
+            board("plain", None),
+            board("mirrored", Some(Mode::Mirrored)),
+        ]
+        .into_iter()
+        .map(|board| (board.id.clone(), board))
+        .collect(),
+    }
+}
+
+#[test]
+fn refuses_a_move_on_a_mirrored_board_and_names_where() {
+    let requests: [(&[&str], usize); 3] = [
+        (&["mirrored"], 1),
+        (&["free", "plain", "mirrored"], 3),
+        (&["free", "mirrored", "mirrored"], 2),
+    ];
+
+    for (boards, position) in requests {
+        let operations: Vec<Operation> = boards.iter().map(|board| a_move_on(board)).collect();
+
+        assert_eq!(
+            check_modes(&snapshot(), &operations),
+            Err(Refused::Mirrored {
+                position,
+                board: "mirrored".parse().unwrap(),
+            }),
+            "{boards:?}"
+        );
+    }
+}
+
+#[test]
+fn lets_a_move_pass_on_a_free_board_on_no_zone_and_on_a_board_it_does_not_have() {
+    for board in ["free", "plain", "nowhere"] {
+        assert_eq!(
+            check_modes(&snapshot(), &[a_move_on(board)]),
+            Ok(()),
+            "{board}"
+        );
+    }
+}
+
+#[test]
+fn names_only_the_position_and_the_board_of_a_refused_move() {
+    let refused = Refused::Mirrored {
+        position: 2,
+        board: "mirrored".parse().unwrap(),
+    };
+
+    assert_eq!(
+        refused.to_string(),
+        "operation 2: board mirrored is mirrored, so the canvas may not move its elements"
+    );
 }

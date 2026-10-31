@@ -20,6 +20,7 @@ function view(id: string, title: string, names: string[] = []): BoardView {
   return {
     id,
     title,
+    mode: null,
     placements: names.map((name, index) => ({
       element: name.toLowerCase(),
       x: index * 200,

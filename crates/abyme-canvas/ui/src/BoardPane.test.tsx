@@ -42,6 +42,7 @@ function placement(element: string, x: number) {
 const VIEW: BoardView = {
   id: "context",
   title: "Context",
+  mode: null,
   placements: [placement("orders", 300), placement("payments", 0)],
 };
 

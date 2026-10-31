@@ -11,6 +11,7 @@ function view(payments: XYPosition, orders: XYPosition): BoardView {
   return {
     id: "context",
     title: "Context",
+    mode: null,
     placements: [
       { element: "orders", ...orders, width: 180, height: 90, shown },
       { element: "payments", ...payments, width: 180, height: 90, shown },

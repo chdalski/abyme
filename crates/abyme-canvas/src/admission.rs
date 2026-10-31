@@ -1,20 +1,26 @@
 //! Which operations the canvas may send: a request reaches the project only
 //! when every one of its operations is admitted here.
 //!
-//! The check is pure and runs before any access to the project. It matches
+//! [`admit`] is pure and runs before any access to the project. It matches
 //! every variant of the core's operations and references by name, so a new
 //! one breaks the build until it is admitted or refused here.
+//! [`check_modes`] then decides from the project's files, also by name for
+//! each variant and each mode: a person does not move what lies on a mirrored
+//! board. That is a rule of this one client, not a boundary: the files stay
+//! open to the AI and to edits by hand.
 
 use std::fmt;
 
-use abyme_core::{MAX_OPERATIONS, Operation, Ref};
+use abyme_core::{MAX_OPERATIONS, Operation, Ref, Snapshot};
+use abyme_model::{BoardId, Mode};
 
 #[cfg(test)]
 mod tests;
 
 /// Why the canvas refuses a request. It names where and what kind of
-/// operation, never anything the operation carries.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// operation, and a board by its validated ID, never any other text the
+/// operation or the project holds.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Refused {
     /// The request carries more than [`MAX_OPERATIONS`] operations.
     TooMany {
@@ -28,6 +34,13 @@ pub enum Refused {
         /// The kind of operation, named by this module.
         kind: &'static str,
     },
+    /// One operation moves an element on a mirrored board.
+    Mirrored {
+        /// The operation's position in the request, counted from 1.
+        position: usize,
+        /// The board.
+        board: BoardId,
+    },
 }
 
 impl fmt::Display for Refused {
@@ -40,6 +53,11 @@ impl fmt::Display for Refused {
             Self::Operation { position, kind } => write!(
                 formatter,
                 "operation {position}: the canvas may not send {kind}"
+            ),
+            Self::Mirrored { position, board } => write!(
+                formatter,
+                "operation {position}: board {board} is mirrored, so the canvas may not move its \
+                 elements"
             ),
         }
     }
@@ -70,6 +88,48 @@ pub fn admit(operations: &[Operation]) -> Result<(), Refused> {
             refused_kind(operation).map(|kind| Refused::Operation { position, kind })
         })
         .map_or(Ok(()), Err)
+}
+
+/// Checks that no operation of a request moves an element on a mirrored
+/// board of `snapshot`. A board `snapshot` does not have passes, and the core
+/// rejects it.
+///
+/// # Errors
+///
+/// Returns [`Refused::Mirrored`] for the first such operation.
+pub fn check_modes(snapshot: &Snapshot, operations: &[Operation]) -> Result<(), Refused> {
+    operations
+        .iter()
+        .zip(1..)
+        .find_map(|(operation, position)| {
+            mirrored_board(snapshot, operation).map(|board| Refused::Mirrored {
+                position,
+                board: board.clone(),
+            })
+        })
+        .map_or(Ok(()), Err)
+}
+
+/// The board `operation` moves an element on, if it is mirrored. [`admit`]
+/// lets no other operation and no new board through; they pass here.
+fn mirrored_board<'a>(snapshot: &Snapshot, operation: &'a Operation) -> Option<&'a BoardId> {
+    match operation {
+        Operation::MoveElement { board, .. } => match board {
+            Ref::Existing(board) => match snapshot.boards.get(board)?.zone?.mode {
+                Mode::Mirrored => Some(board),
+                Mode::Free => None,
+            },
+            Ref::New(_) => None,
+        },
+        Operation::CreateElement { .. }
+        | Operation::CreateBoard { .. }
+        | Operation::UpdateBoard { .. }
+        | Operation::PlaceElement { .. }
+        | Operation::UpdateElement { .. }
+        | Operation::DeleteElement { .. }
+        | Operation::CreateRelation { .. }
+        | Operation::DeleteRelation { .. } => None,
+    }
 }
 
 /// The kind of `operation`, if the canvas may not send it.

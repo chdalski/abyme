@@ -17,7 +17,9 @@ export type Move = { element: string; position: XYPosition };
 /**
  * The boxes of `view`, one per placement, at the rect from the board file.
  * Every box has the one node type `element`; nothing from the repository
- * chooses a node type, and the node's ID is the validated element ID.
+ * chooses a node type, and the node's ID is the validated element ID. A box
+ * on a mirrored board cannot be dragged: React Flow goes by this value on the
+ * node, also for the arrow keys.
  */
 export function toNodes(view: BoardView): ElementNode[] {
   return view.placements.map((placement) => {
@@ -29,7 +31,7 @@ export function toNodes(view: BoardView): ElementNode[] {
       width: placement.width,
       height: placement.height,
       data: { element: placement.element, shown: placement.shown, home },
-      draggable: true,
+      draggable: view.mode !== "mirrored",
       connectable: false,
     };
   });

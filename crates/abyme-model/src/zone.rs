@@ -17,6 +17,7 @@ use crate::object_only::ObjectOnly;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub enum Mode {
     /// People and the AI change it, and nothing outside steers it.
     Free,

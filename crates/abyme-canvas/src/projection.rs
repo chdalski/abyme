@@ -6,7 +6,7 @@
 //! part of it.
 
 use abyme_core::{Snapshot, UnknownBoard};
-use abyme_model::{BoardId, Element, ElementId, Rect};
+use abyme_model::{BoardId, Element, ElementId, Mode, Rect};
 use serde::Serialize;
 
 #[cfg(test)]
@@ -20,6 +20,9 @@ pub struct BoardView {
     pub id: BoardId,
     /// The title shown for the board.
     pub title: String,
+    /// The board's mode, if it is a zone. The UI does not offer a drag on a
+    /// mirrored board.
+    pub mode: Option<Mode>,
     /// One entry per element on the board, in element-ID order.
     pub placements: Vec<Placement>,
 }
@@ -74,6 +77,7 @@ pub fn project(snapshot: &Snapshot, board: &BoardId) -> Result<BoardView, Unknow
     Ok(BoardView {
         id: found.id.clone(),
         title: found.title.clone(),
+        mode: found.zone.map(|zone| zone.mode),
         placements: found
             .placements
             .iter()

@@ -21,9 +21,16 @@ id: string,
  */
 title: string, 
 /**
+ * The board's mode, if it is a zone. The UI does not offer a drag on a
+ * mirrored board.
+ */
+mode: Mode | null, 
+/**
  * One entry per element on the board, in element-ID order.
  */
 placements: Array<Placement>, };
+
+export type Mode = "free" | "mirrored";
 
 export type Placement = { 
 /**

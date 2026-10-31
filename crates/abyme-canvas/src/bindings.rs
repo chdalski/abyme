@@ -5,6 +5,7 @@
 use std::fs;
 use std::path::Path;
 
+use abyme_model::Mode;
 use ts_rs::{Config, TS};
 
 use crate::boards::BoardEntry;
@@ -31,6 +32,7 @@ fn bindings() -> String {
         BINDINGS_HEADER.to_owned(),
         exported::<BoardEntry>(&config),
         exported::<BoardView>(&config),
+        exported::<Mode>(&config),
         exported::<Placement>(&config),
         exported::<Shown>(&config),
     ]

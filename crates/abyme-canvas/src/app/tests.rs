@@ -310,6 +310,180 @@ fn apply_writes_a_move_into_the_board_file() {
     assert_eq!(after[&orders], before[&orders]);
 }
 
+/// `root` as `project_with_a_board` leaves it, with the board `context` made
+/// a zone of `zone`, as the AI or a hand edit does.
+fn make_context_a_zone(root: &Path, zone: &str) {
+    let file = root.join("abyme/boards/context.board.json");
+    let text = fs::read_to_string(&file).unwrap();
+    let zoned = text.replace(
+        "  \"placements\"",
+        &format!("  \"zone\": {zone},\n  \"placements\""),
+    );
+    fs::write(file, zoned).unwrap();
+}
+
+/// A second board, `free-board`, a zone of mode free that places
+/// `payment-service` too.
+fn add_a_free_board(root: &Path) {
+    fs::write(
+        root.join("abyme/boards/free-board.board.json"),
+        r#"{"format": 1, "id": "free-board", "title": "Free",
+            "zone": {"mode": "free", "statement": "idea"}, "placements": [
+            {"element": "payment-service", "x": 0, "y": 0, "width": 180, "height": 90}]}"#,
+    )
+    .unwrap();
+}
+
+const MIRRORED: &str = r#"{"mode": "mirrored", "statement": "current"}"#;
+const FREE: &str = r#"{"mode": "free", "statement": "idea"}"#;
+
+#[test]
+fn a_move_on_a_mirrored_board_is_refused_and_writes_nothing() {
+    let root = tempfile::tempdir().unwrap();
+    project_with_a_board(root.path());
+    make_context_a_zone(root.path(), MIRRORED);
+    let before = project_files(root.path());
+    let (_app, window) = canvas(root.path());
+
+    let applied = apply_from(&window, &json!([a_move(400, 200)]));
+
+    assert_eq!(
+        applied,
+        Err(json!(
+            "operation 1: board context is mirrored, so the canvas may not move its elements"
+        ))
+    );
+    assert_eq!(project_files(root.path()), before);
+}
+
+#[test]
+fn a_request_that_also_moves_on_a_mirrored_board_writes_nothing() {
+    let root = tempfile::tempdir().unwrap();
+    project_with_a_board(root.path());
+    make_context_a_zone(root.path(), MIRRORED);
+    add_a_free_board(root.path());
+    let before = project_files(root.path());
+    let (_app, window) = canvas(root.path());
+    let on_the_free_board = json!({
+        "op": "move_element",
+        "element": {"existing": "payment-service"},
+        "board": {"existing": "free-board"},
+        "x": 1,
+        "y": 2
+    });
+
+    let applied = apply_from(&window, &json!([on_the_free_board, a_move(400, 200)]));
+
+    assert_eq!(
+        applied,
+        Err(json!(
+            "operation 2: board context is mirrored, so the canvas may not move its elements"
+        ))
+    );
+    assert_eq!(project_files(root.path()), before);
+}
+
+#[test]
+fn a_move_on_a_free_board_writes_and_keeps_the_zone() {
+    let root = tempfile::tempdir().unwrap();
+    project_with_a_board(root.path());
+    make_context_a_zone(root.path(), FREE);
+    let (_app, window) = canvas(root.path());
+
+    let applied = apply_from(&window, &json!([a_move(400, 200)]));
+
+    assert_eq!(applied, Ok(Value::Null));
+    let written = fs::read_to_string(root.path().join("abyme/boards/context.board.json")).unwrap();
+    assert!(
+        written.contains(&format!("  \"zone\": {FREE},\n")),
+        "{written}"
+    );
+    assert!(written.contains("\"x\": 400, \"y\": 200"), "{written}");
+}
+
+#[test]
+fn a_board_file_that_does_not_read_refuses_the_move_and_writes_nothing() {
+    for zone in [
+        r#"{"mode": "locked", "statement": "current"}"#,
+        r#"{"mode": {"free": null}, "statement": "current"}"#,
+    ] {
+        let root = tempfile::tempdir().unwrap();
+        project_with_a_board(root.path());
+        make_context_a_zone(root.path(), zone);
+        let before = project_files(root.path());
+        let (_app, window) = canvas(root.path());
+
+        let applied = apply_from(&window, &json!([a_move(400, 200)]));
+
+        let error = applied.unwrap_err().to_string();
+        assert!(error.contains("board context"), "{zone}: {error}");
+        assert_eq!(project_files(root.path()), before, "{zone}");
+    }
+}
+
+#[test]
+fn a_move_on_an_unknown_board_still_gets_the_core_s_answer() {
+    let root = tempfile::tempdir().unwrap();
+    project_with_a_board(root.path());
+    let before = project_files(root.path());
+    let (_app, window) = canvas(root.path());
+    let on_no_board = json!({
+        "op": "move_element",
+        "element": {"existing": "payment-service"},
+        "board": {"existing": "nowhere"},
+        "x": 1,
+        "y": 2
+    });
+
+    let applied = apply_from(&window, &json!([on_no_board]));
+
+    let error = applied.unwrap_err().to_string();
+    assert!(
+        error.contains("nowhere") && !error.contains("mirrored"),
+        "{error}"
+    );
+    assert_eq!(project_files(root.path()), before);
+}
+
+#[test]
+fn an_operation_the_canvas_may_not_send_gets_that_answer_on_a_mirrored_board_too() {
+    let root = tempfile::tempdir().unwrap();
+    project_with_a_board(root.path());
+    make_context_a_zone(root.path(), MIRRORED);
+    let (_app, window) = canvas(root.path());
+
+    let applied = apply_from(
+        &window,
+        &json!([a_move(400, 200), {"op": "create_board", "key": "b", "title": "T"}]),
+    );
+
+    assert_eq!(
+        applied,
+        Err(json!("operation 2: the canvas may not send create_board"))
+    );
+}
+
+#[test]
+fn open_board_says_the_board_s_mode_and_not_its_statement_kind() {
+    for (zone, expected) in [
+        (Some(MIRRORED), json!("mirrored")),
+        (Some(FREE), json!("free")),
+        (None, Value::Null),
+    ] {
+        let root = tempfile::tempdir().unwrap();
+        project_with_a_board(root.path());
+        if let Some(zone) = zone {
+            make_context_a_zone(root.path(), zone);
+        }
+        let (_app, window) = canvas(root.path());
+
+        let view = open_board_from(&window, json!({"board": "context"})).unwrap();
+
+        assert_eq!(view["mode"], expected, "{zone:?}");
+        assert!(!view.to_string().contains("statement"), "{view}");
+    }
+}
+
 #[test]
 fn a_request_with_a_refused_operation_writes_nothing() {
     let root = tempfile::tempdir().unwrap();

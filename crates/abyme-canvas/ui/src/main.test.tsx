@@ -11,6 +11,7 @@ const shop = vi.hoisted(() => ({
   view: {
     id: "online-shop",
     title: "Online Shop",
+    mode: null,
     placements: [
       {
         element: "orders-database",

@@ -51,7 +51,7 @@ board refuse the drags a person makes in the canvas.
 - [x] Zones in the board file and in `apply`
 - [x] Each element's statement kind, shown wherever the AI reads elements
 - [x] Search filtered by statement kind
-- [ ] Mirrored boards in the canvas
+- [x] Mirrored boards in the canvas
 
 ## Tasks
 
@@ -163,18 +163,18 @@ let a person drag its elements.
 
 Review path: Security-Hybrid
 
-- [ ] The canvas refuses every `move_element` onto a mirrored board,
+- [x] The canvas refuses every `move_element` onto a mirrored board,
       writes nothing for that request, and says which board refused it;
       moves on free boards and on boards without a zone write as before.
-- [ ] The board view the UI receives carries the board's mode, and the
+- [x] The board view the UI receives carries the board's mode, and the
       UI does not let the user drag elements on a mirrored board;
       `crates/abyme-canvas/ui/src/bindings.ts` matches the Rust types.
-- [ ] Rust tests cover the refusal and the moves that stay allowed; a
+- [x] Rust tests cover the refusal and the moves that stay allowed; a
       Vitest test covers that elements on a mirrored board are not
       draggable.
-- [ ] Canvas, Boards and Zones, and the root `CLAUDE.md` Components table
+- [x] Canvas, Boards and Zones, and the root `CLAUDE.md` Components table
       describe what a mirrored board does in the canvas.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
       `cargo fmt --all --check`, `pnpm --dir crates/abyme-canvas/ui
       check`, and `pnpm --dir crates/abyme-canvas/ui test` pass.
 

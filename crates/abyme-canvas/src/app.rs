@@ -1,6 +1,7 @@
 //! The canvas's side of the IPC boundary: its commands, its one event, its
 //! window, and the watcher that raises the event. The one command that
-//! writes, `apply`, passes a request on only when `admission` admits it.
+//! writes, `apply`, passes a request on only when `admission` admits it and
+//! no move in it lies on a mirrored board.
 //!
 //! No command takes a path: every command works on the project that the
 //! directory the canvas started in lies in, found anew by the core on each
@@ -14,7 +15,7 @@ use abyme_model::BoardId;
 use tauri::webview::NewWindowResponse;
 use tauri::{App, Builder, Emitter as _, Manager as _, Runtime, State, WebviewWindowBuilder};
 
-use crate::admission::admit;
+use crate::admission::{admit, check_modes};
 use crate::boards::{BoardEntry, board_list};
 use crate::projection::{BoardView, project};
 use crate::{pages, watcher};
@@ -103,8 +104,10 @@ async fn open_board(start: State<'_, Start>, board: BoardId) -> Result<BoardView
 }
 
 /// Applies `operations` to the project, all or none, once the canvas may
-/// send every one of them; the check comes before any access to the
-/// project.
+/// send every one of them and none moves an element on a mirrored board. The
+/// first check comes before any access to the project, the second reads the
+/// project the request goes to; a board that turns mirrored between it and
+/// the write lets that one move through, which changes only layout.
 #[tauri::command]
 async fn apply(start: State<'_, Start>, operations: Operations) -> Result<(), String> {
     let operations = operations.into_vec();
@@ -112,6 +115,8 @@ async fn apply(start: State<'_, Start>, operations: Operations) -> Result<(), St
     let start = start.0.clone();
     on_core(move || {
         let project = Project::discover(&start).map_err(|error| error.to_string())?;
+        let snapshot = project.snapshot().map_err(|error| error.to_string())?;
+        check_modes(&snapshot, &operations).map_err(|refused| refused.to_string())?;
         project
             .apply(&operations)
             .map(|_created| ())

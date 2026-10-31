@@ -6,6 +6,7 @@ import { finishedMoves, keepUiState, returnHome, toNodes } from "./nodes";
 const VIEW: BoardView = {
   id: "context",
   title: "Context",
+  mode: null,
   placements: [
     {
       element: "orders",
@@ -59,6 +60,15 @@ describe("toNodes", () => {
         (node) => node.draggable === true && node.connectable === false,
       ),
     ).toBe(true);
+  });
+
+  it("makes every box draggable except on a mirrored board", () => {
+    const draggable = (mode: BoardView["mode"]) =>
+      toNodes({ ...VIEW, mode }).map((node) => node.draggable);
+
+    expect(draggable("mirrored")).toEqual([false, false]);
+    expect(draggable("free")).toEqual([true, true]);
+    expect(draggable(null)).toEqual([true, true]);
   });
 
   it("hands the projection's content to the box", () => {
