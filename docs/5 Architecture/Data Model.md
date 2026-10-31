@@ -219,7 +219,7 @@ A request is a list of operations, each a JSON object with the field `op`:
 - **References:** `{"new": "<key>"}` names what an earlier operation of the same request creates, `{"existing": "<id>"}` what already exists. A **local key** has 1 to 64 ASCII letters, digits, hyphens, and underscores, is valid only within its request, and elements and boards share one set of keys.
 - **All or nothing:** Operations run in order. If one fails, for example because a key is unknown or an element already has a home, the request writes nothing, and the error names the operation's position. A request has at most 1000 operations.
 - **The result** names the ID each key received; the canvas and the AI refer to the new elements and boards by these IDs from then on.
-- **Placement:** The skeleton gives every placed element the size 180 × 90 and the first free cell of a grid near the board's origin, or a position below everything else. A placement never overlaps an element that an earlier operation of the same request moved.
+- **Placement:** `place_element` gives an element a box of the size of its type, name, and summary (see [[Placement and Layout#Rules]]) and the first free place in a grid near the board's origin, or a position below everything else. `move_element` and `update_element` leave the size as it is, so a box can cut off a text that grew, as it can where the estimate falls short. A placement never overlaps an element that an earlier operation of the same request moved.
 
 The MCP server and the canvas use the same core functions:
 

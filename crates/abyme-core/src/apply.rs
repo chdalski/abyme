@@ -14,7 +14,7 @@ use abyme_model::{
 };
 
 use crate::board_tree::BoardTree;
-use crate::layout::Size;
+use crate::layout::box_size::box_size;
 use crate::layout::free_space::FreeSpace;
 use crate::operation::{LocalKey, MAX_COORDINATE, Operation, Ref};
 use crate::slug::free_slug;
@@ -467,9 +467,13 @@ impl<'snapshot> Draft<'snapshot> {
                 return Err(OperationProblem::InsideItself(owned.clone()));
             }
         }
+        let shown = self
+            .element(&element)
+            .ok_or_else(|| OperationProblem::UnknownElement(element.clone()))?;
+        let size = box_size(shown.type_ref().as_str(), shown.name(), shown.summary());
         let (draft_board, free_space) = self.draft_board(&board)?;
         let rect = free_space
-            .place(Size::DEFAULT)
+            .place(size)
             .ok_or_else(|| OperationProblem::BoardFull(board.clone()))?;
         draft_board.placements.insert(
             element.clone(),

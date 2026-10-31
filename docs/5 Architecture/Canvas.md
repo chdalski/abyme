@@ -35,7 +35,7 @@ Rejected:
   - `tauri.conf.json` and `capabilities/default.json` decide what the webview may reach. `build.rs` lists the canvas's own commands, so that Tauri checks them against the capabilities as well.
 - The web UI lies next to it, in `crates/abyme-canvas/ui/`: React, built and served by Vite and tested with Vitest. It talks to the Rust side only through an interface, `AbymeClient` (`ui/src/client.ts`), which runs over Tauri's IPC; tests give the UI a fake one.
 - The TypeScript types are generated from the Rust types with ts-rs into `ui/src/bindings.ts`. That way the format is defined only once, in `abyme-model`. A Rust test compares the committed file with the Rust types and fails when it is stale. The few IPC commands are typed by hand in `AbymeClient`.
-- Layout and text measurement stay in Rust. The AI places things without a canvas too, so layout must work without a screen.
+- Layout and box sizes stay in Rust. The AI places things without a canvas too, so layout must work without a screen.
 
 ## Commands
 
@@ -149,16 +149,15 @@ flowchart LR
     class theme proposal
 ```
 
-**Text measurement:** Layout without a screen has to know how big a box with a given text becomes. So a Rust library for text layout computes the sizes, with bundled fonts, such as parley or cosmic-text. The canvas takes these sizes over instead of measuring itself. This comes with the MVP; the Working Skeleton uses fixed sizes. Fixed sizes for the MVP were rejected for exactly that reason.
+**Box sizes:** Layout without a screen has to know how big a box with a given text becomes. So the core estimates it from the width of each character (see [[Placement and Layout#Rules]]), and the canvas takes the size over instead of measuring itself. The canvas shows the system font, which no measurement in Rust could match, so a box can cut off text the estimate did not expect. The styles of a box use the line height and the wrapping the estimate assumes.
 
 ## Platforms and Risks
 
 - **Desktop first**, as a Tauri app with access to files and Git. In the browser there is no file system and no Git; there the canvas needs `abyme serve` from [[Hexagonal Architecture#Runtime|stage B]].
 - **Linux:** The webview there is WebKitGTK. How well it renders many elements must be shown by a test.
-- **Text sizes** from Rust and the rendering in the webview can differ slightly. Fixed fonts and some room around the text help.
+- **Box sizes** from Rust and the text in the webview can differ. The estimate leaves some room per character, and a box hides what does not fit.
 
 > [!todo] Open
-> - Which library for text layout?
 > - Arrow routing: straight, orthogonal, or routed around obstacles?
 
 Sources: [React Flow](https://reactflow.dev/), [React Flow examples](https://reactflow.dev/examples), [tldraw license key](https://tldraw.dev/sdk-features/license-key)

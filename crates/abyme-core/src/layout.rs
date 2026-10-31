@@ -4,6 +4,7 @@ use std::num::NonZeroU32;
 
 use abyme_model::Rect;
 
+pub mod box_size;
 pub mod free_space;
 
 /// The size of a box on a board.
@@ -16,7 +17,8 @@ pub struct Size {
 }
 
 impl Size {
-    /// The size of a box: 180 × 90.
+    /// The smallest box, which [`box_size`](box_size::box_size) grows from, and
+    /// the measure of the free-space grid: 180 × 90.
     pub const DEFAULT: Self = Self {
         width: NonZeroU32::MIN.saturating_add(179),
         height: NonZeroU32::MIN.saturating_add(89),

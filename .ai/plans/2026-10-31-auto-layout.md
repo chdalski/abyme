@@ -36,7 +36,7 @@ person placed by hand where it is.
 - [x] A board holds placements, not bare rectangles
 - [x] Free-space placement takes a size
 - [x] Pinned placements
-- [ ] Box sizes from text
+- [x] Box sizes from text
 - [ ] `layout_board`
 
 ## Tasks
@@ -140,25 +140,25 @@ that the canvas does not cut off what it shows.
 
 Review path: Security-Hybrid
 
-- [ ] One pure function gives a box's size from an element's type, name, and
+- [x] One pure function gives a box's size from an element's type, name, and
       summary, counting character widths with `unicode-width`: the width stays
       180, the height grows by whole lines from 90 up to a fixed maximum, and it
       reads no more text than fits that maximum. Text that fits three lines gives
       180 × 90.
-- [ ] `place_element` places an element at the size of its text and overlaps
+- [x] `place_element` places an element at the size of its text and overlaps
       nothing. `move_element` and `update_element` leave a placement's size as it
       is, and an existing placement keeps its size.
-- [ ] The canvas draws a box's text with the line height and the wrapping the
+- [x] The canvas draws a box's text with the line height and the wrapping the
       function assumes, and the function and the styles each say that they change
       together.
-- [ ] Unit tests cover the function for short text, wide characters, an
+- [x] Unit tests cover the function for short text, wide characters, an
       unbroken long word, and text far beyond the maximum; the tests of
       `place_element` cover a tall box.
-- [ ] A reader of Canvas, Placement and Layout, and Data Model's rule on
+- [x] A reader of Canvas, Placement and Layout, and Data Model's rule on
       placement can tell how a box gets its size and why a box can still cut off
       text, and the Decisions table holds the estimate instead of a font
       measurement.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
       `cargo fmt --all --check`, `cargo deny --locked check`, `pnpm --dir
       crates/abyme-canvas/ui check`, and `pnpm --dir crates/abyme-canvas/ui test`
       pass.

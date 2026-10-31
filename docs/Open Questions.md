@@ -9,7 +9,7 @@ Only what is still open, with a link to the note where the question lives. Once 
 ## Before the MVP
 
 - **Measuring the results:** How are the MVP's results measured, for example the share of justified review flags in the replay? See [[First Slice]].
-- **Canvas:** Which library for text layout? How are arrows routed? See [[Canvas]].
+- **Canvas:** How are arrows routed? See [[Canvas]].
 
 ## Later
 

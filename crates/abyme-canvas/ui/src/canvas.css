@@ -58,6 +58,10 @@ nav button[aria-current="page"] {
   border-radius: 4px;
   background: #ffffff;
   font-size: 12px;
+  /* The core estimates a box's height from this line height and this wrapping:
+     crates/abyme-core/src/layout/box_size.rs. The two change together. */
+  line-height: 15px;
+  overflow-wrap: anywhere;
 }
 
 .element-type {

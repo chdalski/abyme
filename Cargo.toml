@@ -52,6 +52,7 @@ toml = { version = "0.9.8", default-features = false, features = ["std", "parse"
 # Never the `format` feature, which deny.toml bans; declarations are compared in memory,
 # never exported by a test.
 ts-rs = "=12.0.1"
+unicode-width = { version = "0.2.2", default-features = false }
 # No `gzip`, which deny.toml bans: model files arrive byte for byte as their pinned size and
 # hash describe them.
 ureq = { version = "3.5.0", default-features = false, features = ["rustls", "platform-verifier"] }
