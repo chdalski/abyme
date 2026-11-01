@@ -233,6 +233,29 @@ pub enum Kind {
     Board,
 }
 
+/// What a `create_element` gives the new element.
+struct NewElement<'a> {
+    type_ref: &'a str,
+    name: &'a str,
+    summary: Option<&'a str>,
+    body: &'a str,
+    anchor: Option<&'a str>,
+}
+
+/// What an `update_element` changes: a field that is `None` stays as it is.
+#[expect(
+    clippy::option_option,
+    reason = "a missing summary or anchor keeps it, `Some(None)` removes it, and a text replaces it"
+)]
+#[derive(Default, PartialEq, Eq)]
+struct ElementChanges<'a> {
+    name: Option<&'a str>,
+    type_ref: Option<&'a str>,
+    summary: Option<Option<&'a str>>,
+    body: Option<&'a str>,
+    anchor: Option<Option<&'a str>>,
+}
+
 /// The request's changes as they build up, operation by operation.
 struct Draft<'snapshot> {
     snapshot: &'snapshot Snapshot,
@@ -325,11 +348,13 @@ impl<'snapshot> Draft<'snapshot> {
                 anchor,
             } => self.create_element(
                 key,
-                type_ref,
-                name,
-                summary.as_deref(),
-                body,
-                anchor.as_deref(),
+                &NewElement {
+                    type_ref,
+                    name,
+                    summary: summary.as_deref(),
+                    body,
+                    anchor: anchor.as_deref(),
+                },
             ),
             Operation::CreateBoard {
                 key,
@@ -369,11 +394,13 @@ impl<'snapshot> Draft<'snapshot> {
                 anchor,
             } => self.update_element(
                 element,
-                name.as_deref(),
-                type_ref.as_deref(),
-                summary.as_ref().map(Option::as_deref),
-                body.as_deref(),
-                anchor.as_ref().map(Option::as_deref),
+                &ElementChanges {
+                    name: name.as_deref(),
+                    type_ref: type_ref.as_deref(),
+                    summary: summary.as_ref().map(Option::as_deref),
+                    body: body.as_deref(),
+                    anchor: anchor.as_ref().map(Option::as_deref),
+                },
             ),
             Operation::CreateRelation {
                 from,
@@ -389,12 +416,15 @@ impl<'snapshot> Draft<'snapshot> {
     fn create_element(
         &mut self,
         key: &LocalKey,
-        type_ref: &str,
-        name: &str,
-        summary: Option<&str>,
-        body: &str,
-        anchor: Option<&str>,
+        new: &NewElement<'_>,
     ) -> Result<(), OperationProblem> {
+        let NewElement {
+            type_ref,
+            name,
+            summary,
+            body,
+            anchor,
+        } = *new;
         self.check_new_key(key)?;
         let type_ref =
             TypeRef::try_from(type_ref.to_owned()).map_err(OperationProblem::InvalidElement)?;
@@ -557,28 +587,22 @@ impl<'snapshot> Draft<'snapshot> {
 
     /// Changes the fields an update names and keeps the others, the ID and
     /// the relations included. An update that names no field is rejected.
-    #[expect(
-        clippy::option_option,
-        reason = "a missing summary or anchor keeps it, `Some(None)` removes it, and a text replaces it"
-    )]
     fn update_element(
         &mut self,
         element: &Ref<ElementId>,
-        name: Option<&str>,
-        type_ref: Option<&str>,
-        summary: Option<Option<&str>>,
-        body: Option<&str>,
-        anchor: Option<Option<&str>>,
+        changes: &ElementChanges<'_>,
     ) -> Result<(), OperationProblem> {
         let id = self.resolve_element(element)?;
-        if name.is_none()
-            && type_ref.is_none()
-            && summary.is_none()
-            && body.is_none()
-            && anchor.is_none()
-        {
+        if *changes == ElementChanges::default() {
             return Err(OperationProblem::NothingToUpdate(id));
         }
+        let ElementChanges {
+            name,
+            type_ref,
+            summary,
+            body,
+            anchor,
+        } = *changes;
         let type_ref = type_ref
             .map(|type_ref| TypeRef::try_from(type_ref.to_owned()))
             .transpose()

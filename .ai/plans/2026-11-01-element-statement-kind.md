@@ -28,7 +28,7 @@ that reads statement kinds follow it.
 
 - [x] `Element` holds its fields
 - [x] The order of an element's errors is pinned
-- [ ] Element parameters as one value
+- [x] Element parameters as one value
 - [ ] An element file and a request can hold a statement kind
 - [ ] The element's own kind takes precedence
 
@@ -76,12 +76,12 @@ in the dispatch of `apply`. Behavior is unchanged, also which error comes first;
 
 Review path: Reviewer-only
 
-- [ ] `create_element` and `update_element` in `crates/abyme-core/src/apply.rs` each take
+- [x] `create_element` and `update_element` in `crates/abyme-core/src/apply.rs` each take
       one private value for those parameters. `Operation` and its schema do not change,
       and the other operations stay positional.
-- [ ] The named tests pass with no assertion changed, including an update that names no
+- [x] The named tests pass with no assertion changed, including an update that names no
       field and the errors of a request with several invalid values.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`, and
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`, and
       `cargo fmt --all --check` pass.
 
 ### Task 4: An element file and a request can hold a statement kind
