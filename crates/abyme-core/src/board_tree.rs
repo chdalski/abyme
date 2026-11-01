@@ -133,6 +133,20 @@ impl BoardTree {
         self.cycles.contains(board)
     }
 
+    /// The board above `board` in the tree readers show: the home of its owner.
+    /// `None` for a board without an owner, one that lies inside itself, one
+    /// whose owner has no element file, as `has_file` tells, and one whose owner
+    /// has no home. Unlike [`Self::parent`], it never follows a cycle.
+    pub fn above(
+        &self,
+        board: &BoardId,
+        has_file: impl Fn(&ElementId) -> bool,
+    ) -> Option<&BoardId> {
+        self.owner(board)
+            .filter(|owner| has_file(owner) && !self.lies_inside_itself(board))
+            .and_then(|owner| self.home(owner))
+    }
+
     /// Every board once, depth first, with its depth: the top-level boards
     /// by ID, each followed by the boards inside it, by ID, and theirs. A
     /// board is top-level when no board lies above it, when it lies inside
@@ -143,11 +157,7 @@ impl BoardTree {
         let mut top_level: Vec<&BoardId> = Vec::new();
         let mut inside: BTreeMap<&BoardId, Vec<&BoardId>> = BTreeMap::new();
         for board in &self.boards {
-            let above = self
-                .owner(board)
-                .filter(|owner| has_file(owner) && !self.lies_inside_itself(board))
-                .and_then(|owner| self.home(owner));
-            match above {
+            match self.above(board, &has_file) {
                 Some(above) => inside.entry(above).or_default().push(board),
                 None => top_level.push(board),
             }

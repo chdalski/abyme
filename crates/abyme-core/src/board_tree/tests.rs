@@ -110,6 +110,29 @@ fn takes_the_lowest_board_id_as_the_home_of_an_element_placed_twice() {
     assert_eq!(home, Some(board_id("alpha")));
 }
 
+#[rstest]
+#[case::the_home_of_its_owner("inner", Some("top"))]
+#[case::no_owner("top", None)]
+#[case::an_owner_without_a_home("homeless", None)]
+#[case::an_owner_without_a_file("fileless", None)]
+#[case::inside_a_cycle("loop-a", None)]
+fn says_which_board_lies_above_a_board(#[case] board_name: &str, #[case] above: Option<&str>) {
+    let tree = tree(&[
+        board("top", None, &["owner", "no-file"]),
+        board("inner", Some("owner"), &[]),
+        board("homeless", Some("nowhere"), &[]),
+        board("fileless", Some("no-file"), &[]),
+        board("loop-a", Some("in-b"), &["in-a"]),
+        board("loop-b", Some("in-a"), &["in-b"]),
+    ]);
+    let has_file = |element: &ElementId| element.as_str() != "no-file";
+
+    assert_eq!(
+        tree.above(&board_id(board_name), has_file),
+        above.map(board_id).as_ref()
+    );
+}
+
 #[test]
 fn has_no_parent_for_an_owner_without_a_home() {
     let tree = tree(&[board("inside", Some("homeless"), &[])]);

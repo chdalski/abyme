@@ -26,7 +26,7 @@ elements with a breadcrumb, see review flags and pins, and release a pin.
 
 - [x] One test fixture for what the UI receives
 - [x] One rule for the relations a board shows
-- [ ] One way up the board tree
+- [x] One way up the board tree
 - [ ] Relations as arrows
 - [ ] Inner boards and a breadcrumb
 - [ ] A marker on pinned boxes
@@ -74,10 +74,10 @@ a cycle, and let `depth_first` use it. Behavior is unchanged;
 
 Review path: Reviewer-only
 
-- [ ] `BoardTree` answers the board above a board, and `None` for a board inside a cycle, for an
+- [x] `BoardTree` answers the board above a board, and `None` for a board inside a cycle, for an
       owner without a file, and for an owner without a home; `depth_first` uses that answer.
-- [ ] The named tests pass with no assertion changed.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`, and
+- [x] The named tests pass with no assertion changed.
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`, and
       `cargo fmt --all --check` pass.
 
 ### Task 4: Relations as arrows
