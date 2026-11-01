@@ -25,7 +25,7 @@ elements with a breadcrumb, see review flags and pins, and release a pin.
 ## Steps
 
 - [x] One test fixture for what the UI receives
-- [ ] One rule for the relations a board shows
+- [x] One rule for the relations a board shows
 - [ ] One way up the board tree
 - [ ] Relations as arrows
 - [ ] Inner boards and a breadcrumb
@@ -58,10 +58,10 @@ unchanged; `shows_only_relations_whose_ends_both_lie_on_the_board` and the other
 
 Review path: Reviewer-only
 
-- [ ] One public function of `abyme-core` answers which relations a board shows: the source has
+- [x] One public function of `abyme-core` answers which relations a board shows: the source has
       a file and both ends are placed. `read_board` uses it.
-- [ ] The named tests pass with no assertion changed.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`, and
+- [x] The named tests pass with no assertion changed.
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`, and
       `cargo fmt --all --check` pass.
 
 ### Task 3: One way up the board tree

@@ -659,21 +659,54 @@ fn owner_line(snapshot: &Snapshot, tree: &BoardTree, board: &BoardId, owner: &El
     format!("Inside of: {owner}{missing}{above}")
 }
 
-/// The rows of the relations between elements on `board`: by source, then
-/// in the order of the source's relations.
-fn relation_rows(snapshot: &Snapshot, board: &Board) -> Vec<Vec<String>> {
+/// One relation a board shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ShownRelation<'a> {
+    /// The element it goes out from.
+    pub from: &'a ElementId,
+    /// Its kind.
+    pub kind: RelationKind,
+    /// The element it points to, whose file may be missing.
+    pub to: &'a ElementId,
+    /// Its label, if it has one.
+    pub label: Option<&'a str>,
+}
+
+/// The relations `board` shows: those whose source has a file and whose ends
+/// both lie on the board, by source, then in the order of the source's
+/// relations.
+pub fn relations_on<'a>(
+    snapshot: &'a Snapshot,
+    board: &'a Board,
+) -> impl Iterator<Item = ShownRelation<'a>> {
     board
         .placements
         .keys()
         .filter_map(|id| snapshot.elements.get(id))
-        .flat_map(|source| {
+        .flat_map(move |source| {
             source
                 .relations()
                 .iter()
                 .filter(|((_, to), _)| board.placements.contains_key(to))
-                .map(|((kind, to), label)| {
-                    relation_row(source.id(), to.as_str(), *kind, label.as_deref())
+                .map(|((kind, to), label)| ShownRelation {
+                    from: source.id(),
+                    kind: *kind,
+                    to,
+                    label: label.as_deref(),
                 })
+        })
+}
+
+/// The rows of the relations `board` shows.
+fn relation_rows(snapshot: &Snapshot, board: &Board) -> Vec<Vec<String>> {
+    relations_on(snapshot, board)
+        .map(|relation| {
+            relation_row(
+                relation.from,
+                relation.to.as_str(),
+                relation.kind,
+                relation.label,
+            )
         })
         .collect()
 }
