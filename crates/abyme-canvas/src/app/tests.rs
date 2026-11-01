@@ -281,6 +281,57 @@ fn open_board_names_the_boards_above_and_inside_with_only_id_and_title() {
 }
 
 #[test]
+fn open_board_says_which_placements_a_board_file_pins() {
+    let root = tempfile::tempdir().unwrap();
+    project_with_a_board(root.path());
+    fs::write(
+        root.path().join("abyme/boards/context.board.json"),
+        r#"{"format": 1, "id": "context", "title": "Context", "placements": [
+            {"element": "a", "x": 0, "y": 0, "width": 1, "height": 1, "pinned": true},
+            {"element": "b", "x": 0, "y": 0, "width": 1, "height": 1},
+            {"element": "c", "x": 0, "y": 0, "width": 1, "height": 1, "pinned": false}
+        ]}"#,
+    )
+    .unwrap();
+    let (_app, window) = canvas(root.path());
+
+    let view = open_board_from(&window, json!({"board": "context"})).unwrap();
+
+    assert_eq!(
+        view["placements"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|placement| &placement["pinned"])
+            .collect::<Vec<_>>(),
+        [&json!(true), &json!(false), &json!(false)]
+    );
+}
+
+#[test]
+fn a_moved_box_is_pinned_in_the_board_s_next_view() {
+    let root = tempfile::tempdir().unwrap();
+    project_with_a_board(root.path());
+    let (_app, window) = canvas(root.path());
+
+    apply_from(&window, &json!([a_move(400, 200)])).unwrap();
+
+    let view = open_board_from(&window, json!({"board": "context"})).unwrap();
+    assert_eq!(
+        view["placements"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|placement| (&placement["element"], &placement["pinned"]))
+            .collect::<Vec<_>>(),
+        [
+            (&json!("orders"), &json!(false)),
+            (&json!("payment-service"), &json!(true)),
+        ]
+    );
+}
+
+#[test]
 fn open_board_names_only_the_id_of_an_unknown_board() {
     let root = tempfile::tempdir().unwrap();
     project_with_a_board(root.path());

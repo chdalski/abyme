@@ -9,14 +9,15 @@ import type { BoardEntry, BoardView, Shown } from "./bindings";
 
 /**
  * What a box shows: its element's ID and what the projection says of it,
- * its position in the board file, where it returns when a move fails, and
- * the boards its element owns.
+ * its position in the board file, where it returns when a move fails, the
+ * boards its element owns, and whether the board file pins it.
  */
 export type ElementData = {
   element: string;
   shown: Shown;
   home: XYPosition;
   innerBoards: BoardEntry[];
+  pinned: boolean;
 };
 
 /** A box on the canvas. */
@@ -48,6 +49,7 @@ export function toNodes(view: BoardView): ElementNode[] {
         shown: placement.shown,
         home,
         innerBoards: placement.inner_boards,
+        pinned: placement.pinned,
       },
       draggable: view.mode !== "mirrored",
       connectable: false,

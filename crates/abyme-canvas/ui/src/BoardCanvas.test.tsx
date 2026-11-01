@@ -233,17 +233,77 @@ function boardWithInnerBoards(...boards: string[]): BoardView {
   });
 }
 
-describe("inner boards on a box", () => {
-  const box = (container: HTMLElement, element: string) => {
-    const found = container.querySelector(
-      `.react-flow__node[data-id="${element}"]`,
-    );
-    if (!(found instanceof HTMLElement)) {
-      throw new Error(`no box for ${element}`);
-    }
-    return found;
-  };
+/** The box of `element` on a rendered canvas. */
+function box(container: HTMLElement, element: string): HTMLElement {
+  const found = container.querySelector(
+    `.react-flow__node[data-id="${element}"]`,
+  );
+  if (!(found instanceof HTMLElement)) {
+    throw new Error(`no box for ${element}`);
+  }
+  return found;
+}
 
+describe("the marker of a pin", () => {
+  it("shows on a pinned box, also one whose file is missing, and on no other", () => {
+    const { container } = render(
+      canvasOf(
+        boardView({
+          placements: [
+            placedBox("gone", { pinned: true }),
+            placedBox("kept", {
+              x: 200,
+              pinned: true,
+              shown: {
+                kind: "element",
+                type_ref: "t",
+                name: "<b>pinned</b>",
+                summary: null,
+              },
+            }),
+            placedBox("free", { x: 400 }),
+          ],
+        }),
+        () => Promise.resolve(),
+      ),
+    );
+
+    for (const pinned of ["gone", "kept"]) {
+      expect(
+        box(container, pinned).querySelector(".element-pin")?.textContent,
+      ).toBe("pinned");
+    }
+    expect(box(container, "free").querySelector(".element-pin")).toBeNull();
+    expect(box(container, "kept").querySelector("b")).toBeNull();
+  });
+
+  it("is plain text, with no button", () => {
+    const { container } = render(
+      canvasOf(
+        boardView({ placements: [placedBox("kept", { pinned: true })] }),
+        () => Promise.resolve(),
+      ),
+    );
+
+    expect(box(container, "kept").querySelector("button")).toBeNull();
+  });
+
+  it("follows the file through a reload, in both directions", () => {
+    const view = (pinned: boolean) =>
+      boardView({ placements: [placedBox("kept", { pinned })] });
+    const { container, rerender } = render(
+      canvasOf(view(false), () => Promise.resolve()),
+    );
+
+    rerender(canvasOf(view(true), () => Promise.resolve()));
+    expect(container.querySelector(".element-pin")).not.toBeNull();
+
+    rerender(canvasOf(view(false), () => Promise.resolve()));
+    expect(container.querySelector(".element-pin")).toBeNull();
+  });
+});
+
+describe("inner boards on a box", () => {
   it("offers a button per inner board that opens it, and writes nothing", () => {
     const move = vi.fn(() => Promise.resolve());
     const onOpen = vi.fn();

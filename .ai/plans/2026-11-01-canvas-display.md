@@ -29,7 +29,7 @@ elements with a breadcrumb, see review flags and pins, and release a pin.
 - [x] One way up the board tree
 - [x] Relations as arrows
 - [x] Inner boards and a breadcrumb
-- [ ] A marker on pinned boxes
+- [x] A marker on pinned boxes
 - [ ] Releasing a pin
 - [ ] Review flags on boxes
 - [ ] Review flags stay current
@@ -137,13 +137,13 @@ A person sees which boxes are pinned.
 
 Review path: Security-Hybrid
 
-- [ ] `open_board` says for each placement whether it is pinned, and a pinned box shows a marker
+- [x] `open_board` says for each placement whether it is pinned, and a pinned box shows a marker
       that hides none of its text, in a form that does not rely on color alone.
-- [ ] A move in the canvas shows the marker after the reload that follows it.
-- [ ] Tests in Rust and Vitest cover the field and the marker.
-- [ ] A reader of Canvas can tell what the marker means, and the entry "At a glance" in
+- [x] A move in the canvas shows the marker after the reload that follows it.
+- [x] Tests in Rust and Vitest cover the field and the marker.
+- [x] A reader of Canvas can tell what the marker means, and the entry "At a glance" in
       `docs/Open Questions.md` keeps only what is still open.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
       `cargo fmt --all --check`, `pnpm --dir crates/abyme-canvas/ui check`, and
       `pnpm --dir crates/abyme-canvas/ui test` pass.
 

@@ -71,7 +71,11 @@ shown: Shown,
  * The boards the element owns, by ID. More than one only after a merge
  * or a hand edit.
  */
-inner_boards: Array<BoardEntry>, };
+inner_boards: Array<BoardEntry>, 
+/**
+ * Whether the placement is pinned, from the board file.
+ */
+pinned: boolean, };
 
 export type Relation = { 
 /**

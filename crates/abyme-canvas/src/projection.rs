@@ -8,7 +8,7 @@
 use std::iter::successors;
 
 use abyme_core::{BoardTree, ShownRelation, Snapshot, UnknownBoard, relations_on};
-use abyme_model::{BoardId, Element, ElementId, Mode, Rect, RelationKind};
+use abyme_model::{BoardId, Element, ElementId, Mode, RelationKind};
 use serde::Serialize;
 
 use crate::boards::BoardEntry;
@@ -71,6 +71,8 @@ pub struct Placement {
     /// The boards the element owns, by ID. More than one only after a merge
     /// or a hand edit.
     pub inner_boards: Vec<BoardEntry>,
+    /// Whether the placement is pinned, from the board file.
+    pub pinned: bool,
 }
 
 /// What the box of a placement shows.
@@ -109,7 +111,7 @@ pub fn project(snapshot: &Snapshot, board: &BoardId) -> Result<BoardView, Unknow
         placements: found
             .placements
             .iter()
-            .map(|(element, placed)| placement(snapshot, &tree, element, &placed.rect))
+            .map(|(element, placed)| placement(snapshot, &tree, element, placed))
             .collect(),
         relations: relations_on(snapshot, found).map(relation).collect(),
         trail: trail(snapshot, &tree, board),
@@ -146,8 +148,14 @@ fn relation(shown: ShownRelation<'_>) -> Relation {
     }
 }
 
-fn placement(snapshot: &Snapshot, tree: &BoardTree, id: &ElementId, rect: &Rect) -> Placement {
+fn placement(
+    snapshot: &Snapshot,
+    tree: &BoardTree,
+    id: &ElementId,
+    placed: &abyme_model::Placement,
+) -> Placement {
     let element: Option<&Element> = snapshot.elements.get(id);
+    let rect = &placed.rect;
     Placement {
         element: id.clone(),
         x: rect.x,
@@ -163,5 +171,6 @@ fn placement(snapshot: &Snapshot, tree: &BoardTree, id: &ElementId, rect: &Rect)
             .owned_by(id)
             .filter_map(|board| entry(snapshot, board))
             .collect(),
+        pinned: placed.pinned,
     }
 }

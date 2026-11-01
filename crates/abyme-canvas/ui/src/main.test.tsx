@@ -24,6 +24,7 @@ const shop = vi.hoisted(() => ({
         height: 90,
         shown: { kind: "missing" as const },
         inner_boards: [],
+        pinned: false,
       },
       {
         element: "orders",
@@ -33,6 +34,7 @@ const shop = vi.hoisted(() => ({
         height: 90,
         shown: { kind: "missing" as const },
         inner_boards: [],
+        pinned: false,
       },
     ],
     relations: [
@@ -58,6 +60,7 @@ const shop = vi.hoisted(() => ({
         height: 90,
         shown: { kind: "missing" as const },
         inner_boards: [],
+        pinned: false,
       },
       {
         element: "web-shop",
@@ -72,6 +75,7 @@ const shop = vi.hoisted(() => ({
           summary: "Where customers order",
         },
         inner_boards: [],
+        pinned: false,
       },
     ],
     relations: [],

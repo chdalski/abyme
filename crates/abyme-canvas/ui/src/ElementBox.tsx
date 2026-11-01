@@ -44,6 +44,7 @@ export function ElementBox({ data }: NodeProps<ElementNode>) {
         className="element-handle"
       />
       <ElementContent element={data.element} shown={data.shown} />
+      {data.pinned && <span className="element-pin">pinned</span>}
       {data.innerBoards.length > 0 && <InnerBoards boards={data.innerBoards} />}
       <Handle
         type="source"

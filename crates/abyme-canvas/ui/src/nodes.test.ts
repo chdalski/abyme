@@ -66,6 +66,7 @@ describe("toNodes", () => {
         shown: { kind: "missing" },
         home: { x: -20, y: 300 },
         innerBoards: [],
+        pinned: false,
       },
       {
         element: "payments",
@@ -77,7 +78,19 @@ describe("toNodes", () => {
         },
         home: { x: 40, y: 80 },
         innerBoards: [],
+        pinned: false,
       },
+    ]);
+  });
+
+  it("hands the pin of each placement to its box", () => {
+    const view = boardView({
+      placements: [placedBox("free"), placedBox("held", { pinned: true })],
+    });
+
+    expect(toNodes(view).map((node) => node.data.pinned)).toEqual([
+      false,
+      true,
     ]);
   });
 });
@@ -115,6 +128,24 @@ describe("keepUiState", () => {
         ["payments", { x: 40, y: 80 }, undefined],
       ],
     );
+  });
+
+  const nodesWithPin = (pinned: boolean) =>
+    toNodes(boardView({ placements: [placedBox("kept", { pinned })] }));
+
+  it("takes the pin from the file, also for a box the user holds or selected", () => {
+    for (const held of [{ dragging: true }, { selected: true }]) {
+      for (const pinned of [true, false]) {
+        const current = nodesWithPin(!pinned).map((node) => ({
+          ...node,
+          ...held,
+        }));
+
+        const [kept] = keepUiState(nodesWithPin(pinned), current);
+
+        expect(kept?.data.pinned).toBe(pinned);
+      }
+    }
   });
 });
 

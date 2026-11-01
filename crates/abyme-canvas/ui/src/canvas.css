@@ -69,6 +69,20 @@ main > nav button[aria-current="page"] {
   cursor: pointer;
 }
 
+/* On the box's top edge, where it hides no text and no button. */
+.element-pin {
+  position: absolute;
+  top: -9px;
+  left: 4px;
+  padding: 0 0.25rem;
+  border: 1px solid #3b4a6b;
+  border-radius: 4px;
+  background: #ffffff;
+  font-size: 10px;
+  line-height: 14px;
+  pointer-events: none;
+}
+
 .element-inner-boards {
   position: absolute;
   right: 4px;

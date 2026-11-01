@@ -4,7 +4,7 @@ use super::*;
 use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 
-use abyme_model::{Board, ElementFields, Relations, TypeRef};
+use abyme_model::{Board, ElementFields, Rect, Relations, TypeRef};
 use serde_json::{Value, json};
 
 fn element_id(value: &str) -> ElementId {
@@ -89,6 +89,7 @@ fn shows_a_box_per_placement_with_its_rect_and_the_element_s_fields() {
                     height: 100,
                     shown: Shown::Missing,
                     inner_boards: Vec::new(),
+                    pinned: false,
                 },
                 Placement {
                     element: element_id("payments"),
@@ -102,6 +103,7 @@ fn shows_a_box_per_placement_with_its_rect_and_the_element_s_fields() {
                         summary: Some("Payment processing".to_owned()),
                     },
                     inner_boards: Vec::new(),
+                    pinned: false,
                 },
             ],
             relations: Vec::new(),
@@ -156,6 +158,7 @@ fn the_projection_carries_exactly_the_named_fields_and_no_body() {
             "element",
             "height",
             "inner_boards",
+            "pinned",
             "shown",
             "width",
             "x",
@@ -380,4 +383,26 @@ fn a_placement_names_the_boards_its_element_owns_with_only_id_and_title() {
     );
     assert_eq!(json["placements"][0]["inner_boards"], json!([]));
     assert!(!json.to_string().contains("SECRET"), "{json}");
+}
+
+#[test]
+fn says_a_placement_is_pinned_also_when_its_element_file_is_missing() {
+    let mut snapshot = snapshot();
+    snapshot
+        .boards
+        .get_mut(&board_id("context"))
+        .unwrap()
+        .placements
+        .get_mut(&element_id("orders"))
+        .unwrap()
+        .pinned = true;
+
+    let view = project(&snapshot, &board_id("context")).unwrap();
+
+    let [orders, payments] = view.placements.as_slice() else {
+        panic!("two placements expected");
+    };
+    assert!(orders.pinned);
+    assert_eq!(orders.shown, Shown::Missing);
+    assert!(!payments.pinned);
 }

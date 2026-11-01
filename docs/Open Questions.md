@@ -26,4 +26,4 @@ Only what is still open, with a link to the note where the question lives. Once 
 - **Several repos** that lie side by side rather than nested, see [[Storage in Git]]
 - **Several projects:** one data set per project, or links across project boundaries?
 - **Roles and permissions**, when several people are involved
-- **At a glance:** How do you recognize references and pinned positions?
+- **At a glance:** How do you recognize references?
