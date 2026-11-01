@@ -2644,3 +2644,44 @@ fn the_layouts_of_a_request_share_their_work() {
         OperationProblem::LayoutTooLarge(board_id("main"))
     );
 }
+
+/// A `create_element` under the key `k` with an empty type and an invalid
+/// anchor, each of which alone refuses the request.
+const INVALID_NEW_ELEMENT: &str =
+    r#"{"op": "create_element", "key": "k", "type_ref": "", "name": "N", "anchor": "../x"}"#;
+
+#[rstest]
+#[case::a_taken_key_before_the_type_and_the_anchor(
+    &format!(
+        r#"[{{"op": "create_board", "key": "k", "title": "B"}}, {INVALID_NEW_ELEMENT}]"#
+    ),
+    OperationProblem::DuplicateKey(key("k"))
+)]
+#[case::the_type_before_the_anchor_on_create(
+    &format!("[{INVALID_NEW_ELEMENT}]"),
+    OperationProblem::InvalidElement(ElementProblem::EmptyType)
+)]
+#[case::the_type_before_the_anchor_on_update(
+    r#"[{"op": "update_element", "element": {"existing": "loose"}, "type_ref": "", "anchor": "../x"}]"#,
+    OperationProblem::InvalidElement(ElementProblem::EmptyType)
+)]
+fn a_request_with_several_invalid_values_gets_the_first_error_in_a_fixed_order(
+    #[case] json: &str,
+    #[case] expected: OperationProblem,
+) {
+    assert_eq!(problem(&snapshot(), json), expected);
+}
+
+#[rstest]
+#[case::on_create(
+    r#"[{"op": "create_element", "key": "k", "type_ref": "t", "name": "N", "anchor": "../x"}]"#
+)]
+#[case::on_update(
+    r#"[{"op": "update_element", "element": {"existing": "loose"}, "anchor": "../x"}]"#
+)]
+fn the_anchor_of_those_requests_is_invalid_on_its_own(#[case] json: &str) {
+    assert!(matches!(
+        problem(&snapshot(), json),
+        OperationProblem::InvalidElement(_)
+    ));
+}

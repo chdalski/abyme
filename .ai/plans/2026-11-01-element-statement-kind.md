@@ -27,7 +27,7 @@ that reads statement kinds follow it.
 ## Steps
 
 - [x] `Element` holds its fields
-- [ ] The order of an element's errors is pinned
+- [x] The order of an element's errors is pinned
 - [ ] Element parameters as one value
 - [ ] An element file and a request can hold a statement kind
 - [ ] The element's own kind takes precedence
@@ -58,12 +58,12 @@ error such a request gets today.
 
 Review path: Reviewer-only
 
-- [ ] Tests in `crates/abyme-core/src/apply/tests.rs` pin, through `apply`, the error of a
+- [x] Tests in `crates/abyme-core/src/apply/tests.rs` pin, through `apply`, the error of a
       `create_element` with a taken key, an invalid type, and an invalid anchor at once, of
       one with an invalid type and an invalid anchor, and of an `update_element` with an
       invalid type and an invalid anchor.
-- [ ] No production code changes.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`, and
+- [x] No production code changes.
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`, and
       `cargo fmt --all --check` pass.
 
 ### Task 3: Element parameters as one value
@@ -141,6 +141,12 @@ Review path: Security-Hybrid
       itself holds.
 - [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
       `cargo fmt --all --check`, and `pnpm --dir crates/abyme-canvas/ui check` pass.
+
+## Task Notes
+
+- **Task 3:** the order of the anchor against the checks of `Element::new` on
+  `create_element`, and of resolving the element against the type on `update_element`,
+  has no test; keep them where they are.
 
 ## Decisions
 
