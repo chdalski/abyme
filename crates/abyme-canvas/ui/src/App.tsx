@@ -7,7 +7,7 @@ import { BoardPane } from "./BoardPane";
 import { type BoardsState, loadBoards } from "./boards";
 import type { AbymeClient } from "./client";
 import { ReviewMarks } from "./ElementBox";
-import { type FlagsState, NO_MARKS, loadFlags } from "./flags";
+import { type FlagsState, NO_MARKS, loadFlags, whileVisible } from "./flags";
 import { useLive } from "./live";
 
 /**
@@ -36,15 +36,20 @@ function FlagsStatus({ state }: { state: FlagsState }) {
 /**
  * The canvas: the project's boards, the board the user opened, and the review
  * flags of its boxes. All are asked for again whenever the project's files
- * change. The flags stay out of the board's own answer and are asked for once,
- * not per board, since Git can be slow.
+ * change, and the flags also while the window is visible. The flags stay out of
+ * the board's own answer and are not asked for per board, since Git can be slow.
  */
 export function App({ client }: { client: AbymeClient }) {
   const load = useCallback(() => loadBoards(client), [client]);
   const boards = useLive<BoardsState>(client, load, { kind: "loading" });
   const [open, setOpen] = useState<string | null>(null);
   const askForFlags = useCallback(() => loadFlags(client), [client]);
-  const flags = useLive<FlagsState>(client, askForFlags, { kind: "pending" });
+  const flags = useLive<FlagsState>(
+    client,
+    askForFlags,
+    { kind: "pending" },
+    whileVisible,
+  );
 
   return (
     <main>

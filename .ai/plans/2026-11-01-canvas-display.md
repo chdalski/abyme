@@ -32,7 +32,7 @@ elements with a breadcrumb, see review flags and pins, and release a pin.
 - [x] A marker on pinned boxes
 - [x] Releasing a pin
 - [x] Review flags on boxes
-- [ ] Review flags stay current
+- [x] Review flags stay current
 
 ## Tasks
 
@@ -205,13 +205,13 @@ again when the window gets focus and every 30 s while it is visible.
 
 Review path: Security-Hybrid
 
-- [ ] Flags are computed again when the window gets focus and every 30 s while the document is
+- [x] Flags are computed again when the window gets focus and every 30 s while the document is
       visible, and not while it is hidden. A slow run never starts a second one beside it.
-- [ ] The watcher does not change.
-- [ ] Vitest with fake timers covers focus, the interval, a hidden document, and a run still pending.
-- [ ] A reader of Canvas and of Checks can tell how current the marks on the canvas are, at most
+- [x] The watcher does not change.
+- [x] Vitest with fake timers covers focus, the interval, a hidden document, and a run still pending.
+- [x] A reader of Canvas and of Checks can tell how current the marks on the canvas are, at most
       one interval behind.
-- [ ] `pnpm --dir crates/abyme-canvas/ui check` and `pnpm --dir crates/abyme-canvas/ui test` pass.
+- [x] `pnpm --dir crates/abyme-canvas/ui check` and `pnpm --dir crates/abyme-canvas/ui test` pass.
 
 ## Decisions
 

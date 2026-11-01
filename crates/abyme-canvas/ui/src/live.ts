@@ -5,13 +5,17 @@ import type { AbymeClient } from "./client";
 
 /**
  * The result of `load`, starting from `initial` and asked for again whenever
- * the project's files change. `load` must keep its identity between renders;
- * a result that arrives after the component is gone is dropped.
+ * the project's files change, and whenever `alsoAskWhen` calls what it is given,
+ * until the function it returns stops it. At most one run is in flight, however
+ * often it is asked. `load` and `alsoAskWhen` must keep their identity between
+ * renders, since a new one would start a run beside the one in flight; a result
+ * that arrives after the component is gone is dropped.
  */
 export function useLive<T>(
   client: AbymeClient,
   load: () => Promise<T>,
   initial: T,
+  alsoAskWhen?: (ask: () => void) => () => void,
 ): T {
   const [state, setState] = useState(initial);
 
@@ -25,11 +29,13 @@ export function useLive<T>(
     });
     void refresh();
     const listening = client.onProjectChanged(() => void refresh());
+    const stopAsking = alsoAskWhen?.(() => void refresh());
     return () => {
       current = false;
       void listening.then((stop) => stop());
+      stopAsking?.();
     };
-  }, [client, load]);
+  }, [client, load, alsoAskWhen]);
 
   return state;
 }

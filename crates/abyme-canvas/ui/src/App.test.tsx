@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -6,7 +7,8 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { StrictMode } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
 import type { BoardView } from "./bindings";
@@ -220,6 +222,176 @@ describe("review flags", () => {
 
     client.change();
     await waitFor(() => expect(client.flagCalls).toBe(2));
+  });
+});
+
+describe("review flags stay current", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({
+      toFake: ["setInterval", "clearInterval"],
+      shouldAdvanceTime: true,
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  const pass = (milliseconds: number) =>
+    act(() => {
+      vi.advanceTimersByTime(milliseconds);
+    });
+  const focus = () => act(() => void fireEvent.focus(window));
+  const hideTheDocument = () =>
+    vi
+      .spyOn(Document.prototype, "visibilityState", "get")
+      .mockReturnValue("hidden");
+
+  /** The board `context` is open, and the first answer on flags has arrived. */
+  async function openWithAnswer(client: FakeClient) {
+    client.flags = [{ element: "payments", priority: "task" }];
+    const rendered = await openContext(client);
+    await waitFor(() =>
+      expect(marks(rendered.container)).toEqual({ payments: "⚠ task" }),
+    );
+    return rendered;
+  }
+
+  /** Gives a run that has ended the time to clear the way for the next. */
+  const settle = () =>
+    act(() => new Promise<void>((done) => queueMicrotask(done)));
+
+  it("asks again when the window gets focus", async () => {
+    const client = clientWithBoards();
+    await openWithAnswer(client);
+    await settle();
+
+    focus();
+
+    await waitFor(() => expect(client.flagCalls).toBe(2));
+  });
+
+  it("asks again every 30 s while the document is visible", async () => {
+    const client = clientWithBoards();
+    await openWithAnswer(client);
+    await settle();
+    const before = client.flagCalls;
+
+    pass(30_000);
+    await waitFor(() => expect(client.flagCalls).toBe(before + 1));
+    await settle();
+
+    pass(30_000);
+    await waitFor(() => expect(client.flagCalls).toBe(before + 2));
+  });
+
+  it("does not ask while the document is hidden, and asks again once it is visible", async () => {
+    const client = clientWithBoards();
+    await openWithAnswer(client);
+    await settle();
+    const before = client.flagCalls;
+    const hidden = hideTheDocument();
+
+    pass(90_000);
+    focus();
+    await settle();
+    expect(client.flagCalls).toBe(before);
+
+    hidden.mockRestore();
+    pass(30_000);
+    await waitFor(() => expect(client.flagCalls).toBe(before + 1));
+  });
+
+  it("starts no second run beside one still going, and one more after it", async () => {
+    const client = clientWithBoards();
+    const { container, rerender } = await openWithAnswer(client);
+    await settle();
+    const before = client.flagCalls;
+    client.hold(FakeClient.FLAGS);
+
+    pass(30_000);
+    expect(client.flagCalls).toBe(before + 1);
+
+    pass(90_000);
+    focus();
+    rerender(<App client={client} />);
+    fireEvent.click(screen.getByRole("button", { name: "Containers" }));
+    await screen.findByRole("heading", { name: "Containers" });
+    pass(30_000);
+    expect(client.flagCalls).toBe(before + 1);
+    expect(screen.queryByRole("status")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Context" }));
+    await screen.findByRole("heading", { name: "Context" });
+    await waitFor(() =>
+      expect(marks(container)).toEqual({ payments: "⚠ task" }),
+    );
+
+    client.release(FakeClient.FLAGS);
+    await waitFor(() => expect(client.flagCalls).toBe(before + 2));
+    await settle();
+    expect(client.flagCalls).toBe(before + 2);
+  });
+
+  it("asks only for the flags", async () => {
+    const client = clientWithBoards();
+    await openWithAnswer(client);
+    await settle();
+    const { listCalls } = client;
+    const opened = client.openCalls.length;
+
+    pass(30_000);
+    focus();
+    await waitFor(() => expect(client.flagCalls).toBeGreaterThan(1));
+    await settle();
+
+    expect(client.listCalls).toBe(listCalls);
+    expect(client.openCalls).toHaveLength(opened);
+  });
+
+  it("takes the marks away when a later run fails, and brings them back with the next", async () => {
+    const client = clientWithBoards();
+    const { container } = await openWithAnswer(client);
+    await settle();
+
+    client.flags = "git failed";
+    pass(30_000);
+    await waitFor(() =>
+      expect(screen.getByRole("status").textContent).toContain("git failed"),
+    );
+    expect(marks(container)).toEqual({ payments: null });
+    await settle();
+
+    client.flags = [{ element: "payments", priority: "hint" }];
+    pass(30_000);
+    await waitFor(() =>
+      expect(marks(container)).toEqual({ payments: "⚠ hint" }),
+    );
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("asks once per tick under StrictMode, and stops when the app closes", async () => {
+    const client = clientWithBoards();
+    const { unmount } = render(
+      <StrictMode>
+        <App client={client} />
+      </StrictMode>,
+    );
+    await screen.findByRole("button", { name: "Context" });
+    await waitFor(() => expect(client.flagCalls).toBeGreaterThan(0));
+    await settle();
+    const before = client.flagCalls;
+
+    pass(30_000);
+    await waitFor(() => expect(client.flagCalls).toBe(before + 1));
+    await settle();
+    expect(client.flagCalls).toBe(before + 1);
+
+    unmount();
+    pass(90_000);
+    focus();
+    await settle();
+    expect(client.flagCalls).toBe(before + 1);
   });
 });
 

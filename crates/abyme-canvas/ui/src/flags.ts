@@ -13,6 +13,28 @@ export type FlagsState =
 /** No box is marked. */
 export const NO_MARKS: FlagMarks = new Map();
 
+/** How often the flags are asked for while the window is visible. */
+const INTERVAL_MS = 30_000;
+
+/**
+ * Calls `ask` when the window gets focus and every interval, while the document
+ * is visible; returns a function that stops. The watcher sees neither commits
+ * nor changes under an anchor, which is what raises flags.
+ */
+export function whileVisible(ask: () => void): () => void {
+  const askIfVisible = () => {
+    if (document.visibilityState === "visible") {
+      ask();
+    }
+  };
+  window.addEventListener("focus", askIfVisible);
+  const interval = setInterval(askIfVisible, INTERVAL_MS);
+  return () => {
+    window.removeEventListener("focus", askIfVisible);
+    clearInterval(interval);
+  };
+}
+
 /** Asks `client` for the review flags; a rejection becomes the message shown. */
 export async function loadFlags(client: AbymeClient): Promise<FlagsState> {
   try {

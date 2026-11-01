@@ -24,7 +24,7 @@ aliases:
 
 When an element changes, the system sets review flags along the [[Relations]] that trigger checks. This works like the dirty flag in build systems. In classic AI, such a thing is called a truth maintenance system. Whether a statement still holds is then judged by the AI or a person.
 
-Review flags are not stored. They are computed whenever they are needed, from the anchors, the [[#Verification Stamp|verification stamps]], Git, and the relations, so they cannot go stale.
+Review flags are not stored. They are computed whenever they are needed, from the anchors, the [[#Verification Stamp|verification stamps]], Git, and the relations, so they cannot go stale. Only what the canvas shows of them lags: while Git answers, its marks are at most 30 s behind (see [[Canvas#Projecting a Board]]).
 
 Two things help against a flood of warnings:
 
