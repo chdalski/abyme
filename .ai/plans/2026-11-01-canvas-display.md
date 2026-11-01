@@ -31,7 +31,7 @@ elements with a breadcrumb, see review flags and pins, and release a pin.
 - [x] Inner boards and a breadcrumb
 - [x] A marker on pinned boxes
 - [x] Releasing a pin
-- [ ] Review flags on boxes
+- [x] Review flags on boxes
 - [ ] Review flags stay current
 
 ## Tasks
@@ -178,23 +178,23 @@ whenever a file watcher sees the project change.
 
 Review path: Security-Hybrid
 
-- [ ] A new command returns each flagged element with `task` or `hint`, computed through the core,
+- [x] A new command returns each flagged element with `task` or `hint`, computed through the core,
       apart from `open_board`, so a slow Git holds up neither boxes nor arrows nor a drag. Opening
       another board does not ask Git again.
-- [ ] A box of a flagged element shows its level, in a form that does not rely on color alone and
+- [x] A box of a flagged element shows its level, in a form that does not rely on color alone and
       that hides none of its text, and shows no reason.
-- [ ] When Git cannot be asked, the board shows one status line that says flags are unavailable and
+- [x] When Git cannot be asked, the board shows one status line that says flags are unavailable and
       why, and marks no box, so a missing mark never reads as clean. While the first answer is
       pending, it says so.
-- [ ] The capability grants the new command and no other, as the capability test checks.
-- [ ] Tests cover the command over IPC in a real repository and outside one, and in Vitest the marks,
+- [x] The capability grants the new command and no other, as the capability test checks.
+- [x] Tests cover the command over IPC in a real repository and outside one, and in Vitest the marks,
       the status line, and a slow answer; `abyme-test-support` becomes a dev-dependency of the canvas.
-- [ ] A reader of Canvas can tell what a mark means and what the line means; its Commands section
+- [x] A reader of Canvas can tell what a mark means and what the line means; its Commands section
       counts and lists the command, and its Security section says the canvas starts Git as the core
       does. The Glossary defines the mark. The components rows of the root
       `CLAUDE.md` for the canvas, with arrows, inner boards, pins, and flags, and for
       `abyme-test-support` state the plan's result.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
       `cargo fmt --all --check`, `cargo deny --locked check`, `pnpm --dir crates/abyme-canvas/ui check`,
       and `pnpm --dir crates/abyme-canvas/ui test` pass.
 

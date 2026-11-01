@@ -1,12 +1,13 @@
 {
   "identifier": "default",
-  "description": "What the canvas's window may call: the list of boards, a board's projection, the writes the canvas admits, and listening to the canvas's events.",
+  "description": "What the canvas's window may call: the list of boards, a board's projection, the writes the canvas admits, the review flags, and listening to the canvas's events.",
   "windows": ["main"],
   "permissions": [
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     "allow-list-boards",
     "allow-open-board",
-    "allow-apply"
+    "allow-apply",
+    "allow-review-flags"
   ]
 }

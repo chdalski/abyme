@@ -69,11 +69,12 @@ main > nav button[aria-current="page"] {
   cursor: pointer;
 }
 
-/* On the box's top edge, where it hides no text and no button. */
-.element-pin {
+/* On the box's top edge, where they hide no text and no button: the pin at the
+   left, the review flag at the right. */
+.element-pin,
+.element-flag {
   position: absolute;
   top: -9px;
-  left: 4px;
   padding: 0 0.25rem;
   border: 1px solid #3b4a6b;
   border-radius: 4px;
@@ -81,6 +82,14 @@ main > nav button[aria-current="page"] {
   font-size: 10px;
   line-height: 14px;
   pointer-events: none;
+}
+
+.element-pin {
+  left: 4px;
+}
+
+.element-flag {
+  right: 4px;
 }
 
 button.element-pin {
@@ -115,6 +124,16 @@ button.element-pin {
   flex-direction: column;
   min-width: 0;
   padding: 0 1rem;
+}
+
+/* A message from the core can be any length, and must leave the canvas its
+   room. */
+.flags-status {
+  flex: none;
+  max-height: 4.5rem;
+  margin: 0.25rem 0;
+  overflow: auto;
+  overflow-wrap: anywhere;
 }
 
 .flow {

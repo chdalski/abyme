@@ -39,13 +39,14 @@ Rejected:
 
 ## Commands
 
-The webview reaches the Rust side through three IPC commands and the event `project-changed`:
+The webview reaches the Rust side through four IPC commands and the event `project-changed`:
 
 | Command | Takes | Does |
 |---|---|---|
 | `list_boards` | nothing | returns the project's boards, each with its ID and title |
 | `open_board` | a board ID | returns the board's projection (see [[#Projecting a Board]]) |
 | `apply` | operations in the format of [[Data Model#Operations]] | applies them to the project through the core, all or none |
+| `review_flags` | nothing | returns each element with a [[Checks\|review flag]], with its level (see [[#Projecting a Board]]) |
 
 `apply` is the only command that writes. It passes a request on only when every operation in it is admitted, and it checks that before it touches the project. Today it admits one kind: `move_element` of an existing element on an existing board that says `pinned`. With `true`, what a person moves stays where they put it (see [[Placement and Layout#Rules]]); with `false`, it releases the pin. It then reads the project and refuses a request that moves an element on a [[Boards and Zones#Modes|mirrored]] board, and one that releases a pin anywhere but at the position in the board file, naming only the operation's position and the board; either writes nothing. That check catches a release from a stale view, which would move the box back; it authorizes nothing. The canvas sends the operation whenever the user finishes moving boxes: releasing a drag of one box or of several, which go in one request, or pressing an arrow key; and when the user clicks the marker of a pinned box, in order with the moves. Boxes cannot be deleted on the canvas. Every other operation, and a request with more operations than the core takes, is refused with the operation's position and kind and nothing of its content. The set of admitted operations grows one reviewed change to `src/admission.rs` at a time. That module matches every kind of operation by name, so a new operation in the core does not build until the canvas admits or refuses it. The UI's `AbymeClient` types `apply` with the admitted operations only.
 
@@ -61,6 +62,7 @@ The Rust side watches the project's files itself: `abyme/`, `abyme/elements/`, a
 - **Only Abyme's own commands:** The webview reaches the Rust side only through the commands in [[#Commands]] and listening to events, not through plugins for files or the shell. The capability grants exactly these; a page from another origin reaches none of them. What the webview can write is limited to the operations `apply` admits.
 - **Only its own pages:** The window navigates only to the canvas's own origin, and to the dev server's while it is developed; it opens no other window.
 - **Only its own scripts:** The page's content security policy, in `ui/index.html`, lets it run only its own scripts. During development, Vite's dev server also sends the policy as a header, so that it covers the scripts Vite puts into the page. Once the page's modules have loaded, it freezes `Object.prototype`.
+- **Git on open:** The canvas starts Git as the core does, when it opens and whenever the project's files change, so start it only where you would run `git status`: a repository unpacked from an archive brings a `.git` whose filters then run.
 - **No widened watch:** The watcher follows no symbolic link and watches no directory recursively, so a link in a cloned repository does not make it walk other directories.
 
 The core's part is in [[Hexagonal Architecture#Security Baseline]].
@@ -84,6 +86,8 @@ This includes camera, selection, moving, resizing, snapping, editing text in pla
 React Flow knows only one surface, no [[Board Graph]]. That fits, because the graph lives in the core. The canvas always shows one board as a projection: the elements and references on it and the arrows between them. Edits go back to the core as operations, and the core sends the new projection.
 
 The canvas computes a board's projection from the core's snapshot, with pure functions in `src/projection.rs`: the command `open_board` takes a board ID and returns the board's mode; one entry per placement, with its rect from the board file, whether the file pins it, the element's type, name, and summary, or a mark that the element's file is missing, and the boards the element owns; the relations the board shows, as `read_board` shows them; and the boards above it. Of the boards above and inside it names only the ID and the title. The projection names its fields one by one and never carries an element's body. Each entry becomes a box of the one node type `element`, at its position and size, and a box on a mirrored board cannot be dragged or moved with the arrow keys. A pinned box (see [[Placement and Layout#Rules]]) shows a marker `pinned` on its top edge: a button that releases the pin and leaves the box where it is, or plain text on a mirrored board. A box shows one `▸` button per board its element owns, and the open board shows a breadcrumb of the boards above it, as `overview` places them; both open a board and write nothing. Where a merge or a hand edit broke the tree, the breadcrumb ends there and the board stays reachable through the list. Each relation becomes an arrow from the bottom of its source to the top of its target, with React Flow's built-in edges, so arrows are not routed around boxes. An arrow shows the relation's label, cut after 40 characters, and no other text, and a `see_also` is dashed. Arrows cannot be selected, deleted, or reconnected, and a relation to an element on another board has none.
+
+A box of an element with a [[Checks|review flag]] shows a mark on its top edge, `⚠ task` or `⚠ hint`: the flag's level and no reason, which the AI or `read_element` gives. The command `review_flags` computes the flags apart from `open_board`, since Git can be slow, so it holds up neither boxes nor arrows nor a drag. The canvas asks when it opens and whenever the watcher sees a change, not per board. A line above the board says so while the first answer is pending. When Git cannot be asked, the line says flags are unavailable and why, and no box is marked, so a box without a mark never reads as clean.
 
 | Abyme | in React Flow |
 |---|---|

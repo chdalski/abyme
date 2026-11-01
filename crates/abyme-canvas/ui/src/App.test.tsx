@@ -48,6 +48,181 @@ function clientWithBoards(): FakeClient {
   return client;
 }
 
+/** The marks on the open board, by the box's element. */
+function marks(container: HTMLElement) {
+  return Object.fromEntries(
+    [...container.querySelectorAll(".react-flow__node")].map((box) => [
+      box.getAttribute("data-id"),
+      box.querySelector(".element-flag")?.textContent ?? null,
+    ]),
+  );
+}
+
+/** Opens the board `context`, which holds the box of `payments`. */
+async function openContext(client: FakeClient) {
+  const rendered = render(<App client={client} />);
+  fireEvent.click(await screen.findByRole("button", { name: "Context" }));
+  await screen.findByRole("heading", { name: "Context" });
+  await waitFor(() => expect(client.listening).toBe(3));
+  return rendered;
+}
+
+describe("review flags", () => {
+  it("marks a box with its level, in words, and no other box", async () => {
+    const client = clientWithBoards();
+    client.views.context = view("context", "Context", [
+      "Payments",
+      "Orders",
+      "Calm",
+      "__proto__",
+    ]);
+    client.flags = [
+      { element: "payments", priority: "task" },
+      { element: "orders", priority: "hint" },
+    ];
+
+    const { container } = await openContext(client);
+
+    await waitFor(() =>
+      expect(marks(container)).toEqual({
+        payments: "⚠ task",
+        orders: "⚠ hint",
+        calm: null,
+        ["__proto__"]: null,
+      }),
+    );
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("keeps the box's text and offers no button on a mark", async () => {
+    const client = clientWithBoards();
+    client.flags = [{ element: "payments", priority: "task" }];
+
+    const { container } = await openContext(client);
+
+    const mark = await waitFor(() => {
+      const found = container.querySelector(".element-flag");
+      expect(found).not.toBeNull();
+      return found;
+    });
+    expect(mark?.closest("button")).toBeNull();
+    expect(mark?.querySelector("button")).toBeNull();
+    expect(screen.getByText("Payments")).toBeDefined();
+    expect(screen.getByText("c4/container")).toBeDefined();
+  });
+
+  it("shows the board while the first answer is pending, says so, and marks nothing", async () => {
+    const client = clientWithBoards();
+    client.flags = [{ element: "payments", priority: "task" }];
+    client.hold(FakeClient.FLAGS);
+
+    const { container } = await openContext(client);
+
+    expect(screen.getByRole("status").textContent).toBe(
+      "Checking review flags…",
+    );
+    expect(screen.getByText("Payments")).toBeDefined();
+    expect(marks(container)).toEqual({ payments: null });
+
+    client.release(FakeClient.FLAGS);
+    await waitFor(() =>
+      expect(marks(container)).toEqual({ payments: "⚠ task" }),
+    );
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("holds up neither an arrow nor a move while the first answer is pending, and disturbs neither when it comes", async () => {
+    const client = clientWithBoards();
+    client.views.context = {
+      ...view("context", "Context", ["Payments", "Orders"]),
+      relations: [
+        { from: "payments", kind: "uses", to: "orders", label: "calls" },
+      ],
+    };
+    client.flags = [{ element: "orders", priority: "hint" }];
+    client.hold(FakeClient.FLAGS);
+    const { container } = await openContext(client);
+
+    await waitFor(() =>
+      expect(
+        container.querySelector(".react-flow__edge-text")?.textContent,
+      ).toBe("calls"),
+    );
+    const box = container.querySelector(
+      '.react-flow__node[data-id="payments"]',
+    );
+    if (!(box instanceof HTMLElement)) {
+      throw new Error("no box for payments");
+    }
+    fireEvent.keyDown(box, { key: "Enter" });
+    await waitFor(() => expect(box.classList.contains("selected")).toBe(true));
+    fireEvent.keyDown(box, { key: "ArrowRight" });
+    await waitFor(() => expect(client.applied).toHaveLength(1));
+    const movedTo = box.style.transform;
+    const opened = client.openCalls.length;
+
+    client.release(FakeClient.FLAGS);
+
+    await waitFor(() =>
+      expect(marks(container)).toEqual({ payments: null, orders: "⚠ hint" }),
+    );
+    expect(box.isConnected).toBe(true);
+    expect(box.style.transform).toBe(movedTo);
+    expect(client.openCalls).toHaveLength(opened);
+  });
+
+  it("says why flags are unavailable, as text, and marks nothing", async () => {
+    const client = clientWithBoards();
+    client.flags = "<img src=x onerror=alert(1)>";
+
+    const { container } = await openContext(client);
+
+    await waitFor(() =>
+      expect(screen.getByRole("status").textContent).toBe(
+        "Review flags are unavailable, so no box is marked: <img src=x onerror=alert(1)>",
+      ),
+    );
+    expect(container.querySelector("img")).toBeNull();
+    expect(marks(container)).toEqual({ payments: null });
+  });
+
+  it("takes every mark away when a later answer fails, and brings them back", async () => {
+    const client = clientWithBoards();
+    client.flags = [{ element: "payments", priority: "task" }];
+    const { container } = await openContext(client);
+    await waitFor(() =>
+      expect(marks(container)).toEqual({ payments: "⚠ task" }),
+    );
+
+    client.flags = "git failed";
+    client.change();
+    await waitFor(() =>
+      expect(screen.getByRole("status").textContent).toContain("git failed"),
+    );
+    expect(marks(container)).toEqual({ payments: null });
+
+    client.flags = [{ element: "payments", priority: "hint" }];
+    client.change();
+    await waitFor(() =>
+      expect(marks(container)).toEqual({ payments: "⚠ hint" }),
+    );
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("asks once for all boards, and again when the project's files change", async () => {
+    const client = clientWithBoards();
+    await openContext(client);
+    await waitFor(() => expect(client.flagCalls).toBe(1));
+
+    fireEvent.click(screen.getByRole("button", { name: "Containers" }));
+    await screen.findByRole("heading", { name: "Containers" });
+    expect(client.flagCalls).toBe(1);
+
+    client.change();
+    await waitFor(() => expect(client.flagCalls).toBe(2));
+  });
+});
+
 describe("App", () => {
   it("shows the titles of the boards the client lists", async () => {
     render(<App client={clientWithBoards()} />);
@@ -63,7 +238,7 @@ describe("App", () => {
     const client = new FakeClient([{ id: "context", title: "Context" }]);
     render(<App client={client} />);
     await screen.findByText("Context");
-    await waitFor(() => expect(client.listening).toBe(1));
+    await waitFor(() => expect(client.listening).toBe(2));
 
     client.boards = [
       { id: "containers", title: "Containers" },
@@ -98,7 +273,7 @@ describe("App", () => {
     render(<App client={client} />);
     fireEvent.click(await screen.findByRole("button", { name: "Context" }));
     await screen.findByText("Payments");
-    await waitFor(() => expect(client.listening).toBe(2));
+    await waitFor(() => expect(client.listening).toBe(3));
 
     client.views.context = view("context", "Context", ["Payments", "Shipping"]);
     client.change();
@@ -202,7 +377,7 @@ describe("App", () => {
   it("stops listening when it is closed", async () => {
     const client = new FakeClient([]);
     const { unmount } = render(<App client={client} />);
-    await waitFor(() => expect(client.listening).toBe(1));
+    await waitFor(() => expect(client.listening).toBe(2));
 
     unmount();
 

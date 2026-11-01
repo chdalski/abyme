@@ -48,6 +48,7 @@ The docs, the UI, and the code use these terms alike. The type names are in [[Da
 | [[Reconciliation#Direction of Changes\|Base snapshot]] | state at the last reconciliation, basis for detecting the direction |
 | [[Change Requests\|Change request]] | change on the board that is to be implemented in the external resource |
 | [[Checks\|Review flag]] | “this needs to be reviewed” |
+| [[Canvas#Projecting a Board\|Review mark]] | what a box on the canvas shows of its element's review flags: the level, `⚠ task` or `⚠ hint`, and no reason |
 | [[Checks#Verification Stamp\|Verification stamp]] | “last verified against commit X, by the AI or a person” |
 | [[Current and Target\|Correspondence link]] | connection between a target element and a current element |
 | [[Current and Target#Diff\|Diff]] | difference between target and current |

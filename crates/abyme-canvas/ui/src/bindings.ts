@@ -40,6 +40,18 @@ relations: Array<Relation>,
  */
 trail: Array<BoardEntry>, };
 
+export type ElementFlag = { 
+/**
+ * The element's ID.
+ */
+element: string, 
+/**
+ * The highest priority among the element's flags.
+ */
+priority: FlagPriority, };
+
+export type FlagPriority = "task" | "hint";
+
 export type Mode = "free" | "mirrored";
 
 export type Placement = { 

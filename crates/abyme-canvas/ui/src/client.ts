@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
-import type { BoardEntry, BoardView } from "./bindings";
+import type { BoardEntry, BoardView, ElementFlag } from "./bindings";
 
 /**
  * An operation the canvas may send: the operations `src/admission.rs`
@@ -34,6 +34,11 @@ export interface AbymeClient {
    */
   apply(operations: AdmittedOperation[]): Promise<void>;
   /**
+   * The project's flagged elements with their levels; rejects with why flags
+   * are unavailable.
+   */
+  reviewFlags(): Promise<ElementFlag[]>;
+  /**
    * Calls `onChange` whenever the project's files change; resolves to a
    * function that stops listening.
    */
@@ -47,5 +52,6 @@ export const tauriClient: AbymeClient = {
   apply: async (operations) => {
     await invoke("apply", { operations });
   },
+  reviewFlags: () => invoke<ElementFlag[]>("review_flags"),
   onProjectChanged: (onChange) => listen("project-changed", () => onChange()),
 };

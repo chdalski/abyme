@@ -9,6 +9,7 @@ use abyme_model::{Mode, RelationKind};
 use ts_rs::{Config, TS};
 
 use crate::boards::BoardEntry;
+use crate::flags::{ElementFlag, FlagPriority};
 use crate::projection::{BoardView, Placement, Relation, Shown};
 
 /// Where the UI's generated types lie, relative to this crate.
@@ -32,6 +33,8 @@ fn bindings() -> String {
         BINDINGS_HEADER.to_owned(),
         exported::<BoardEntry>(&config),
         exported::<BoardView>(&config),
+        exported::<ElementFlag>(&config),
+        exported::<FlagPriority>(&config),
         exported::<Mode>(&config),
         exported::<Placement>(&config),
         exported::<Relation>(&config),

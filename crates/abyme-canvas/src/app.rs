@@ -17,6 +17,7 @@ use tauri::{App, Builder, Emitter as _, Manager as _, Runtime, State, WebviewWin
 
 use crate::admission::{admit, check_board_files};
 use crate::boards::{BoardEntry, board_list};
+use crate::flags::{ElementFlag, element_flags};
 use crate::projection::{BoardView, project};
 use crate::{pages, watcher};
 
@@ -36,7 +37,12 @@ struct Start(PathBuf);
 pub fn configure<R: Runtime>(builder: Builder<R>, start: PathBuf) -> Builder<R> {
     builder
         .manage(Start(start))
-        .invoke_handler(tauri::generate_handler![list_boards, open_board, apply])
+        .invoke_handler(tauri::generate_handler![
+            list_boards,
+            open_board,
+            apply,
+            review_flags
+        ])
         .setup(|app| {
             open_window(app)?;
             watch_project(app);
@@ -124,6 +130,24 @@ async fn apply(start: State<'_, Start>, operations: Operations) -> Result<(), St
             .apply(&operations)
             .map(|_created| ())
             .map_err(|error| error.to_string())
+    })
+    .await
+}
+
+/// The flagged elements of the project with their levels, or why they are
+/// unavailable. Apart from `open_board`, since this asks Git, which can be slow.
+/// Git's failures reach the page only as the core's fixed texts, which carry
+/// nothing Git prints; a project that cannot be read reports as in `open_board`.
+#[tauri::command]
+async fn review_flags(start: State<'_, Start>) -> Result<Vec<ElementFlag>, String> {
+    let start = start.0.clone();
+    on_core(move || {
+        let project = Project::discover(&start).map_err(|error| error.to_string())?;
+        let snapshot = project.snapshot().map_err(|error| error.to_string())?;
+        let review = project
+            .review(&snapshot)
+            .map_err(|reason| reason.to_string())?;
+        Ok(element_flags(&review))
     })
     .await
 }

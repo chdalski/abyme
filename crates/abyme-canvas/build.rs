@@ -12,6 +12,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             "list_boards",
             "open_board",
             "apply",
+            "review_flags",
         ])),
     )?;
     Ok(())

@@ -13,6 +13,7 @@ mod app;
 #[cfg(test)]
 mod bindings;
 mod boards;
+mod flags;
 mod pages;
 mod projection;
 mod watcher;

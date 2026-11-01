@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use std::fs;
 
 use abyme_core::{LocalKey, MAX_OPERATIONS, Operation, ProjectError, UnknownBoard};
+use abyme_test_support::{commit_all, git};
 use serde_json::{Value, json};
 use tauri::ipc::{CallbackFn, InvokeBody};
 use tauri::test::{INVOKE_KEY, MockRuntime, get_ipc_response, mock_builder};
@@ -378,6 +379,107 @@ fn open_board_refuses_an_invalid_id_before_looking_for_a_project() {
             "{body}: {message}"
         );
     }
+}
+
+fn review_flags_from(window: &WebviewWindow<MockRuntime>) -> Result<Value, Value> {
+    invoke(window, APP_ORIGIN, "review_flags", json!({}))
+}
+
+/// Writes the element `id` with a stamp, an anchor, and a relation `uses`, as
+/// far as they are given.
+fn write_element(
+    root: &Path,
+    id: &str,
+    stamp: Option<&str>,
+    anchor: Option<&str>,
+    uses: Option<&str>,
+) {
+    let stamp = stamp.map_or(String::new(), |stamp| {
+        format!("verified: \"{stamp}\"\nverified_by: ai\n")
+    });
+    let anchor = anchor.map_or(String::new(), |anchor| format!("anchor: {anchor}\n"));
+    let uses = uses.map_or(String::new(), |to| {
+        format!("relations:\n  - {{kind: uses, to: {to}}}\n")
+    });
+    fs::create_dir_all(root.join("abyme/elements")).unwrap();
+    fs::write(
+        root.join(format!("abyme/elements/{id}.md")),
+        format!("---\nid: {id}\ntype: t\nname: N\n{anchor}{stamp}{uses}---\n"),
+    )
+    .unwrap();
+}
+
+#[test]
+fn review_flags_name_each_flagged_element_with_its_highest_level_and_nothing_else() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path();
+    git(root, &["init", "-q"]).unwrap();
+    Project::init(root).unwrap();
+    for file in [
+        "src/changed/secret-canary.txt",
+        "src/both/b.txt",
+        "src/target/t.txt",
+    ] {
+        let path = root.join(file);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, "a\n").unwrap();
+    }
+    let first = commit_all(root).unwrap();
+    // `hinted` sees the change of `target` since its own stamp; `target` is
+    // stamped after it, so it has no flag of its own.
+    write_element(root, "hinted", Some(&first), None, Some("target"));
+    fs::write(root.join("src/target/t.txt"), "b\n").unwrap();
+    let second = commit_all(root).unwrap();
+    write_element(root, "target", Some(&second), Some("src/target"), None);
+    write_element(root, "changed", Some(&second), Some("src/changed"), None);
+    write_element(root, "both", Some(&first), Some("src/both"), Some("target"));
+    write_element(root, "calm", None, None, None);
+    fs::write(root.join("src/changed/secret-canary.txt"), "b\n").unwrap();
+    fs::write(root.join("src/both/b.txt"), "b\n").unwrap();
+    let (_app, window) = canvas(root);
+
+    assert_eq!(
+        review_flags_from(&window),
+        Ok(json!([
+            {"element": "both", "priority": "task"},
+            {"element": "changed", "priority": "task"},
+            {"element": "hinted", "priority": "hint"},
+        ]))
+    );
+}
+
+#[test]
+fn review_flags_in_a_project_outside_a_repository_say_so() {
+    let root = tempfile::tempdir().unwrap();
+    project_with_a_board(root.path());
+    let (_app, window) = canvas(root.path());
+
+    assert_eq!(
+        review_flags_from(&window),
+        Err(json!("the project lies in no Git repository"))
+    );
+}
+
+#[test]
+fn review_flags_outside_a_project_return_the_hint_mcp_gives() {
+    let root = tempfile::tempdir().unwrap();
+    let (_app, window) = canvas(root.path());
+
+    assert_eq!(
+        review_flags_from(&window),
+        Err(json!(ProjectError::NotFound.to_string()))
+    );
+}
+
+#[test]
+fn a_remote_page_may_not_ask_for_review_flags() {
+    let root = tempfile::tempdir().unwrap();
+    let (_app, window) = canvas(root.path());
+
+    let response = invoke(&window, "https://example.com/", "review_flags", json!({}));
+
+    let message = response.expect_err("a remote page asked for review flags");
+    assert!(message.to_string().contains("not allowed"), "{message}");
 }
 
 #[test]
@@ -1116,7 +1218,8 @@ fn the_capability_grants_the_canvas_s_commands_and_listening_only() {
             "core:event:allow-unlisten",
             "allow-list-boards",
             "allow-open-board",
-            "allow-apply"
+            "allow-apply",
+            "allow-review-flags"
         ])
     );
     assert_eq!(capability.get("remote"), None);

@@ -1,18 +1,23 @@
-import type { BoardEntry, BoardView } from "./bindings";
+import type { BoardEntry, BoardView, ElementFlag } from "./bindings";
 import type { AbymeClient, AdmittedOperation } from "./client";
 
 /**
  * A client for tests: it lists `boards` and opens the boards in `views`,
  * or rejects where they hold a message instead. `applied` records every
- * request, which rejects with `applyFailure` when that is set. `hold` makes
- * the answers for a board wait until `release` is called, and `change`
- * plays a change of the project's files.
+ * request, which rejects with `applyFailure` when that is set. It answers for
+ * the review flags with `flags`, or rejects where that holds a message. `hold`
+ * makes the answers for a board, or for `FLAGS`, wait until `release` is
+ * called, and `change` plays a change of the project's files.
  */
 export class FakeClient implements AbymeClient {
+  /** What `hold` and `release` take for the answers on review flags; no board can have this ID. */
+  static readonly FLAGS = "review_flags";
   boards: BoardEntry[] | string;
   views: Record<string, BoardView | string> = {};
   applied: AdmittedOperation[][] = [];
   applyFailure: string | null = null;
+  flags: ElementFlag[] | string = [];
+  flagCalls = 0;
   listCalls = 0;
   openCalls: string[] = [];
   private listeners: (() => void)[] = [];
@@ -41,6 +46,15 @@ export class FakeClient implements AbymeClient {
     return this.applyFailure === null
       ? Promise.resolve()
       : Promise.reject(this.applyFailure);
+  }
+
+  async reviewFlags(): Promise<ElementFlag[]> {
+    this.flagCalls += 1;
+    const waiting = this.held.get(FakeClient.FLAGS);
+    if (waiting !== undefined) {
+      await new Promise<void>((resolve) => waiting.push(resolve));
+    }
+    return answer(this.flags);
   }
 
   hold(board: string): void {

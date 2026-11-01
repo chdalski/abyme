@@ -6,6 +6,7 @@ import {
 } from "@xyflow/react";
 import { createContext, useContext } from "react";
 
+import { type FlagMarks, NO_MARKS } from "./flags";
 import type { ElementData, ElementNode } from "./nodes";
 
 /** Opens a board: how a box reaches the app's choice of the open board. */
@@ -18,6 +19,24 @@ export const OpenBoard = createContext<(board: string) => void>(() => {});
 export const ReleasePin = createContext<
   ((element: string, position: XYPosition) => void) | null
 >(null);
+
+/** The levels of the review flags the boxes show. */
+export const ReviewMarks = createContext<FlagMarks>(NO_MARKS);
+
+/**
+ * The mark of an element's review flag: its level in words, and no reason. It
+ * takes no clicks, so it stands in the way of nothing.
+ */
+function FlagMark({ element }: { element: string }) {
+  switch (useContext(ReviewMarks).get(element)) {
+    case undefined:
+      return null;
+    case "task":
+      return <span className="element-flag">⚠ task</span>;
+    case "hint":
+      return <span className="element-flag">⚠ hint</span>;
+  }
+}
 
 /**
  * The buttons of the boards `boards` that an element owns. They neither start
@@ -98,6 +117,7 @@ export function ElementBox({
           position={{ x: positionAbsoluteX, y: positionAbsoluteY }}
         />
       )}
+      <FlagMark element={data.element} />
       {data.innerBoards.length > 0 && <InnerBoards boards={data.innerBoards} />}
       <Handle
         type="source"
