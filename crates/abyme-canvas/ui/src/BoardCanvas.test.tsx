@@ -8,8 +8,11 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { XYPosition } from "@xyflow/react";
+
 import type { BoardView } from "./bindings";
 import { BoardCanvas } from "./BoardCanvas";
+import type { Move } from "./nodes";
 import { boardView, placedBox } from "./testBoards";
 
 afterEach(cleanup);
@@ -25,14 +28,16 @@ function boardIn(mode: BoardView["mode"]): BoardView {
 /** A sized canvas of `view`. */
 function canvasOf(
   view: BoardView,
-  move: () => Promise<void>,
+  move: (moves: Move[]) => Promise<void>,
   onOpen: (board: string) => void = () => {},
+  release: (element: string, position: XYPosition) => void = () => {},
 ) {
   return (
     <div style={{ width: 800, height: 600 }}>
       <BoardCanvas
         view={view}
         move={move}
+        release={release}
         onMoveFailed={() => {}}
         onOpen={onOpen}
       />
@@ -117,6 +122,7 @@ describe("BoardCanvas", () => {
         <BoardCanvas
           view={view}
           move={() => Promise.resolve()}
+          release={() => {}}
           onOpen={() => {}}
           onMoveFailed={() => {}}
         />
@@ -271,21 +277,97 @@ describe("the marker of a pin", () => {
     for (const pinned of ["gone", "kept"]) {
       expect(
         box(container, pinned).querySelector(".element-pin")?.textContent,
-      ).toBe("pinned");
+      ).toContain("pinned");
     }
     expect(box(container, "free").querySelector(".element-pin")).toBeNull();
     expect(box(container, "kept").querySelector("b")).toBeNull();
   });
 
-  it("is plain text, with no button", () => {
+  it("is plain text with no button on a mirrored board", () => {
     const { container } = render(
       canvasOf(
-        boardView({ placements: [placedBox("kept", { pinned: true })] }),
+        boardView({
+          mode: "mirrored",
+          placements: [placedBox("kept", { pinned: true })],
+        }),
         () => Promise.resolve(),
       ),
     );
 
     expect(box(container, "kept").querySelector("button")).toBeNull();
+    expect(
+      box(container, "kept").querySelector(".element-pin")?.textContent,
+    ).toBe("pinned");
+  });
+
+  it("is a button elsewhere that releases the pin where the box lies, and nothing else", () => {
+    for (const mode of [null, "free"] as const) {
+      const move = vi.fn(() => Promise.resolve());
+      const onOpen = vi.fn();
+      const release = vi.fn();
+      const { unmount } = render(
+        canvasOf(
+          boardView({
+            mode,
+            placements: [
+              placedBox("kept", {
+                x: 200,
+                y: 30,
+                pinned: true,
+                inner_boards: [{ id: "inner", title: "Inner" }],
+              }),
+            ],
+          }),
+          move,
+          onOpen,
+          release,
+        ),
+      );
+      const marker = screen.getByRole("button", { name: "Release pin" });
+
+      fireEvent.click(marker);
+      fireEvent.doubleClick(marker);
+
+      expect(release).toHaveBeenCalledWith("kept", { x: 200, y: 30 });
+      expect(move).not.toHaveBeenCalled();
+      expect(onOpen).not.toHaveBeenCalled();
+      unmount();
+    }
+  });
+
+  it("offers no release on a box without a pin", () => {
+    render(
+      canvasOf(boardView({ placements: [placedBox("free")] }), () =>
+        Promise.resolve(),
+      ),
+    );
+
+    expect(screen.queryByRole("button", { name: "Release pin" })).toBeNull();
+  });
+
+  it("names the release in its own words, whatever the element is called", () => {
+    render(
+      canvasOf(
+        boardView({
+          placements: [
+            placedBox("kept", {
+              pinned: true,
+              shown: {
+                kind: "element",
+                type_ref: "t",
+                name: "Keep this pin",
+                summary: null,
+              },
+            }),
+          ],
+        }),
+        () => Promise.resolve(),
+      ),
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Release pin" }).textContent,
+    ).toBe("pinned ×");
   });
 
   it("follows the file through a reload, in both directions", () => {
@@ -532,5 +614,43 @@ describe("arrows in a laid-out canvas", () => {
     expect(path()).toBeTruthy();
     measure();
     expect(path()).toBeTruthy();
+  });
+
+  it("releases a pin where a drag left the box, not where the file still has it", async () => {
+    const move = vi.fn<(moves: Move[]) => Promise<void>>(() =>
+      Promise.resolve(),
+    );
+    const release = vi.fn();
+    const { container } = render(
+      canvasOf(
+        boardView({ placements: [placedBox("kept", { pinned: true })] }),
+        move,
+        () => {},
+        release,
+      ),
+    );
+    measure();
+    measure();
+    const dragged = box(container, "kept");
+
+    act(() => {
+      dragged.dispatchEvent(mouse("mousedown", 10, 10));
+    });
+    act(() => {
+      window.dispatchEvent(mouse("mousemove", 100, 10));
+    });
+    act(() => {
+      window.dispatchEvent(mouse("mousemove", 250, 15));
+    });
+    await act(async () => {
+      window.dispatchEvent(mouse("mouseup", 250, 15));
+      await Promise.resolve();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Release pin" }));
+
+    const position = move.mock.calls[0]?.[0][0]?.position;
+    expect(position).toBeDefined();
+    expect(position).not.toEqual({ x: 0, y: 0 });
+    expect(release).toHaveBeenCalledExactlyOnceWith("kept", position);
   });
 });

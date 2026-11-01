@@ -442,7 +442,7 @@ fn a_request_with_a_layout_writes_nothing() {
 }
 
 #[test]
-fn a_request_with_a_move_that_does_not_pin_writes_nothing() {
+fn a_request_with_a_move_that_does_not_say_pinned_writes_nothing() {
     let root = tempfile::tempdir().unwrap();
     project_with_a_board(root.path());
     let before = project_files(root.path());
@@ -454,25 +454,15 @@ fn a_request_with_a_move_that_does_not_pin_writes_nothing() {
         "x": 1,
         "y": 2
     });
-    let releasing = json!({
-        "op": "move_element",
-        "element": {"existing": "payment-service"},
-        "board": {"existing": "context"},
-        "x": 1,
-        "y": 2,
-        "pinned": false
-    });
 
-    for not_pinning in [plain, releasing] {
-        let applied = apply_from(&window, &json!([a_move(400, 200), not_pinning]));
+    let applied = apply_from(&window, &json!([a_move(400, 200), plain]));
 
-        let error = applied.unwrap_err().to_string();
-        assert!(
-            error.contains("the canvas may not send move_element without pinned: true"),
-            "{error}"
-        );
-        assert_eq!(project_files(root.path()), before);
-    }
+    let error = applied.unwrap_err().to_string();
+    assert!(
+        error.contains("the canvas may not send move_element without pinned"),
+        "{error}"
+    );
+    assert_eq!(project_files(root.path()), before);
 }
 
 /// `root` as `project_with_a_board` leaves it, with the board `context` made
@@ -498,6 +488,36 @@ fn add_a_free_board(root: &Path) {
     )
     .unwrap();
 }
+
+/// `project_with_a_board` with `payment-service` moved by the canvas, so
+/// pinned at 400, 200, in the file the core writes.
+fn project_with_a_pin(root: &Path) -> (App<MockRuntime>, WebviewWindow<MockRuntime>) {
+    project_with_a_board(root);
+    let (app, window) = canvas(root);
+    apply_from(&window, &json!([a_move(400, 200)])).unwrap();
+    (app, window)
+}
+
+fn a_release_of(element: &str, board: &str, x: i64, y: i64) -> Value {
+    json!({
+        "op": "move_element",
+        "element": {"existing": element},
+        "board": {"existing": board},
+        "x": x,
+        "y": y,
+        "pinned": false
+    })
+}
+
+fn a_release(x: i64, y: i64) -> Value {
+    a_release_of("payment-service", "context", x, y)
+}
+
+fn context_file(root: &Path) -> String {
+    fs::read_to_string(root.join("abyme/boards/context.board.json")).unwrap()
+}
+
+const RELEASED_ELSEWHERE: &str = "the canvas releases a pin on board";
 
 const MIRRORED: &str = r#"{"mode": "mirrored", "statement": "current"}"#;
 const FREE: &str = r#"{"mode": "free", "statement": "idea"}"#;
@@ -545,6 +565,220 @@ fn a_request_that_also_moves_on_a_mirrored_board_writes_nothing() {
         Err(json!(
             "operation 2: board context is mirrored, so the canvas may not move its elements"
         ))
+    );
+    assert_eq!(project_files(root.path()), before);
+}
+
+#[test]
+fn a_release_at_the_file_s_position_changes_only_the_pin() {
+    let root = tempfile::tempdir().unwrap();
+    let (_app, window) = project_with_a_pin(root.path());
+    let pinned = context_file(root.path());
+    assert!(pinned.contains(", \"pinned\": true"), "{pinned}");
+
+    apply_from(&window, &json!([a_release(400, 200)])).unwrap();
+
+    assert_eq!(
+        context_file(root.path()),
+        pinned.replace(", \"pinned\": true", "")
+    );
+}
+
+#[test]
+fn a_release_of_a_box_without_a_pin_changes_no_file() {
+    let root = tempfile::tempdir().unwrap();
+    project_with_a_board(root.path());
+    let (_app, window) = canvas(root.path());
+    let view = open_board_from(&window, json!({"board": "context"})).unwrap();
+    let payments = view["placements"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|placement| placement["element"] == json!("payment-service"))
+        .unwrap();
+    let release = a_release(
+        payments["x"].as_i64().unwrap(),
+        payments["y"].as_i64().unwrap(),
+    );
+    let before = project_files(root.path());
+
+    apply_from(&window, &json!([release])).unwrap();
+
+    assert_eq!(project_files(root.path()), before);
+}
+
+#[test]
+fn a_release_anywhere_else_writes_nothing_and_names_position_and_board() {
+    for zone in [None, Some(FREE)] {
+        let root = tempfile::tempdir().unwrap();
+        let (_app, window) = project_with_a_pin(root.path());
+        if let Some(zone) = zone {
+            make_context_a_zone(root.path(), zone);
+        }
+        let before = project_files(root.path());
+
+        for (x, y) in [(401, 200), (400, 201), (0, 0)] {
+            let error = apply_from(&window, &json!([a_release(x, y)]))
+                .unwrap_err()
+                .to_string();
+
+            assert!(
+                error.contains(&format!(
+                    "operation 1: {RELEASED_ELSEWHERE} context only at the position in the board \
+                     file"
+                )),
+                "{error}"
+            );
+            assert!(!error.contains("payment-service"), "{error}");
+            assert_eq!(project_files(root.path()), before);
+        }
+    }
+}
+
+#[test]
+fn a_release_of_an_element_the_board_does_not_place_writes_nothing() {
+    let root = tempfile::tempdir().unwrap();
+    let (_app, window) = project_with_a_pin(root.path());
+    let before = project_files(root.path());
+
+    let error = apply_from(
+        &window,
+        &json!([a_release_of("nowhere", "context", 400, 200)]),
+    )
+    .unwrap_err()
+    .to_string();
+
+    assert!(error.contains(RELEASED_ELSEWHERE), "{error}");
+    assert_eq!(project_files(root.path()), before);
+}
+
+#[test]
+fn a_release_of_an_element_whose_file_is_missing_writes_nothing_like_a_move_of_it() {
+    let root = tempfile::tempdir().unwrap();
+    project_with_a_board(root.path());
+    let (_app, window) = canvas(root.path());
+    let view = open_board_from(&window, json!({"board": "context"})).unwrap();
+    let orders = view["placements"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|placement| placement["element"] == json!("orders"))
+        .unwrap();
+    let release = a_release_of(
+        "orders",
+        "context",
+        orders["x"].as_i64().unwrap(),
+        orders["y"].as_i64().unwrap(),
+    );
+    let before = project_files(root.path());
+
+    let applied = apply_from(&window, &json!([release]));
+
+    assert!(applied.is_err());
+    assert_eq!(project_files(root.path()), before);
+}
+
+#[test]
+fn a_release_with_the_position_of_another_board_writes_nothing() {
+    let root = tempfile::tempdir().unwrap();
+    let (_app, window) = project_with_a_pin(root.path());
+    add_a_free_board(root.path());
+    let before = project_files(root.path());
+
+    let error = apply_from(
+        &window,
+        &json!([a_release_of("payment-service", "free-board", 400, 200)]),
+    )
+    .unwrap_err()
+    .to_string();
+
+    assert!(
+        error.contains(&format!("{RELEASED_ELSEWHERE} free-board")),
+        "{error}"
+    );
+    assert_eq!(project_files(root.path()), before);
+}
+
+#[test]
+fn a_release_on_a_mirrored_board_is_refused_like_every_move_there() {
+    let root = tempfile::tempdir().unwrap();
+    let (_app, window) = project_with_a_pin(root.path());
+    make_context_a_zone(root.path(), MIRRORED);
+    let before = project_files(root.path());
+
+    let error = apply_from(&window, &json!([a_release(400, 200)]))
+        .unwrap_err()
+        .to_string();
+
+    assert!(
+        error.contains("board context is mirrored, so the canvas may not move its elements"),
+        "{error}"
+    );
+    assert_eq!(project_files(root.path()), before);
+}
+
+#[test]
+fn a_release_on_an_unknown_board_writes_nothing() {
+    let root = tempfile::tempdir().unwrap();
+    let (_app, window) = project_with_a_pin(root.path());
+    let before = project_files(root.path());
+
+    let applied = apply_from(
+        &window,
+        &json!([a_release_of("payment-service", "nowhere", 400, 200)]),
+    );
+
+    assert!(applied.is_err());
+    assert_eq!(project_files(root.path()), before);
+}
+
+#[test]
+fn a_move_with_a_release_at_its_new_position_writes_nothing() {
+    let root = tempfile::tempdir().unwrap();
+    let (_app, window) = project_with_a_pin(root.path());
+    let before = project_files(root.path());
+
+    let error = apply_from(&window, &json!([a_move(10, 20), a_release(10, 20)]))
+        .unwrap_err()
+        .to_string();
+
+    assert!(
+        error.contains(&format!("operation 2: {RELEASED_ELSEWHERE}")),
+        "{error}"
+    );
+    assert_eq!(project_files(root.path()), before);
+}
+
+#[test]
+fn a_move_with_a_release_at_the_file_s_position_ends_like_the_release_alone() {
+    let root = tempfile::tempdir().unwrap();
+    let (_app, window) = project_with_a_pin(root.path());
+    let released = context_file(root.path()).replace(", \"pinned\": true", "");
+
+    apply_from(&window, &json!([a_move(10, 20), a_release(400, 200)])).unwrap();
+
+    assert_eq!(context_file(root.path()), released);
+}
+
+#[test]
+fn a_request_with_one_good_release_and_one_elsewhere_writes_neither() {
+    let root = tempfile::tempdir().unwrap();
+    let (_app, window) = project_with_a_pin(root.path());
+    let before = project_files(root.path());
+
+    let error = apply_from(
+        &window,
+        &json!([
+            a_release(400, 200),
+            a_release_of("orders", "context", 999, 999)
+        ]),
+    )
+    .unwrap_err()
+    .to_string();
+
+    assert!(
+        error.contains(&format!("operation 2: {RELEASED_ELSEWHERE}")),
+        "{error}"
     );
     assert_eq!(project_files(root.path()), before);
 }

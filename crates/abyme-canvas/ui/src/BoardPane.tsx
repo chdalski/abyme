@@ -1,10 +1,11 @@
+import type { XYPosition } from "@xyflow/react";
 import { useCallback, useMemo, useState } from "react";
 
 import { BoardCanvas } from "./BoardCanvas";
 import { type BoardState, inOrder, loadBoard } from "./boards";
-import type { AbymeClient } from "./client";
+import type { AbymeClient, AdmittedOperation } from "./client";
 import { useLive } from "./live";
-import { toMove } from "./moves";
+import { toMove, toRelease } from "./moves";
 import type { Move } from "./nodes";
 
 /**
@@ -24,25 +25,32 @@ export function BoardPane({
   const load = useCallback(() => loadBoard(client, board), [client, board]);
   const state = useLive<BoardState>(client, load, { kind: "loading" });
   const [moveFailure, setMoveFailure] = useState<string | null>(null);
-  // Moves reach the core in the order the user made them, so that the
-  // board file ends at the last one, however fast the arrow keys repeat.
+  // Moves and releases reach the core in the order the user made them, so
+  // that the board file ends at the last one, however fast the arrow keys
+  // repeat, and a release right after a drag finds the box where the drag
+  // left it.
   const send = useMemo(
     () =>
-      inOrder((moves: Move[]) =>
-        client.apply(
-          moves.map(({ element, position }) =>
-            toMove(board, element, position),
-          ),
-        ),
-      ),
-    [client, board],
+      inOrder((operations: AdmittedOperation[]) => client.apply(operations)),
+    [client],
   );
   const move = useCallback(
     async (moves: Move[]) => {
-      await send(moves);
+      await send(
+        moves.map(({ element, position }) => toMove(board, element, position)),
+      );
       setMoveFailure(null);
     },
-    [send],
+    [send, board],
+  );
+  const release = useCallback(
+    (element: string, position: XYPosition) => {
+      send([toRelease(board, element, position)]).then(
+        () => setMoveFailure(null),
+        (error: unknown) => setMoveFailure(String(error)),
+      );
+    },
+    [send, board],
   );
 
   switch (state.kind) {
@@ -72,6 +80,7 @@ export function BoardPane({
             <BoardCanvas
               view={state.view}
               move={move}
+              release={release}
               onMoveFailed={setMoveFailure}
               onOpen={onOpen}
             />

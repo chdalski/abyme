@@ -2,9 +2,10 @@
 
 use super::*;
 use std::collections::BTreeMap;
+use std::num::NonZeroU32;
 
 use abyme_core::LocalKey;
-use abyme_model::{Board, StatementKind, Zone};
+use abyme_model::{Placement, Rect, StatementKind, Zone};
 use serde_json::{Value, json};
 
 fn operation(value: Value) -> Operation {
@@ -28,28 +29,45 @@ fn a_move_of_an_existing_element_on_an_existing_board_is_admitted() {
 }
 
 #[test]
-fn a_move_that_does_not_pin_is_refused_with_its_position() {
-    for without_a_pin in [
-        json!({"op": "move_element", "element": {"existing": "payments"}, "board": {"existing": "context"}, "x": 1, "y": 2}),
-        json!({"op": "move_element", "element": {"existing": "payments"}, "board": {"existing": "context"}, "x": 1, "y": 2, "pinned": false}),
-    ] {
-        let refusal = admit(&[move_existing(), operation(without_a_pin)]).unwrap_err();
+fn a_release_of_an_existing_element_on_an_existing_board_is_admitted() {
+    let release = operation(json!({
+        "op": "move_element",
+        "element": {"existing": "payments"},
+        "board": {"existing": "context"},
+        "x": 1,
+        "y": 2,
+        "pinned": false
+    }));
 
-        assert_eq!(
-            refusal,
-            Refused::Operation {
-                position: 2,
-                kind: "move_element without pinned: true",
-            }
-        );
-    }
+    assert_eq!(admit(&[release]), Ok(()));
 }
 
 #[test]
-fn a_pin_does_not_admit_a_move_with_a_new_element_or_board() {
+fn a_move_that_does_not_say_pinned_is_refused_with_its_position() {
+    let without_pinned = operation(json!({
+        "op": "move_element",
+        "element": {"existing": "payments"},
+        "board": {"existing": "context"},
+        "x": 1,
+        "y": 2
+    }));
+
+    assert_eq!(
+        admit(&[move_existing(), without_pinned]),
+        Err(Refused::Operation {
+            position: 2,
+            kind: "move_element without pinned",
+        })
+    );
+}
+
+#[test]
+fn pinned_does_not_admit_a_move_with_a_new_element_or_board() {
     for with_a_new_ref in [
         json!({"op": "move_element", "element": {"new": "e"}, "board": {"existing": "context"}, "x": 1, "y": 2, "pinned": true}),
         json!({"op": "move_element", "element": {"existing": "payments"}, "board": {"new": "b"}, "x": 1, "y": 2, "pinned": true}),
+        json!({"op": "move_element", "element": {"new": "e"}, "board": {"existing": "context"}, "x": 1, "y": 2, "pinned": false}),
+        json!({"op": "move_element", "element": {"existing": "payments"}, "board": {"new": "b"}, "x": 1, "y": 2, "pinned": false}),
     ] {
         assert_eq!(
             admit(&[operation(with_a_new_ref)]),
@@ -243,7 +261,7 @@ fn refuses_a_move_on_a_mirrored_board_and_names_where() {
         let operations: Vec<Operation> = boards.iter().map(|board| a_move_on(board)).collect();
 
         assert_eq!(
-            check_modes(&snapshot(), &operations),
+            check_board_files(&snapshot(), &operations),
             Err(Refused::Mirrored {
                 position,
                 board: "mirrored".parse().unwrap(),
@@ -257,7 +275,7 @@ fn refuses_a_move_on_a_mirrored_board_and_names_where() {
 fn lets_a_move_pass_on_a_free_board_on_no_zone_and_on_a_board_it_does_not_have() {
     for board in ["free", "plain", "nowhere"] {
         assert_eq!(
-            check_modes(&snapshot(), &[a_move_on(board)]),
+            check_board_files(&snapshot(), &[a_move_on(board)]),
             Ok(()),
             "{board}"
         );
@@ -274,5 +292,105 @@ fn names_only_the_position_and_the_board_of_a_refused_move() {
     assert_eq!(
         refused.to_string(),
         "operation 2: board mirrored is mirrored, so the canvas may not move its elements"
+    );
+}
+
+/// A release of the pin of `payments` on the existing board `board`, at 10, 20.
+fn a_release_on(board: &str) -> Operation {
+    operation(json!({
+        "op": "move_element",
+        "element": {"existing": "payments"},
+        "board": {"existing": board},
+        "x": 10,
+        "y": 20,
+        "pinned": false
+    }))
+}
+
+/// `snapshot` with `payments` on the board `plain` at `x` and `y`.
+fn snapshot_with_payments_at(x: i32, y: i32) -> Snapshot {
+    let mut snapshot = snapshot();
+    snapshot
+        .boards
+        .get_mut(&"plain".parse::<BoardId>().unwrap())
+        .unwrap()
+        .placements
+        .insert(
+            "payments".parse().unwrap(),
+            Placement {
+                rect: Rect {
+                    x,
+                    y,
+                    width: NonZeroU32::new(180).unwrap(),
+                    height: NonZeroU32::new(90).unwrap(),
+                },
+                pinned: true,
+            },
+        );
+    snapshot
+}
+
+#[test]
+fn lets_a_release_pass_only_at_the_position_in_the_file_of_its_board() {
+    assert_eq!(
+        check_board_files(&snapshot_with_payments_at(10, 20), &[a_release_on("plain")]),
+        Ok(())
+    );
+    for (x, y) in [(11, 20), (10, 21)] {
+        assert_eq!(
+            check_board_files(&snapshot_with_payments_at(x, y), &[a_release_on("plain")]),
+            Err(Refused::ReleaseElsewhere {
+                position: 1,
+                board: "plain".parse().unwrap(),
+            }),
+            "{x}, {y}"
+        );
+    }
+}
+
+#[test]
+fn refuses_a_release_of_an_element_its_board_does_not_place() {
+    for board in ["free", "plain"] {
+        assert_eq!(
+            check_board_files(&snapshot(), &[a_release_on(board)]),
+            Err(Refused::ReleaseElsewhere {
+                position: 1,
+                board: board.parse().unwrap(),
+            }),
+            "{board}"
+        );
+    }
+}
+
+#[test]
+fn refuses_a_release_on_a_mirrored_board_as_a_move_there() {
+    assert_eq!(
+        check_board_files(&snapshot(), &[a_release_on("mirrored")]),
+        Err(Refused::Mirrored {
+            position: 1,
+            board: "mirrored".parse().unwrap(),
+        })
+    );
+}
+
+#[test]
+fn lets_a_release_on_a_board_it_does_not_have_pass_to_the_core() {
+    assert_eq!(
+        check_board_files(&snapshot(), &[a_release_on("nowhere")]),
+        Ok(())
+    );
+}
+
+#[test]
+fn names_only_the_position_and_the_board_of_a_refused_release() {
+    let refused = Refused::ReleaseElsewhere {
+        position: 2,
+        board: "plain".parse().unwrap(),
+    };
+
+    assert_eq!(
+        refused.to_string(),
+        "operation 2: the canvas releases a pin on board plain only at the position in the board \
+         file"
     );
 }

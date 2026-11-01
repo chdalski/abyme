@@ -1,26 +1,36 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
 import type { ReactFlowProps, XYPosition } from "@xyflow/react";
+import { type FunctionComponent, useContext } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { BoardView } from "./bindings";
 import { BoardPane } from "./BoardPane";
+import { ReleasePin } from "./ElementBox";
 import { FakeClient } from "./fakeClient";
 import { boardView, placedBox } from "./testBoards";
 import type { ElementNode } from "./nodes";
 
 // jsdom cannot drive React Flow's pointer drag, so React Flow is replaced by
 // a stand-in that keeps the props the pane gives it; a test then reports
-// the position changes React Flow reports when boxes move.
+// the position changes React Flow reports when boxes move. A probe inside it
+// keeps what a box would call to release its pin.
 const flow = vi.hoisted(() => ({
   props: null as ReactFlowProps<ElementNode> | null,
+  release: null as ((element: string, position: XYPosition) => void) | null,
+  Probe: (() => null) as FunctionComponent,
 }));
 vi.mock("@xyflow/react", async (original) => ({
   ...(await original<typeof import("@xyflow/react")>()),
   ReactFlow: (props: ReactFlowProps<ElementNode>) => {
     flow.props = props;
-    return null;
+    return <flow.Probe />;
   },
 }));
+
+flow.Probe = function ReleaseProbe() {
+  flow.release = useContext(ReleasePin);
+  return null;
+};
 
 afterEach(cleanup);
 
@@ -144,6 +154,92 @@ describe("BoardPane", () => {
       orders: { x: 300, y: 0 },
       payments: { x: 0, y: 0 },
     });
+  });
+
+  /** Releases the pin of `payments` as its box would, at its position. */
+  async function releasePayments(position: XYPosition) {
+    await act(async () => {
+      flow.release?.("payments", position);
+      await Promise.resolve();
+    });
+  }
+
+  it("sends a release that says pinned: false, at integer coordinates", async () => {
+    const client = paneWith(null);
+    await openPane(client);
+
+    await releasePayments({ x: 40.4, y: -80.6 });
+
+    expect(client.applied).toEqual([
+      [
+        {
+          op: "move_element",
+          element: { existing: "payments" },
+          board: { existing: "context" },
+          x: 40,
+          y: -81,
+          pinned: false,
+        },
+      ],
+    ]);
+  });
+
+  it("holds a release back until the move before it has been written", async () => {
+    const client = paneWith(null);
+    let finishMove = () => {};
+    const apply = vi
+      .spyOn(client, "apply")
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            finishMove = resolve;
+          }),
+      )
+      .mockResolvedValue();
+    await openPane(client);
+
+    await dragTogether({ payments: { x: 40, y: 80 } });
+    await releasePayments({ x: 40, y: 80 });
+    expect(apply).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      finishMove();
+      await Promise.resolve();
+    });
+    expect(apply.mock.calls.map(([[first]]) => first?.pinned)).toEqual([
+      true,
+      false,
+    ]);
+  });
+
+  it("shows why a release failed, as text, and moves no box", async () => {
+    const message = "<img src=x onerror=alert(1)>";
+    const client = paneWith(message);
+    const { container } = await openPane(client);
+
+    await releasePayments({ x: 0, y: 0 });
+
+    expect((await screen.findByRole("alert")).textContent).toBe(message);
+    expect(container.querySelector("img")).toBeNull();
+    expect(positionsOnCanvas()).toEqual({
+      orders: { x: 300, y: 0 },
+      payments: { x: 0, y: 0 },
+    });
+  });
+
+  it("still sends a release after a move failed", async () => {
+    const message = "the move failed";
+    const client = paneWith(message);
+    await openPane(client);
+
+    await dragTogether({ payments: { x: 40, y: 80 } });
+    await releasePayments({ x: 0, y: 0 });
+
+    expect(client.applied.map(([first]) => first?.pinned)).toEqual([
+      true,
+      false,
+    ]);
+    expect((await screen.findByRole("alert")).textContent).toBe(message);
   });
 
   it("gives React Flow no key that deletes a box", async () => {

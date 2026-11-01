@@ -8,12 +8,30 @@ export function toMove(
   element: string,
   position: XYPosition,
 ): AdmittedOperation {
+  return placeAt(board, element, position, true);
+}
+
+/** The operation that releases the pin of `element` on `board`, which lies at `position`, rounded as a move rounds it. */
+export function toRelease(
+  board: string,
+  element: string,
+  position: XYPosition,
+): AdmittedOperation {
+  return placeAt(board, element, position, false);
+}
+
+function placeAt(
+  board: string,
+  element: string,
+  position: XYPosition,
+  pinned: boolean,
+): AdmittedOperation {
   return {
     op: "move_element",
     element: { existing: element },
     board: { existing: board },
     x: Math.round(position.x),
     y: Math.round(position.y),
-    pinned: true,
+    pinned,
   };
 }

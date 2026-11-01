@@ -10,12 +10,11 @@ export function onlyAdmittedOperations(client: AbymeClient): void {
     { op: "move_element", element, board, x: 1, y: 2, pinned: true },
   ]);
   void client.apply([
-    // @ts-expect-error The canvas pins what a person moves.
-    { op: "move_element", element, board, x: 1, y: 2 },
+    { op: "move_element", element, board, x: 1, y: 2, pinned: false },
   ]);
   void client.apply([
-    // @ts-expect-error The canvas may not release a pin.
-    { op: "move_element", element, board, x: 1, y: 2, pinned: false },
+    // @ts-expect-error The canvas says whether a move pins or releases.
+    { op: "move_element", element, board, x: 1, y: 2 },
   ]);
   void client.apply([
     // @ts-expect-error The canvas may not create elements.

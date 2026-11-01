@@ -1,10 +1,23 @@
-import { Handle, type NodeProps, Position } from "@xyflow/react";
+import {
+  Handle,
+  type NodeProps,
+  Position,
+  type XYPosition,
+} from "@xyflow/react";
 import { createContext, useContext } from "react";
 
 import type { ElementData, ElementNode } from "./nodes";
 
 /** Opens a board: how a box reaches the app's choice of the open board. */
 export const OpenBoard = createContext<(board: string) => void>(() => {});
+
+/**
+ * Releases the pin of an element at its position, or `null` on a board where
+ * a person may not.
+ */
+export const ReleasePin = createContext<
+  ((element: string, position: XYPosition) => void) | null
+>(null);
 
 /**
  * The buttons of the boards `boards` that an element owns. They neither start
@@ -30,11 +43,46 @@ function InnerBoards({ boards }: { boards: ElementData["innerBoards"] }) {
 }
 
 /**
+ * The marker of a pinned box: a button that releases the pin where a person
+ * may, and says so, or plain text. Like the buttons of inner boards, it neither
+ * starts a drag nor moves a selected box with the arrow keys.
+ */
+function PinMarker({
+  element,
+  position,
+}: {
+  element: string;
+  position: XYPosition;
+}) {
+  const release = useContext(ReleasePin);
+  if (release === null) {
+    return <span className="element-pin">pinned</span>;
+  }
+  return (
+    <button
+      type="button"
+      className="element-pin nodrag nopan nokey"
+      aria-label="Release pin"
+      title="Release pin"
+      onClick={() => release(element, position)}
+      onDoubleClick={(event) => event.stopPropagation()}
+    >
+      pinned ×
+    </button>
+  );
+}
+
+/**
  * The box of an element on the canvas. Its handles are hidden and connect
  * nothing: React Flow measures them, and without them it forgets where arrows
- * start and end after it measures the box.
+ * start and end after it measures the box. A release of its pin goes by where
+ * the box lies now, so it follows a drag still on its way to the board file.
  */
-export function ElementBox({ data }: NodeProps<ElementNode>) {
+export function ElementBox({
+  data,
+  positionAbsoluteX,
+  positionAbsoluteY,
+}: NodeProps<ElementNode>) {
   return (
     <>
       <Handle
@@ -44,7 +92,12 @@ export function ElementBox({ data }: NodeProps<ElementNode>) {
         className="element-handle"
       />
       <ElementContent element={data.element} shown={data.shown} />
-      {data.pinned && <span className="element-pin">pinned</span>}
+      {data.pinned && (
+        <PinMarker
+          element={data.element}
+          position={{ x: positionAbsoluteX, y: positionAbsoluteY }}
+        />
+      )}
       {data.innerBoards.length > 0 && <InnerBoards boards={data.innerBoards} />}
       <Handle
         type="source"

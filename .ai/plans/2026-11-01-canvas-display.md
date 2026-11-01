@@ -30,7 +30,7 @@ elements with a breadcrumb, see review flags and pins, and release a pin.
 - [x] Relations as arrows
 - [x] Inner boards and a breadcrumb
 - [x] A marker on pinned boxes
-- [ ] Releasing a pin
+- [x] Releasing a pin
 - [ ] Review flags on boxes
 - [ ] Review flags stay current
 
@@ -153,21 +153,21 @@ A person releases a pin in the canvas with one click, and the box stays where it
 
 Review path: Security-Hybrid
 
-- [ ] On a board that is not mirrored, the marker of a pinned box is a button that releases the pin.
+- [x] On a board that is not mirrored, the marker of a pinned box is a button that releases the pin.
       On a mirrored board it stays a plain marker. A release is `move_element` with `pinned: false`
       at the box's position, sent in order with the moves of the canvas.
-- [ ] The canvas admits `move_element` with `pinned: false` only when its position is the one in the
+- [x] The canvas admits `move_element` with `pinned: false` only when its position is the one in the
       board file, and refuses it otherwise by position and board, naming no other text; a request
       with such an operation writes nothing. `move_element` without `pinned` stays refused, and a
       release on a mirrored board is refused like every move there.
-- [ ] Rust tests cover each of these states through `apply` over IPC with the bytes of the board file,
+- [x] Rust tests cover each of these states through `apply` over IPC with the bytes of the board file,
       and the tests that pinned the refusal of `pinned: false` change to the new rule; Vitest covers
       the button and its absence on a mirrored board, and the typecheck file `admitted.typecheck.ts`
       covers the wider type.
-- [ ] A reader of Canvas, Placement and Layout, and the Glossary's entry on a pin can tell how a person
+- [x] A reader of Canvas, Placement and Layout, and the Glossary's entry on a pin can tell how a person
       releases a pin, and the comments in `admission.rs`, `app.rs`, and `client.ts` that say what the
       canvas may send, and which check needs the project, state the new rule.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
       `cargo fmt --all --check`, `pnpm --dir crates/abyme-canvas/ui check`, and
       `pnpm --dir crates/abyme-canvas/ui test` pass.
 

@@ -163,6 +163,42 @@ describe("App", () => {
     expect(container.querySelector("img")).toBeNull();
   });
 
+  it("releases a pin with one click, and the marker goes with the reload", async () => {
+    const client = clientWithBoards();
+    const pinned = view("context", "Context", ["Payments"]);
+    client.views.context = {
+      ...pinned,
+      placements: pinned.placements.map((placement) => ({
+        ...placement,
+        pinned: true,
+      })),
+    };
+    render(<App client={client} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Context" }));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Release pin" }));
+
+    await waitFor(() =>
+      expect(client.applied).toEqual([
+        [
+          {
+            op: "move_element",
+            element: { existing: "payments" },
+            board: { existing: "context" },
+            x: 0,
+            y: 0,
+            pinned: false,
+          },
+        ],
+      ]),
+    );
+    client.views.context = pinned;
+    client.change();
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Release pin" })).toBeNull(),
+    );
+  });
+
   it("stops listening when it is closed", async () => {
     const client = new FakeClient([]);
     const { unmount } = render(<App client={client} />);

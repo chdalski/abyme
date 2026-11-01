@@ -1,7 +1,7 @@
 //! The canvas's side of the IPC boundary: its commands, its one event, its
 //! window, and the watcher that raises the event. The one command that
-//! writes, `apply`, passes a request on only when `admission` admits it and
-//! no move in it lies on a mirrored board.
+//! writes, `apply`, passes a request on only when `admission` admits it, no
+//! move in it lies on a mirrored board, and no release leaves its position.
 //!
 //! No command takes a path: every command works on the project that the
 //! directory the canvas started in lies in, found anew by the core on each
@@ -15,7 +15,7 @@ use abyme_model::BoardId;
 use tauri::webview::NewWindowResponse;
 use tauri::{App, Builder, Emitter as _, Manager as _, Runtime, State, WebviewWindowBuilder};
 
-use crate::admission::{admit, check_modes};
+use crate::admission::{admit, check_board_files};
 use crate::boards::{BoardEntry, board_list};
 use crate::projection::{BoardView, project};
 use crate::{pages, watcher};
@@ -104,11 +104,13 @@ async fn open_board(start: State<'_, Start>, board: BoardId) -> Result<BoardView
 }
 
 /// Applies `operations` to the project, all or none, once the canvas may
-/// send every one of them and none moves an element on a mirrored board. The
-/// first check comes before any access to the project, the second reads the
-/// project the request goes to; a board that turns mirrored between it and
-/// the write lets that one move through, which changes only that element's
-/// position and pin.
+/// send every one of them, none moves an element on a mirrored board, and none
+/// releases a pin anywhere but at the position in the board file. The first
+/// check comes before any access to the project, the second reads the project
+/// the request goes to; a board that turns mirrored, or a box that moves,
+/// between it and the write lets that one operation through, which changes
+/// only that element's position and pin. The position catches a stale view and
+/// authorizes nothing.
 #[tauri::command]
 async fn apply(start: State<'_, Start>, operations: Operations) -> Result<(), String> {
     let operations = operations.into_vec();
@@ -117,7 +119,7 @@ async fn apply(start: State<'_, Start>, operations: Operations) -> Result<(), St
     on_core(move || {
         let project = Project::discover(&start).map_err(|error| error.to_string())?;
         let snapshot = project.snapshot().map_err(|error| error.to_string())?;
-        check_modes(&snapshot, &operations).map_err(|refused| refused.to_string())?;
+        check_board_files(&snapshot, &operations).map_err(|refused| refused.to_string())?;
         project
             .apply(&operations)
             .map(|_created| ())

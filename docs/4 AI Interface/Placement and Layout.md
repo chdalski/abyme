@@ -25,7 +25,7 @@ aliases:
 
 ## Rules
 
-- **Pinned positions:** What a person placed by hand is moved neither by the AI nor by auto-layout without asking. Moving a box in the canvas pins it. A `move_element` of a pinned element is refused unless it says `pinned`: `true` keeps the pin and `false` releases it, which the AI sends only after the person has said so. Only such a move pins a box; a box placed any other way is not pinned.
+- **Pinned positions:** What a person placed by hand is moved neither by the AI nor by auto-layout without asking. Moving a box in the canvas pins it, and a click on its marker releases the pin and leaves the box where it is. A `move_element` of a pinned element is refused unless it says `pinned`: `true` keeps the pin and `false` releases it, which the AI sends only after the person has said so. Only such a move pins a box; a box placed any other way is not pinned.
 - **Box sizes:** A box that `place_element` places gets the size of its element's type, name, and summary: the width stays 180, and the height grows by whole lines from 90 up to 300. This is an estimate by character width, not a font measurement, so text can still be cut off. A later change of the text leaves the size as it is until the next layout.
 - **Transactional:** A package of changes succeeds completely or not at all.
 - **Visual check:** The `render` tool returns an image of a board or a section. That way the AI sees what reaches the person, such as overlaps or cut-off text (see [[Canvas#Visual Check]]).

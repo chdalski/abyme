@@ -83,6 +83,11 @@ main > nav button[aria-current="page"] {
   pointer-events: none;
 }
 
+button.element-pin {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
 .element-inner-boards {
   position: absolute;
   right: 4px;

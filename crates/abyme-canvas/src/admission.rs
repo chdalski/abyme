@@ -4,16 +4,19 @@
 //! [`admit`] is pure and runs before any access to the project. It matches
 //! every variant of the core's operations and references by name, so a new
 //! one breaks the build until it is admitted or refused here.
-//! [`check_modes`] then decides from the project's files, also by name for
-//! each variant and each mode: a person does not move what lies on a mirrored
-//! board. That is a rule of this one client, not a boundary: the files stay
-//! open to the AI and to edits by hand. A move the canvas sends pins the
+//! [`check_board_files`] then decides from the project's files, also by name
+//! for each variant and each mode: a person does not move what lies on a
+//! mirrored board, and a release of a pin keeps the position in the board
+//! file, so that a release from a stale view does not move a box back. These
+//! are rules of this one client, not a boundary: the files stay open to the AI
+//! and to edits by hand, and the position authorizes nothing, since a page
+//! that may call `apply` can also read it. A move the canvas sends pins the
 //! element, since a person placed it there.
 
 use std::fmt;
 
 use abyme_core::{MAX_OPERATIONS, Operation, Ref, Snapshot};
-use abyme_model::{BoardId, Mode};
+use abyme_model::{Board, BoardId, ElementId, Mode};
 
 #[cfg(test)]
 mod tests;
@@ -42,6 +45,14 @@ pub enum Refused {
         /// The board.
         board: BoardId,
     },
+    /// One operation releases a pin anywhere but at the element's position
+    /// in the board file.
+    ReleaseElsewhere {
+        /// The operation's position in the request, counted from 1.
+        position: usize,
+        /// The board.
+        board: BoardId,
+    },
 }
 
 impl fmt::Display for Refused {
@@ -60,12 +71,18 @@ impl fmt::Display for Refused {
                 "operation {position}: board {board} is mirrored, so the canvas may not move its \
                  elements"
             ),
+            Self::ReleaseElsewhere { position, board } => write!(
+                formatter,
+                "operation {position}: the canvas releases a pin on board {board} only at the \
+                 position in the board file"
+            ),
         }
     }
 }
 
 /// Checks that the canvas may send every operation of a request. Admitted
-/// today: moving and pinning an element that exists on a board that exists.
+/// today: moving and pinning an element that exists on a board that exists,
+/// and releasing its pin, which says `pinned: false`.
 ///
 /// Whatever page a debug build loads from the dev server's address can send
 /// every operation admitted here, so admitting another one needs a security
@@ -91,35 +108,54 @@ pub fn admit(operations: &[Operation]) -> Result<(), Refused> {
         .map_or(Ok(()), Err)
 }
 
-/// Checks that no operation of a request moves an element on a mirrored
-/// board of `snapshot`. A board `snapshot` does not have passes, and the core
-/// rejects it.
+/// Checks every operation of a request against the board files of `snapshot`,
+/// as they stand before the request: none moves an element on a mirrored
+/// board, and none releases a pin anywhere but at the element's position in
+/// the file of the board it names. So no request leaves a box at a new position
+/// without a pin. A board `snapshot` does not have passes, and the core rejects
+/// it.
 ///
 /// # Errors
 ///
-/// Returns [`Refused::Mirrored`] for the first such operation.
-pub fn check_modes(snapshot: &Snapshot, operations: &[Operation]) -> Result<(), Refused> {
+/// Returns [`Refused`] for the first such operation.
+pub fn check_board_files(snapshot: &Snapshot, operations: &[Operation]) -> Result<(), Refused> {
     operations
         .iter()
         .zip(1..)
-        .find_map(|(operation, position)| {
-            mirrored_board(snapshot, operation).map(|board| Refused::Mirrored {
-                position,
-                board: board.clone(),
-            })
-        })
+        .find_map(|(operation, position)| refused_by_board_file(snapshot, operation, position))
         .map_or(Ok(()), Err)
 }
 
-/// The board `operation` moves an element on, if it is mirrored. [`admit`]
+/// Why the board files of `snapshot` refuse `operation`, if they do. [`admit`]
 /// lets no other operation and no new board through; they pass here.
-fn mirrored_board<'a>(snapshot: &Snapshot, operation: &'a Operation) -> Option<&'a BoardId> {
+fn refused_by_board_file(
+    snapshot: &Snapshot,
+    operation: &Operation,
+    position: usize,
+) -> Option<Refused> {
     match operation {
-        Operation::MoveElement { board, .. } => match board {
-            Ref::Existing(board) => match snapshot.boards.get(board)?.zone?.mode {
-                Mode::Mirrored => Some(board),
-                Mode::Free => None,
-            },
+        Operation::MoveElement {
+            element,
+            board,
+            x,
+            y,
+            pinned,
+        } => match board {
+            Ref::Existing(id) => {
+                let found = snapshot.boards.get(id)?;
+                match found.zone.map(|zone| zone.mode) {
+                    Some(Mode::Mirrored) => Some(Refused::Mirrored {
+                        position,
+                        board: id.clone(),
+                    }),
+                    Some(Mode::Free) | None => (*pinned == Some(false)
+                        && !lies_at(found, element, *x, *y))
+                    .then(|| Refused::ReleaseElsewhere {
+                        position,
+                        board: id.clone(),
+                    }),
+                }
+            }
             Ref::New(_) => None,
         },
         Operation::CreateElement { .. }
@@ -131,6 +167,17 @@ fn mirrored_board<'a>(snapshot: &Snapshot, operation: &'a Operation) -> Option<&
         | Operation::DeleteElement { .. }
         | Operation::CreateRelation { .. }
         | Operation::DeleteRelation { .. } => None,
+    }
+}
+
+/// Whether the file of `board` places `element` at `x` and `y`.
+fn lies_at(board: &Board, element: &Ref<ElementId>, x: i32, y: i32) -> bool {
+    match element {
+        Ref::Existing(element) => board
+            .placements
+            .get(element)
+            .is_some_and(|placed| placed.rect.x == x && placed.rect.y == y),
+        Ref::New(_) => false,
     }
 }
 
@@ -152,10 +199,8 @@ const fn refused_kind(operation: &Operation) -> Option<&'static str> {
             y: _,
             pinned,
         } => match (element, board, pinned) {
-            (Ref::Existing(_), Ref::Existing(_), Some(true)) => None,
-            (Ref::Existing(_), Ref::Existing(_), None | Some(false)) => {
-                Some("move_element without pinned: true")
-            }
+            (Ref::Existing(_), Ref::Existing(_), Some(_)) => None,
+            (Ref::Existing(_), Ref::Existing(_), None) => Some("move_element without pinned"),
             (Ref::New(_), ..) | (Ref::Existing(_), Ref::New(_), _) => {
                 Some("move_element with a new element or board")
             }
