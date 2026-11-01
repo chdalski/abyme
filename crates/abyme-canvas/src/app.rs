@@ -112,11 +112,10 @@ async fn open_board(start: State<'_, Start>, board: BoardId) -> Result<BoardView
 /// Applies `operations` to the project, all or none, once the canvas may
 /// send every one of them, none moves an element on a mirrored board, and none
 /// releases a pin anywhere but at the position in the board file. The first
-/// check comes before any access to the project, the second reads the project
-/// the request goes to; a board that turns mirrored, or a box that moves,
-/// between it and the write lets that one operation through, which changes
-/// only that element's position and pin. The position catches a stale view and
-/// authorizes nothing.
+/// check comes before any access to the project. The second runs under the
+/// project's lock, on the reading of the files the write starts from, so no
+/// writer that takes the lock can change them in between. The position catches
+/// a stale view and authorizes nothing.
 #[tauri::command]
 async fn apply(start: State<'_, Start>, operations: Operations) -> Result<(), String> {
     let operations = operations.into_vec();
@@ -124,12 +123,13 @@ async fn apply(start: State<'_, Start>, operations: Operations) -> Result<(), St
     let start = start.0.clone();
     on_core(move || {
         let project = Project::discover(&start).map_err(|error| error.to_string())?;
-        let snapshot = project.snapshot().map_err(|error| error.to_string())?;
-        check_board_files(&snapshot, &operations).map_err(|refused| refused.to_string())?;
         project
-            .apply(&operations)
+            .apply_checked(&operations, |snapshot| {
+                check_board_files(snapshot, &operations)
+            })
+            .map_err(|error| error.to_string())?
             .map(|_created| ())
-            .map_err(|error| error.to_string())
+            .map_err(|refused| refused.to_string())
     })
     .await
 }

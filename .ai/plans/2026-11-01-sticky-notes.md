@@ -26,7 +26,7 @@ is the next plan.
 
 ## Steps
 
-- [ ] Check and write under one lock
+- [x] Check and write under one lock
 - [ ] A note shows as a note
 - [ ] A note moves on every board
 - [ ] A failed reload keeps the board
@@ -44,14 +44,14 @@ write.
 
 Review path: Security-Hybrid
 
-- [ ] The canvas decides a request from the same reading of the files that the write starts from,
+- [x] The canvas decides a request from the same reading of the files that the write starts from,
       under the project's lock, and a refusal writes nothing to `abyme/`.
-- [ ] Every existing test of what `apply` refuses and writes passes unchanged, apart from the
+- [x] Every existing test of what `apply` refuses and writes passes unchanged, apart from the
       comments that described the gap, which state the new rule.
-- [ ] A Rust test in `abyme-core` shows that a refusing check writes nothing, and that its decision
+- [x] A Rust test in `abyme-core` shows that a refusing check writes nothing, and that its decision
       is based on the files as they lie under the lock.
-- [ ] A reader of Canvas's Commands section can tell that the check runs under the project's lock.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`, and
+- [x] A reader of Canvas's Commands section can tell that the check runs under the project's lock.
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`, and
       `cargo fmt --all --check` pass.
 
 ### Task 2: A note shows as a note
@@ -219,9 +219,10 @@ Review path: Security-Hybrid
   checked current state.
 - **The check moves under the lock, as a first task:** with text and deletion, the gap between
   checking and writing could overwrite or delete what another writer just changed. The states that
-  differ from today: a refused request now creates `.abyme/` and its lock if they are missing, waits
-  for another writer, and fails with the lock's error where the lock cannot be taken. All of them are
-  accepted; nothing under `abyme/` changes.
+  differ from today: a request refused by the check, or failing while the files are read, now creates
+  `.abyme/` and its lock if they are missing, waits for another writer, and fails with the lock's
+  error where the lock cannot be taken, also ahead of a broken file. All of them are accepted; nothing
+  under `abyme/` changes.
 - **`Esc` and a click next to the note both save, and blank text writes nothing:** typed text is never
   lost by a key, and deleting stays its own action. So there is no way to cancel except clearing the
   text, and emptying a note cannot delete it.

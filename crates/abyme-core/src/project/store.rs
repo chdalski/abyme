@@ -66,6 +66,23 @@ pub fn apply_operations(
     })
 }
 
+/// Applies `operations` as [`apply_operations`] does, if `check` passes on the
+/// reading of the files the write starts from. A refusal comes before any
+/// rejection of the operations, and writes nothing.
+pub fn apply_checked<R>(
+    root: &Path,
+    operations: &[Operation],
+    check: impl FnOnce(&Snapshot) -> Result<(), R>,
+) -> Result<Result<Vec<(LocalKey, Created)>, R>, ProjectError> {
+    write_locked(root, |snapshot| {
+        if let Err(refused) = check(snapshot) {
+            return Ok((Vec::new(), Err(refused)));
+        }
+        let applied = apply(snapshot, operations)?;
+        Ok((applied.writes, Ok(applied.created)))
+    })
+}
+
 /// Holds the project's lock from reading the files to the last rename:
 /// reads them, lets `decide` turn them into the files to write and a
 /// result, and writes those files, or none of them if one would be too

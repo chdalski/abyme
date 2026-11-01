@@ -224,6 +224,26 @@ impl Project {
         store::apply_operations(&self.root, operations)
     }
 
+    /// Applies `operations` as [`Project::apply`] does, if `check` passes on
+    /// the reading of the files the write starts from. So no writer that takes
+    /// the project's lock can change the files between the check and the write.
+    ///
+    /// `check` runs under the lock, once: it must neither write through a
+    /// `Project` nor take the lock, which would wait for itself. A refusal comes
+    /// before any rejection of the operations.
+    ///
+    /// # Errors
+    ///
+    /// The outer error is one of [`Project::apply`]'s. The inner one is the
+    /// refusal of `check`, which writes nothing under `abyme/`.
+    pub fn apply_checked<R>(
+        &self,
+        operations: &[Operation],
+        check: impl FnOnce(&Snapshot) -> Result<(), R>,
+    ) -> Result<Result<Vec<(LocalKey, Created)>, R>, ProjectError> {
+        store::apply_checked(&self.root, operations, check)
+    }
+
     /// The review flags of the elements of `snapshot`, from what the
     /// project's Git repository reports. Git only reads; no anchor reaches
     /// its command line.
