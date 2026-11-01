@@ -45,16 +45,19 @@ pub fn normalized_len(frontmatter: &str) -> usize {
 /// relations, if any, come last, one line each in their sorted order.
 pub fn emit(element: &Element) -> String {
     let summary = element
+        .fields
         .summary
         .as_deref()
         .map(|summary| format!("summary: {}\n", quoted(summary)))
         .unwrap_or_default();
     let anchor = element
+        .fields
         .anchor
         .as_ref()
         .map(|anchor| format!("anchor: {}\n", quoted(anchor.as_str())))
         .unwrap_or_default();
     let verified = element
+        .fields
         .verified
         .as_ref()
         .map(|stamp| {
@@ -66,6 +69,7 @@ pub fn emit(element: &Element) -> String {
         })
         .unwrap_or_default();
     let relations = element
+        .fields
         .relations
         .iter()
         .map(|((kind, to), label)| {
@@ -89,8 +93,8 @@ pub fn emit(element: &Element) -> String {
     format!(
         "id: {}\ntype: {}\nname: {}\n{summary}{anchor}{verified}{relations}",
         quoted(element.id.as_str()),
-        quoted(element.type_ref.as_str()),
-        quoted(&element.name),
+        quoted(element.fields.type_ref.as_str()),
+        quoted(&element.fields.name),
     )
 }
 

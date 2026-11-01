@@ -1,5 +1,5 @@
 **Repository:** root
-**Status:** NotStarted
+**Status:** InProgress
 **Created:** 2026-11-01
 
 ## Goal
@@ -26,7 +26,7 @@ that reads statement kinds follow it.
 
 ## Steps
 
-- [ ] `Element` holds its fields
+- [x] `Element` holds its fields
 - [ ] The order of an element's errors is pinned
 - [ ] Element parameters as one value
 - [ ] An element file and a request can hold a statement kind
@@ -43,11 +43,11 @@ every element file with it; `crates/abyme-model/src/element/tests.rs` and
 
 Review path: Security-Hybrid
 
-- [ ] `Element` holds an `ElementFields`, and adding a field to it needs no other list
+- [x] `Element` holds an `ElementFields`, and adding a field to it needs no other list
       of fields in `element.rs` or `element/frontmatter.rs`.
-- [ ] No public signature of `abyme-model` changes.
-- [ ] The named tests pass with no assertion changed.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`, and
+- [x] No public signature of `abyme-model` changes.
+- [x] The named tests pass with no assertion changed.
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`, and
       `cargo fmt --all --check` pass.
 
 ### Task 2: The order of an element's errors is pinned

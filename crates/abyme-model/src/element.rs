@@ -37,13 +37,7 @@ pub type Relations = BTreeMap<(RelationKind, ElementId), Option<String>>;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Element {
     id: ElementId,
-    type_ref: TypeRef,
-    name: String,
-    summary: Option<String>,
-    body: String,
-    anchor: Option<Anchor>,
-    verified: Option<Verification>,
-    relations: Relations,
+    fields: ElementFields,
 }
 
 /// What an element holds besides its ID. Only `type_ref` is checked here,
@@ -273,25 +267,7 @@ impl Element {
     ///
     /// Returns an [`ElementError`] naming `id` when a rule is broken.
     pub fn new(id: ElementId, fields: ElementFields) -> Result<Self, ElementError> {
-        let ElementFields {
-            type_ref,
-            name,
-            summary,
-            body,
-            anchor,
-            verified,
-            relations,
-        } = fields;
-        let element = Self {
-            id,
-            type_ref,
-            name,
-            summary,
-            body,
-            anchor,
-            verified,
-            relations,
-        };
+        let element = Self { id, fields };
         match element.broken_rule() {
             Some(problem) => Err(ElementError {
                 element: element.id,
@@ -352,7 +328,7 @@ impl Element {
     /// double-quoted, then the body as it is.
     #[must_use]
     pub fn to_markdown(&self) -> String {
-        format!("---\n{}---\n{}", frontmatter::emit(self), self.body)
+        format!("---\n{}---\n{}", frontmatter::emit(self), self.fields.body)
     }
 
     /// The element's ID.
@@ -364,76 +340,71 @@ impl Element {
     /// The element's semantic type.
     #[must_use]
     pub const fn type_ref(&self) -> &TypeRef {
-        &self.type_ref
+        &self.fields.type_ref
     }
 
     /// The element's name.
     #[must_use]
     pub fn name(&self) -> &str {
-        &self.name
+        &self.fields.name
     }
 
     /// The element's one-line summary, if it has one.
     #[must_use]
     pub fn summary(&self) -> Option<&str> {
-        self.summary.as_deref()
+        self.fields.summary.as_deref()
     }
 
     /// The element's description as Markdown.
     #[must_use]
     pub fn body(&self) -> &str {
-        &self.body
+        &self.fields.body
     }
 
     /// The path in the project the element stands for, if any.
     #[must_use]
     pub const fn anchor(&self) -> Option<&Anchor> {
-        self.anchor.as_ref()
+        self.fields.anchor.as_ref()
     }
 
     /// The element's verification stamp, if it was verified.
     #[must_use]
     pub const fn verified(&self) -> Option<&Verification> {
-        self.verified.as_ref()
+        self.fields.verified.as_ref()
     }
 
     /// The element's outgoing relations.
     #[must_use]
     pub const fn relations(&self) -> &Relations {
-        &self.relations
+        &self.fields.relations
     }
 
     /// The element's fields without its ID, to build a changed element
     /// from them through [`Element::new`].
     #[must_use]
     pub fn into_fields(self) -> ElementFields {
-        ElementFields {
-            type_ref: self.type_ref,
-            name: self.name,
-            summary: self.summary,
-            body: self.body,
-            anchor: self.anchor,
-            verified: self.verified,
-            relations: self.relations,
-        }
+        self.fields
     }
 
     /// The first rule the element breaks, if any.
     fn broken_rule(&self) -> Option<ElementProblem> {
-        disallowed_character("name", &self.name)
+        disallowed_character("name", &self.fields.name)
             .or_else(|| {
-                self.summary
+                self.fields
+                    .summary
                     .as_deref()
                     .and_then(|summary| disallowed_character("summary", summary))
             })
             .or_else(|| {
-                self.relations
+                self.fields
+                    .relations
                     .values()
                     .flatten()
                     .find_map(|label| disallowed_character("label", label))
             })
             .or_else(|| {
-                self.relations
+                self.fields
+                    .relations
                     .keys()
                     .find(|(_, to)| *to == self.id)
                     .map(|(kind, _)| ElementProblem::SelfRelation { kind: *kind })
