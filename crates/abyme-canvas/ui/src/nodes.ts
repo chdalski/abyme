@@ -1,4 +1,9 @@
-import type { Node, NodeChange, XYPosition } from "@xyflow/react";
+import {
+  type Node,
+  type NodeChange,
+  Position,
+  type XYPosition,
+} from "@xyflow/react";
 
 import type { BoardView, Shown } from "./bindings";
 
@@ -19,7 +24,9 @@ export type Move = { element: string; position: XYPosition };
  * Every box has the one node type `element`; nothing from the repository
  * chooses a node type, and the node's ID is the validated element ID. A box
  * on a mirrored board cannot be dragged: React Flow goes by this value on the
- * node, also for the arrow keys.
+ * node, also for the arrow keys. Arrows leave at the bottom and arrive at the
+ * top; the handles come with the node, since a fresh node after a reload has
+ * no measurements and its arrows would vanish until it is measured again.
  */
 export function toNodes(view: BoardView): ElementNode[] {
   return view.placements.map((placement) => {
@@ -33,6 +40,24 @@ export function toNodes(view: BoardView): ElementNode[] {
       data: { element: placement.element, shown: placement.shown, home },
       draggable: view.mode !== "mirrored",
       connectable: false,
+      handles: [
+        {
+          type: "target",
+          position: Position.Top,
+          x: placement.width / 2,
+          y: 0,
+          width: 1,
+          height: 1,
+        },
+        {
+          type: "source",
+          position: Position.Bottom,
+          x: placement.width / 2,
+          y: placement.height,
+          width: 1,
+          height: 1,
+        },
+      ],
     };
   });
 }

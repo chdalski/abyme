@@ -1,9 +1,11 @@
 import "@xyflow/react/dist/style.css";
 
 import { ReactFlow } from "@xyflow/react";
+import { useMemo } from "react";
 
 import type { BoardView } from "./bindings";
 import { useBoardNodes } from "./boardNodes";
+import { toEdges } from "./edges";
 import { ElementBox } from "./ElementBox";
 import type { Move } from "./nodes";
 
@@ -11,8 +13,9 @@ import type { Move } from "./nodes";
 const NODE_TYPES = { element: ElementBox };
 
 /**
- * A board's boxes on the canvas. Moving boxes moves their elements; the
- * canvas cannot delete a box, since no delete reaches the board file.
+ * A board's boxes and the arrows between them on the canvas. Moving boxes
+ * moves their elements; the canvas cannot delete a box, since no delete
+ * reaches the board file. Arrows follow from the view and hold no state.
  */
 export function BoardCanvas({
   view,
@@ -24,10 +27,12 @@ export function BoardCanvas({
   onMoveFailed: (message: string) => void;
 }) {
   const { nodes, onNodesChange } = useBoardNodes(view, move, onMoveFailed);
+  const edges = useMemo(() => toEdges(view), [view]);
 
   return (
     <ReactFlow
       nodes={nodes}
+      edges={edges}
       nodeTypes={NODE_TYPES}
       onNodesChange={onNodesChange}
       nodesConnectable={false}

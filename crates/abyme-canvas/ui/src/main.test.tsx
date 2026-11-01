@@ -7,7 +7,41 @@ import { FakeClient } from "./fakeClient";
 // fake: it freezes Object.prototype, which stays frozen for this file only,
 // since Vitest runs every test file in a process of its own.
 const shop = vi.hoisted(() => ({
-  boards: [{ id: "online-shop", title: "Online Shop" }],
+  boards: [
+    { id: "online-shop", title: "Online Shop" },
+    { id: "arrows", title: "Arrows" },
+  ],
+  arrows: {
+    id: "arrows",
+    title: "Arrows",
+    mode: null,
+    placements: [
+      {
+        element: "constructor",
+        x: 0,
+        y: 0,
+        width: 180,
+        height: 90,
+        shown: { kind: "missing" as const },
+      },
+      {
+        element: "orders",
+        x: 0,
+        y: 300,
+        width: 180,
+        height: 90,
+        shown: { kind: "missing" as const },
+      },
+    ],
+    relations: [
+      {
+        from: "constructor",
+        kind: "uses" as const,
+        to: "orders",
+        label: "constructor",
+      },
+    ],
+  },
   view: {
     id: "online-shop",
     title: "Online Shop",
@@ -35,13 +69,14 @@ const shop = vi.hoisted(() => ({
         },
       },
     ],
+    relations: [],
   },
 }));
 
 vi.mock("./client", async () => {
   const { FakeClient: Fake } = await import("./fakeClient");
   const client = new Fake(shop.boards);
-  client.views = { "online-shop": shop.view };
+  client.views = { "online-shop": shop.view, arrows: shop.arrows };
   return { tauriClient: client };
 });
 
@@ -75,6 +110,16 @@ describe("main", () => {
       prototype.polluted = 1;
     }).toThrow(TypeError);
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+
+  it("draws an arrow from a box whose ID names a property of every object", async () => {
+    fireEvent.click(await screen.findByRole("button", { name: "Arrows" }));
+
+    await waitFor(() =>
+      expect(
+        document.querySelector(".react-flow__edge-text")?.textContent,
+      ).toBe("constructor"),
+    );
   });
 
   it("shows the boards, opens one with its boxes, and moves a box, all with the prototype frozen", async () => {

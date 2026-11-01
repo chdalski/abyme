@@ -1,10 +1,30 @@
-import type { NodeProps } from "@xyflow/react";
+import { Handle, type NodeProps, Position } from "@xyflow/react";
 
 import type { ElementData, ElementNode } from "./nodes";
 
-/** The box of an element on the canvas. */
+/**
+ * The box of an element on the canvas. Its handles are hidden and connect
+ * nothing: React Flow measures them, and without them it forgets where arrows
+ * start and end after it measures the box.
+ */
 export function ElementBox({ data }: NodeProps<ElementNode>) {
-  return <ElementContent element={data.element} shown={data.shown} />;
+  return (
+    <>
+      <Handle
+        type="target"
+        position={Position.Top}
+        isConnectable={false}
+        className="element-handle"
+      />
+      <ElementContent element={data.element} shown={data.shown} />
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        isConnectable={false}
+        className="element-handle"
+      />
+    </>
+  );
 }
 
 /**

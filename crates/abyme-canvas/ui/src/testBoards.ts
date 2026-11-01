@@ -7,6 +7,7 @@ export function boardView(overrides: Partial<BoardView> = {}): BoardView {
     title: "Context",
     mode: null,
     placements: [],
+    relations: [],
     ...overrides,
   };
 }

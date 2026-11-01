@@ -5,8 +5,8 @@
 //! element's body: the UI shows a box per placement, and the body is not
 //! part of it.
 
-use abyme_core::{Snapshot, UnknownBoard};
-use abyme_model::{BoardId, Element, ElementId, Mode, Rect};
+use abyme_core::{ShownRelation, Snapshot, UnknownBoard, relations_on};
+use abyme_model::{BoardId, Element, ElementId, Mode, Rect, RelationKind};
 use serde::Serialize;
 
 #[cfg(test)]
@@ -25,6 +25,22 @@ pub struct BoardView {
     pub mode: Option<Mode>,
     /// One entry per element on the board, in element-ID order.
     pub placements: Vec<Placement>,
+    /// One entry per relation the board shows, as `read_board` shows them.
+    pub relations: Vec<Relation>,
+}
+
+/// A relation the board shows, which the UI draws as an arrow.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+pub struct Relation {
+    /// The element it goes out from.
+    pub from: ElementId,
+    /// Its kind.
+    pub kind: RelationKind,
+    /// The element it points to, whose file may be missing.
+    pub to: ElementId,
+    /// Its label, in full, if it has one.
+    pub label: Option<String>,
 }
 
 /// An element on a board: where its box lies, how large it is, and what it
@@ -85,7 +101,17 @@ pub fn project(snapshot: &Snapshot, board: &BoardId) -> Result<BoardView, Unknow
                 placement(element, &placed.rect, snapshot.elements.get(element))
             })
             .collect(),
+        relations: relations_on(snapshot, found).map(relation).collect(),
     })
+}
+
+fn relation(shown: ShownRelation<'_>) -> Relation {
+    Relation {
+        from: shown.from.clone(),
+        kind: shown.kind,
+        to: shown.to.clone(),
+        label: shown.label.map(str::to_owned),
+    }
 }
 
 fn placement(id: &ElementId, rect: &Rect, element: Option<&Element>) -> Placement {

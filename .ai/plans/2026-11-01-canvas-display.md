@@ -27,7 +27,7 @@ elements with a breadcrumb, see review flags and pins, and release a pin.
 - [x] One test fixture for what the UI receives
 - [x] One rule for the relations a board shows
 - [x] One way up the board tree
-- [ ] Relations as arrows
+- [x] Relations as arrows
 - [ ] Inner boards and a breadcrumb
 - [ ] A marker on pinned boxes
 - [ ] Releasing a pin
@@ -88,21 +88,21 @@ today.
 
 Review path: Security-Hybrid
 
-- [ ] `open_board` returns the board's relations with source, target, kind, and label, by the rule
+- [x] `open_board` returns the board's relations with source, target, kind, and label, by the rule
       of Task 2, so an arrow to a box whose file is missing is drawn and a relation to an element
       on another board is not.
-- [ ] Each relation draws one arrow from the bottom of its source to the top of its target, and
+- [x] Each relation draws one arrow from the bottom of its source to the top of its target, and
       `see_also` is dashed. An arrow carries the relation's label as text, cut by the UI after
       40 characters and ending in `…`, and no other text. Arrows cannot be selected, deleted, or
       reconnected.
-- [ ] Arrows stay drawn through a reload after a drag, and follow a box while it is dragged.
-- [ ] `bindings.ts` matches the Rust types, and tests in Rust and Vitest cover the projection, the
+- [x] Arrows stay drawn through a reload after a drag, and follow a box while it is dragged.
+- [x] `bindings.ts` matches the Rust types, and tests in Rust and Vitest cover the projection, the
       arrows, the dashed kind, the label as text, and a reload; an IPC test covers `open_board`.
-- [ ] A reader of Canvas can tell what an arrow shows and that arrows are not routed around boxes,
+- [x] A reader of Canvas can tell what an arrow shows and that arrows are not routed around boxes,
       and its Security section names relation labels among what is shown as text. The question on
       routing has left Canvas and `docs/Open Questions.md`, and `docs/Decisions.md` holds the
       decision.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
       `cargo fmt --all --check`, `pnpm --dir crates/abyme-canvas/ui check`, and
       `pnpm --dir crates/abyme-canvas/ui test` pass.
 
@@ -238,6 +238,9 @@ Review path: Security-Hybrid
   sees the warnings. A warning in the breadcrumb was declined.
 - **New work gets Security-Hybrid:** the release is an access decision and flags start the canvas's
   first Git processes, both of which the risk rule would escalate; the user chose this path.
+
+- **Arrows are checked in a simulated layout:** no display exists here to run WebKitGTK, so the tests
+  simulate measuring and a drag in jsdom; a run in the real webview is for the user at the review.
 
 ## Non-Goals
 

@@ -221,6 +221,32 @@ fn open_board_returns_the_board_s_projection_without_bodies() {
 }
 
 #[test]
+fn open_board_returns_the_relations_the_board_shows() {
+    let root = tempfile::tempdir().unwrap();
+    project_with_a_board(root.path());
+    let operations: Vec<Operation> = serde_json::from_value(json!([
+        {"op": "create_element", "key": "s", "type_ref": "t", "name": "Source"},
+        {"op": "place_element", "element": {"new": "s"}, "board": {"existing": "context"}},
+        {"op": "create_relation", "from": {"new": "s"}, "kind": "see_also",
+         "to": {"existing": "payment-service"}, "label": "<b>label</b>"},
+    ]))
+    .unwrap();
+    Project::discover(root.path())
+        .unwrap()
+        .apply(&operations)
+        .unwrap();
+    let (_app, window) = canvas(root.path());
+
+    let view = open_board_from(&window, json!({"board": "context"})).unwrap();
+
+    assert_eq!(
+        view["relations"],
+        json!([{"from": "source", "kind": "see_also", "to": "payment-service",
+                "label": "<b>label</b>"}])
+    );
+}
+
+#[test]
 fn open_board_names_only_the_id_of_an_unknown_board() {
     let root = tempfile::tempdir().unwrap();
     project_with_a_board(root.path());

@@ -28,7 +28,11 @@ mode: Mode | null,
 /**
  * One entry per element on the board, in element-ID order.
  */
-placements: Array<Placement>, };
+placements: Array<Placement>, 
+/**
+ * One entry per relation the board shows, as `read_board` shows them.
+ */
+relations: Array<Relation>, };
 
 export type Mode = "free" | "mirrored";
 
@@ -57,6 +61,26 @@ height: number,
  * What the box shows.
  */
 shown: Shown, };
+
+export type Relation = { 
+/**
+ * The element it goes out from.
+ */
+from: string, 
+/**
+ * Its kind.
+ */
+kind: RelationKind, 
+/**
+ * The element it points to, whose file may be missing.
+ */
+to: string, 
+/**
+ * Its label, in full, if it has one.
+ */
+label: string | null, };
+
+export type RelationKind = "concerns" | "depends_on" | "describes" | "see_also" | "uses";
 
 export type Shown = { "kind": "element", 
 /**

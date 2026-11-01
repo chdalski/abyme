@@ -7,3 +7,8 @@ class ResizeObserverStandIn {
 }
 
 globalThis.ResizeObserver ??= ResizeObserverStandIn;
+
+// jsdom has no SVG layout either; React Flow asks it for the size of a label.
+Object.defineProperty(SVGElement.prototype, "getBBox", {
+  value: () => ({ x: 0, y: 0, width: 10, height: 10 }),
+});

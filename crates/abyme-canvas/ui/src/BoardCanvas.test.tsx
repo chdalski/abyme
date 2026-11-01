@@ -1,5 +1,12 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { BoardView } from "./bindings";
 import { BoardCanvas } from "./BoardCanvas";
@@ -25,6 +32,14 @@ function canvasOf(view: BoardView, move: () => Promise<void>) {
 }
 
 const DRAGGABLE_BOX = ".react-flow__node.draggable";
+
+/** Two boxes in a row and one relation between them with `label`. */
+function boardWithArrow(label: string | null, x = 0): BoardView {
+  return boardView({
+    placements: [placedBox("orders", { x }), placedBox("payments", { y: 300 })],
+    relations: [{ from: "orders", kind: "uses", to: "payments", label }],
+  });
+}
 
 describe("BoardCanvas", () => {
   it("offers a drag on every board but a mirrored one", () => {
@@ -101,5 +116,230 @@ describe("BoardCanvas", () => {
     expect(container.querySelectorAll(".react-flow__node")).toHaveLength(2);
     expect(screen.getByText("Missing element orders")).toBeDefined();
     expect(screen.getByText("Payments")).toBeDefined();
+  });
+
+  it("draws an arrow per relation, and keeps it through a reload", () => {
+    const { container, rerender } = render(
+      canvasOf(boardWithArrow(null), () => Promise.resolve()),
+    );
+    const path = () =>
+      container.querySelector(".react-flow__edge-path")?.getAttribute("d");
+    expect(path()).toBeTruthy();
+    const before = path();
+
+    rerender(canvasOf(boardWithArrow(null), () => Promise.resolve()));
+
+    expect(path()).toBe(before);
+  });
+
+  it("draws an arrow from the bottom of its source to the top of its target", () => {
+    const { container } = render(
+      canvasOf(boardWithArrow(null), () => Promise.resolve()),
+    );
+
+    const path = container
+      .querySelector(".react-flow__edge-path")
+      ?.getAttribute("d");
+
+    expect(path).toMatch(/^M90\.5,91\b/);
+    expect(path).toMatch(/\b90\.5,300$/);
+  });
+
+  it("moves an arrow with its box", () => {
+    const { container, rerender } = render(
+      canvasOf(boardWithArrow(null), () => Promise.resolve()),
+    );
+    const path = () =>
+      container.querySelector(".react-flow__edge-path")?.getAttribute("d");
+    const before = path();
+
+    rerender(canvasOf(boardWithArrow(null, 500), () => Promise.resolve()));
+
+    expect(path()).not.toBe(before);
+  });
+
+  it("shows a label as text and makes nothing of markup in it", () => {
+    for (const label of [
+      "<img src=x onerror=alert(1)>",
+      "</text><script>alert(1)</script>",
+      "__proto__",
+      "constructor",
+    ]) {
+      const { container, unmount } = render(
+        canvasOf(boardWithArrow(label), () => Promise.resolve()),
+      );
+
+      expect(
+        container.querySelector(".react-flow__edge-text")?.textContent,
+      ).toBe(label);
+      expect(container.querySelector("img, script")).toBeNull();
+      unmount();
+    }
+  });
+
+  it("keeps the part of a long label it cuts out of the page", () => {
+    const { container } = render(
+      canvasOf(boardWithArrow(`${"x".repeat(40)}SECRET`), () =>
+        Promise.resolve(),
+      ),
+    );
+
+    expect(new XMLSerializer().serializeToString(container)).not.toContain(
+      "SECRET",
+    );
+  });
+
+  it("does nothing on a click on an arrow or the delete key", () => {
+    const move = vi.fn(() => Promise.resolve());
+    const { container } = render(canvasOf(boardWithArrow("label"), move));
+    const edge = container.querySelector(".react-flow__edge");
+
+    if (edge === null) {
+      throw new Error("the arrow was not drawn");
+    }
+    fireEvent.click(edge);
+    fireEvent.keyDown(edge, { key: "Delete" });
+    fireEvent.keyDown(edge, { key: "Backspace" });
+
+    expect(move).not.toHaveBeenCalled();
+    expect(container.querySelector(".react-flow__edge")).not.toBeNull();
+    expect(container.querySelector(".react-flow__edge.selected")).toBeNull();
+  });
+});
+
+/** Reports the observed boxes when told, as a browser does after layout. */
+class MeasuringObserver {
+  static current: MeasuringObserver[] = [];
+  private readonly targets = new Set<Element>();
+
+  constructor(private readonly report: ResizeObserverCallback) {
+    MeasuringObserver.current.push(this);
+  }
+
+  observe(target: Element): void {
+    this.targets.add(target);
+  }
+
+  unobserve(target: Element): void {
+    this.targets.delete(target);
+  }
+
+  disconnect(): void {
+    this.targets.clear();
+  }
+
+  measure(): void {
+    const entries = [...this.targets].map(
+      (target) =>
+        ({
+          target,
+          contentRect: target.getBoundingClientRect(),
+        }) as unknown as ResizeObserverEntry,
+    );
+    this.report(entries, this as unknown as ResizeObserver);
+  }
+}
+
+/** The rectangle a browser would report for `element`, in a box of 180 x 90. */
+function layoutOf(element: Element): DOMRect {
+  const rect = (x: number, y: number, width: number, height: number) =>
+    new DOMRect(x, y, width, height);
+  if (element.classList.contains("react-flow__handle-top")) {
+    return rect(87, -3, 6, 6);
+  }
+  if (element.classList.contains("react-flow__handle-bottom")) {
+    return rect(87, 87, 6, 6);
+  }
+  return element.classList.contains("react-flow__node")
+    ? rect(0, 0, 180, 90)
+    : rect(0, 0, 800, 600);
+}
+
+/** A mouse event as a browser sends it, which d3-drag reads the window of. */
+function mouse(type: string, clientX: number, clientY: number): MouseEvent {
+  const event = new MouseEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    clientX,
+    clientY,
+  });
+  Object.defineProperty(event, "view", { value: window });
+  return event;
+}
+
+describe("arrows in a laid-out canvas", () => {
+  beforeEach(() => {
+    MeasuringObserver.current = [];
+    vi.stubGlobal("ResizeObserver", MeasuringObserver);
+    vi.stubGlobal(
+      "DOMMatrixReadOnly",
+      class {
+        m22 = 1;
+      },
+    );
+    vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockReturnValue(180);
+    vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(90);
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: Element) {
+        return layoutOf(this);
+      },
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  const measure = () =>
+    act(() => {
+      for (const observer of MeasuringObserver.current) {
+        observer.measure();
+      }
+    });
+
+  it("keeps an arrow through measuring, a drag, and a reload", async () => {
+    const move = vi.fn(() => Promise.resolve());
+    const { container, rerender } = render(
+      canvasOf(boardWithArrow(null), move),
+    );
+    const path = () =>
+      container.querySelector(".react-flow__edge-path")?.getAttribute("d");
+    measure();
+    expect(path()).toBeTruthy();
+    measure();
+    const before = path();
+    expect(before).toBeTruthy();
+
+    const box = container.querySelector('.react-flow__node[data-id="orders"]');
+    if (box === null) {
+      throw new Error("no box for orders");
+    }
+    act(() => {
+      box.dispatchEvent(mouse("mousedown", 10, 10));
+    });
+    act(() => {
+      window.dispatchEvent(mouse("mousemove", 100, 10));
+    });
+    act(() => {
+      window.dispatchEvent(mouse("mousemove", 250, 15));
+    });
+    await waitFor(() => {
+      expect(path()).toBeTruthy();
+      expect(path()).not.toBe(before);
+    });
+    const dragged = path();
+
+    await act(async () => {
+      window.dispatchEvent(mouse("mouseup", 250, 15));
+      await Promise.resolve();
+    });
+    expect(move).toHaveBeenCalledOnce();
+    expect(path()).toBe(dragged);
+
+    rerender(canvasOf(boardWithArrow(null, 240), move));
+    expect(path()).toBeTruthy();
+    measure();
+    expect(path()).toBeTruthy();
   });
 });

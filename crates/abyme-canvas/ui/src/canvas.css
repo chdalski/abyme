@@ -64,6 +64,10 @@ nav button[aria-current="page"] {
   overflow-wrap: anywhere;
 }
 
+.element-handle {
+  visibility: hidden;
+}
+
 .element-type {
   display: block;
   color: #5b6577;

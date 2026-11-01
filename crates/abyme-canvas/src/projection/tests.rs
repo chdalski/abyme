@@ -102,6 +102,7 @@ fn shows_a_box_per_placement_with_its_rect_and_the_element_s_fields() {
                     },
                 },
             ],
+            relations: Vec::new(),
         }
     );
 }
@@ -141,7 +142,10 @@ fn the_projection_carries_exactly_the_named_fields_and_no_body() {
     let json = serde_json::to_value(&view).unwrap();
 
     assert!(!json.to_string().contains("SECRET-BODY"));
-    assert_eq!(keys(&json), ["id", "mode", "placements", "title"]);
+    assert_eq!(
+        keys(&json),
+        ["id", "mode", "placements", "relations", "title"]
+    );
     let placements = json["placements"].as_array().unwrap();
     assert_eq!(
         keys(&placements[0]),
@@ -161,4 +165,81 @@ fn keys(value: &Value) -> Vec<&str> {
         .keys()
         .map(String::as_str)
         .collect()
+}
+
+/// `snapshot()` with `payments` relating to `to` as given, with `SECRET-BODY`
+/// in its description.
+fn with_relation_to(to: &str, label: Option<&str>) -> Snapshot {
+    let mut snapshot = snapshot();
+    let mut fields = snapshot.elements[&element_id("payments")]
+        .clone()
+        .into_fields();
+    fields.relations.insert(
+        (RelationKind::Uses, element_id(to)),
+        label.map(str::to_owned),
+    );
+    snapshot.elements.insert(
+        element_id("payments"),
+        Element::new(element_id("payments"), fields).unwrap(),
+    );
+    snapshot
+}
+
+#[test]
+fn carries_a_relation_to_a_box_whose_file_is_missing_with_its_full_label() {
+    let label = "x".repeat(100);
+    let snapshot = with_relation_to("orders", Some(&label));
+
+    let view = project(&snapshot, &board_id("context")).unwrap();
+
+    assert_eq!(
+        view.relations,
+        [Relation {
+            from: element_id("payments"),
+            kind: RelationKind::Uses,
+            to: element_id("orders"),
+            label: Some(label),
+        }]
+    );
+    assert!(
+        !serde_json::to_string(&view)
+            .unwrap()
+            .contains("SECRET-BODY"),
+        "{view:?}"
+    );
+}
+
+#[test]
+fn a_relation_carries_exactly_the_named_fields() {
+    let view = project(
+        &with_relation_to("orders", Some("REST")),
+        &board_id("context"),
+    )
+    .unwrap();
+
+    let json = serde_json::to_value(&view).unwrap();
+
+    assert_eq!(
+        json["relations"],
+        json!([{"from": "payments", "kind": "uses", "to": "orders", "label": "REST"}])
+    );
+}
+
+#[test]
+fn leaves_out_a_relation_to_an_element_not_on_the_board() {
+    let snapshot = with_relation_to("elsewhere", None);
+
+    let view = project(&snapshot, &board_id("context")).unwrap();
+
+    assert_eq!(view.relations, []);
+}
+
+#[test]
+fn leaves_out_a_relation_of_a_source_whose_file_is_missing() {
+    let mut snapshot = with_relation_to("orders", None);
+    snapshot.elements.remove(&element_id("payments"));
+
+    let view = project(&snapshot, &board_id("context")).unwrap();
+
+    assert_eq!(view.relations, []);
 }

@@ -5,11 +5,11 @@
 use std::fs;
 use std::path::Path;
 
-use abyme_model::Mode;
+use abyme_model::{Mode, RelationKind};
 use ts_rs::{Config, TS};
 
 use crate::boards::BoardEntry;
-use crate::projection::{BoardView, Placement, Shown};
+use crate::projection::{BoardView, Placement, Relation, Shown};
 
 /// Where the UI's generated types lie, relative to this crate.
 const BINDINGS: &str = "ui/src/bindings.ts";
@@ -34,6 +34,8 @@ fn bindings() -> String {
         exported::<BoardView>(&config),
         exported::<Mode>(&config),
         exported::<Placement>(&config),
+        exported::<Relation>(&config),
+        exported::<RelationKind>(&config),
         exported::<Shown>(&config),
     ]
     .join("\n")
