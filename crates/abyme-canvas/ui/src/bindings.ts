@@ -32,7 +32,13 @@ placements: Array<Placement>,
 /**
  * One entry per relation the board shows, as `read_board` shows them.
  */
-relations: Array<Relation>, };
+relations: Array<Relation>, 
+/**
+ * The boards above this one, top first, as `overview` places them. It
+ * ends where the tree is broken, by a cycle or an owner without a file
+ * or a home.
+ */
+trail: Array<BoardEntry>, };
 
 export type Mode = "free" | "mirrored";
 
@@ -60,7 +66,12 @@ height: number,
 /**
  * What the box shows.
  */
-shown: Shown, };
+shown: Shown, 
+/**
+ * The boards the element owns, by ID. More than one only after a merge
+ * or a hand edit.
+ */
+inner_boards: Array<BoardEntry>, };
 
 export type Relation = { 
 /**

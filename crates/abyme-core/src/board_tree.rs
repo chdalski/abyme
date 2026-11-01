@@ -5,8 +5,10 @@
 //! answer every question about the hierarchy the same way. Files that a
 //! merge or a hand edit wrote can hold an element that owns several boards,
 //! an element placed on several boards, and boards that lie inside
-//! themselves; the tree keeps all of them, and every walk up the hierarchy
-//! stops at a board it has seen before, so no file can make it loop. The
+//! themselves; the tree keeps all of them, and no file can make a walk up
+//! the hierarchy loop: a walk along [`BoardTree::above`] ends at a board inside
+//! a cycle, which has none above it, and a walk along the owners' homes inside
+//! this crate stops at a board it has seen before. The
 //! boards that lie inside themselves are found once, when the tree is
 //! built, in a time that grows with the number of boards alone.
 
@@ -94,24 +96,27 @@ impl BoardTree {
     }
 
     /// The element whose inside `board` is, if any.
+    #[must_use]
     pub fn owner(&self, board: &BoardId) -> Option<&ElementId> {
         self.owners.get(board)
     }
 
     /// The home of `element`, if a board places it.
+    #[must_use]
     pub fn home(&self, element: &ElementId) -> Option<&BoardId> {
         self.homes.get(element)
     }
 
     /// The board above `board`: the home of its owner, if it has an owner
     /// with a home.
-    pub fn parent(&self, board: &BoardId) -> Option<&BoardId> {
+    pub(crate) fn parent(&self, board: &BoardId) -> Option<&BoardId> {
         self.owner(board).and_then(|owner| self.home(owner))
     }
 
     /// Whether `board` is `ancestor` or lies inside it, going up from
     /// `board` parent by parent; a walk that comes back to a board it has
     /// seen ends without reaching `ancestor`.
+    #[must_use]
     pub fn lies_inside(&self, board: &BoardId, ancestor: &BoardId) -> bool {
         let mut seen = BTreeSet::new();
         let mut current = Some(board);
@@ -129,6 +134,7 @@ impl BoardTree {
 
     /// Whether `board` lies inside itself: going up from the board above it
     /// comes back to it.
+    #[must_use]
     pub fn lies_inside_itself(&self, board: &BoardId) -> bool {
         self.cycles.contains(board)
     }

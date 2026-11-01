@@ -23,10 +23,19 @@ function boardIn(mode: BoardView["mode"]): BoardView {
 }
 
 /** A sized canvas of `view`. */
-function canvasOf(view: BoardView, move: () => Promise<void>) {
+function canvasOf(
+  view: BoardView,
+  move: () => Promise<void>,
+  onOpen: (board: string) => void = () => {},
+) {
   return (
     <div style={{ width: 800, height: 600 }}>
-      <BoardCanvas view={view} move={move} onMoveFailed={() => {}} />
+      <BoardCanvas
+        view={view}
+        move={move}
+        onMoveFailed={() => {}}
+        onOpen={onOpen}
+      />
     </div>
   );
 }
@@ -108,6 +117,7 @@ describe("BoardCanvas", () => {
         <BoardCanvas
           view={view}
           move={() => Promise.resolve()}
+          onOpen={() => {}}
           onMoveFailed={() => {}}
         />
       </div>,
@@ -204,6 +214,127 @@ describe("BoardCanvas", () => {
     expect(move).not.toHaveBeenCalled();
     expect(container.querySelector(".react-flow__edge")).not.toBeNull();
     expect(container.querySelector(".react-flow__edge.selected")).toBeNull();
+  });
+});
+
+/** A box `shop`, whose element owns `boards`, and a box `plain`, on a free board. */
+function boardWithInnerBoards(...boards: string[]): BoardView {
+  return boardView({
+    mode: "free",
+    placements: [
+      placedBox("plain", { x: 400 }),
+      placedBox("shop", {
+        inner_boards: boards.map((title, index) => ({
+          id: `inner-${index}`,
+          title,
+        })),
+      }),
+    ],
+  });
+}
+
+describe("inner boards on a box", () => {
+  const box = (container: HTMLElement, element: string) => {
+    const found = container.querySelector(
+      `.react-flow__node[data-id="${element}"]`,
+    );
+    if (!(found instanceof HTMLElement)) {
+      throw new Error(`no box for ${element}`);
+    }
+    return found;
+  };
+
+  it("offers a button per inner board that opens it, and writes nothing", () => {
+    const move = vi.fn(() => Promise.resolve());
+    const onOpen = vi.fn();
+    render(canvasOf(boardWithInnerBoards("Containers", "Spare"), move, onOpen));
+
+    fireEvent.click(screen.getByRole("button", { name: "▸ Spare" }));
+
+    expect(onOpen).toHaveBeenCalledExactlyOnceWith("inner-1");
+    expect(move).not.toHaveBeenCalled();
+  });
+
+  it("shows no button on a box without an inner board", () => {
+    const { container } = render(
+      canvasOf(boardWithInnerBoards("Containers"), () => Promise.resolve()),
+    );
+
+    expect(box(container, "plain").querySelector("button")).toBeNull();
+    expect(box(container, "shop").querySelector("button")).not.toBeNull();
+  });
+
+  it("opens the first inner board on a double click, and writes nothing", () => {
+    const move = vi.fn(() => Promise.resolve());
+    const onOpen = vi.fn();
+    const { container } = render(
+      canvasOf(boardWithInnerBoards("Containers", "Spare"), move, onOpen),
+    );
+
+    fireEvent.doubleClick(box(container, "shop"));
+
+    expect(onOpen).toHaveBeenCalledExactlyOnceWith("inner-0");
+    expect(move).not.toHaveBeenCalled();
+  });
+
+  it("does nothing on a double click on a box without an inner board", () => {
+    const move = vi.fn(() => Promise.resolve());
+    const onOpen = vi.fn();
+    const { container } = render(
+      canvasOf(boardWithInnerBoards("Containers"), move, onOpen),
+    );
+
+    fireEvent.doubleClick(box(container, "plain"));
+
+    expect(onOpen).not.toHaveBeenCalled();
+    expect(move).not.toHaveBeenCalled();
+  });
+
+  it("does not open a board twice on a double click on its button", () => {
+    const onOpen = vi.fn();
+    render(
+      canvasOf(
+        boardWithInnerBoards("Containers", "Spare"),
+        () => Promise.resolve(),
+        onOpen,
+      ),
+    );
+
+    fireEvent.doubleClick(screen.getByRole("button", { name: "▸ Spare" }));
+
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it("moves no box with the arrow keys from a focused button, and a click opens it", () => {
+    const move = vi.fn(() => Promise.resolve());
+    const onOpen = vi.fn();
+    const { container } = render(
+      canvasOf(boardWithInnerBoards("Containers"), move, onOpen),
+    );
+    const shop = box(container, "shop");
+    fireEvent.keyDown(shop, { key: "Enter" });
+    const button = screen.getByRole("button", { name: "▸ Containers" });
+    button.focus();
+
+    fireEvent.keyDown(button, { key: "ArrowRight" });
+    fireEvent.keyDown(button, { key: "ArrowDown" });
+
+    expect(move).not.toHaveBeenCalled();
+
+    fireEvent.click(button);
+
+    expect(onOpen).toHaveBeenCalledExactlyOnceWith("inner-0");
+  });
+
+  it("shows a title as text and makes nothing of markup in it", () => {
+    const title = "<img src=x onerror=alert(1)>";
+    const { container } = render(
+      canvasOf(boardWithInnerBoards(title), () => Promise.resolve()),
+    );
+
+    expect(screen.getByRole("button", { name: `▸ ${title}` })).toBeDefined();
+    const shop = box(container, "shop");
+    expect(shop.querySelector("img, script, a")).toBeNull();
   });
 });
 

@@ -28,7 +28,7 @@ elements with a breadcrumb, see review flags and pins, and release a pin.
 - [x] One rule for the relations a board shows
 - [x] One way up the board tree
 - [x] Relations as arrows
-- [ ] Inner boards and a breadcrumb
+- [x] Inner boards and a breadcrumb
 - [ ] A marker on pinned boxes
 - [ ] Releasing a pin
 - [ ] Review flags on boxes
@@ -112,22 +112,22 @@ A person opens an element's inner board from its box and goes back up with a bre
 
 Review path: Security-Hybrid
 
-- [ ] `open_board` returns the boards above the open board, top first, as `overview` places them,
+- [x] `open_board` returns the boards above the open board, top first, as `overview` places them,
       and for each placement the boards its element owns, each with ID and title.
-- [ ] A box shows a `▸` button per inner board, which keyboard and mouse can use and which does not
+- [x] A box shows a `▸` button per inner board, which keyboard and mouse can use and which does not
       start a drag; a double click on a box opens its first inner board, and a box without one
       behaves as before.
-- [ ] The open board shows a breadcrumb of the boards above it, and a click opens that board. Where
+- [x] The open board shows a breadcrumb of the boards above it, and a click opens that board. Where
       the tree is broken, by a cycle or an owner without a file or home, the breadcrumb ends there
       and cannot loop, and the board stays open and reachable through the list of boards.
-- [ ] The open board stays the one piece of state that decides what is shown: the board list marks
+- [x] The open board stays the one piece of state that decides what is shown: the board list marks
       the same board, and a link to a board that has gone shows the existing message.
-- [ ] Tests in Rust and Vitest cover the fields, a broken tree, the button, the double click, the
+- [x] Tests in Rust and Vitest cover the fields, a broken tree, the button, the double click, the
       breadcrumb, and keyboard use; an IPC test covers `open_board` on inner boards.
-- [ ] A reader of Canvas can tell how to move between boards: its table row on zooming in and its
+- [x] A reader of Canvas can tell how to move between boards: its table row on zooming in and its
       Scope proposal no longer say otherwise, and its section on projecting a board and its Security
       section name what `open_board` now returns. The Glossary defines the breadcrumb.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
       `cargo fmt --all --check`, `pnpm --dir crates/abyme-canvas/ui check`, and
       `pnpm --dir crates/abyme-canvas/ui test` pass.
 

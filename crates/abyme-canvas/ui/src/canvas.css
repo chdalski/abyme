@@ -12,18 +12,18 @@ main {
   height: 100%;
 }
 
-nav {
+main > nav {
   overflow: auto;
   padding: 0 1rem;
   border-right: 1px solid #d0d4dc;
 }
 
-nav ul {
+main > nav ul {
   list-style: none;
   padding: 0;
 }
 
-nav button {
+main > nav button {
   width: 100%;
   padding: 0.25rem 0.5rem;
   border: none;
@@ -33,8 +33,62 @@ nav button {
   cursor: pointer;
 }
 
-nav button[aria-current="page"] {
+main > nav button[aria-current="page"] {
   background: #e3e8f2;
+}
+
+/* A title or a chain from a file can be any length, and must leave the canvas
+   its room. */
+.breadcrumb {
+  flex: none;
+  max-height: 4.5rem;
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
+
+.breadcrumb ol {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.breadcrumb li:not(:last-child)::after {
+  content: " ▸";
+}
+
+.breadcrumb button {
+  padding: 0;
+  border: none;
+  background: none;
+  color: #2f6fdb;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.element-inner-boards {
+  position: absolute;
+  right: 4px;
+  bottom: -10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: calc(100% - 8px);
+}
+
+.element-inner-boards button {
+  overflow: hidden;
+  padding: 0 0.25rem;
+  border: 1px solid #3b4a6b;
+  border-radius: 4px;
+  background: #e3e8f2;
+  font-size: 11px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: pointer;
 }
 
 .board {

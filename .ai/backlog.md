@@ -28,3 +28,5 @@ target goes here only after the user has lowered the target.
 - The doc of `outline` repeats the rule of `relations_on` in prose and could point to it: `crates/abyme-core/src/outline.rs` (Reviewer, canvas display Task 2)
 - The return type `{ label: string } | object` of `shownLabel` says nothing: `crates/abyme-canvas/ui/src/edges.ts` (Reviewer, canvas display Task 4)
 - A node's `handles` are 1×1 while the DOM handles are 6×6, so an arrow's end may shift 2 to 3 pixels after a measure: `crates/abyme-canvas/ui/src/nodes.ts` (Reviewer, canvas display Task 4)
+- A real double click on `▸` opens the board on the first click, and the rest of it can land on the new view and go one level deeper; nothing is written, and it is untested in a real webview: `crates/abyme-canvas/ui/src/ElementBox.tsx` (Reviewer, canvas display Task 5)
+- The `▸` button and the double click are tested only on a free board; a case with `mirrored` would pin them there too: `crates/abyme-canvas/ui/src/BoardCanvas.test.tsx` (Reviewer, canvas display Task 5)

@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -170,5 +171,93 @@ describe("App", () => {
     unmount();
 
     await waitFor(() => expect(client.listening).toBe(0));
+  });
+
+  describe("moving between boards", () => {
+    /** The board `outer` whose box owns `inner`, with a trail back on `inner`. */
+    function nestedClient(title = "Outer"): FakeClient {
+      const client = new FakeClient([
+        { id: "inner", title: "Inner" },
+        { id: "outer", title },
+      ]);
+      client.views = {
+        outer: boardView({
+          id: "outer",
+          title,
+          placements: [
+            placedBox("shop", {
+              inner_boards: [{ id: "inner", title: "Inner" }],
+            }),
+          ],
+        }),
+        inner: boardView({
+          id: "inner",
+          title: "Inner",
+          trail: [{ id: "outer", title }],
+        }),
+      };
+      return client;
+    }
+
+    const current = () =>
+      screen
+        .getByRole("list", { name: "Boards" })
+        .querySelector('[aria-current="page"]')?.textContent;
+
+    it("opens an inner board from its box and goes back with the breadcrumb", async () => {
+      const client = nestedClient();
+      render(<App client={client} />);
+      fireEvent.click(await screen.findByRole("button", { name: "Outer" }));
+
+      fireEvent.click(await screen.findByRole("button", { name: "▸ Inner" }));
+
+      await screen.findByRole("heading", { name: "Inner" });
+      expect(current()).toBe("Inner");
+      const breadcrumb = screen.getByRole("navigation", {
+        name: "Boards above",
+      });
+      const back = within(breadcrumb).getByRole("button", { name: "Outer" });
+      back.focus();
+      expect(document.activeElement).toBe(back);
+
+      fireEvent.click(back);
+
+      await screen.findByRole("heading", { name: "Outer" });
+      expect(current()).toBe("Outer");
+      expect(
+        screen.queryByRole("navigation", { name: "Boards above" }),
+      ).toBeNull();
+      expect(client.applied).toEqual([]);
+    });
+
+    it("shows a title in the breadcrumb as text", async () => {
+      const title = "<img src=x onerror=alert(1)>";
+      render(<App client={nestedClient(title)} />);
+      fireEvent.click(await screen.findByRole("button", { name: "Inner" }));
+
+      const breadcrumb = await screen.findByRole("navigation", {
+        name: "Boards above",
+      });
+
+      expect(breadcrumb.textContent).toContain(title);
+      expect(breadcrumb.querySelector("img, script, a")).toBeNull();
+    });
+
+    it("shows the core's message for a board that has gone and keeps the list", async () => {
+      const client = nestedClient();
+      render(<App client={client} />);
+      fireEvent.click(await screen.findByRole("button", { name: "Inner" }));
+      await screen.findByRole("heading", { name: "Inner" });
+      delete client.views["outer"];
+
+      fireEvent.click(
+        within(
+          screen.getByRole("navigation", { name: "Boards above" }),
+        ).getByRole("button", { name: "Outer" }),
+      );
+
+      expect((await screen.findByRole("alert")).textContent).toContain("outer");
+      expect(screen.getByRole("list", { name: "Boards" })).toBeDefined();
+    });
   });
 });

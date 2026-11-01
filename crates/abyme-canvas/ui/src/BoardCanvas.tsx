@@ -1,13 +1,13 @@
 import "@xyflow/react/dist/style.css";
 
-import { ReactFlow } from "@xyflow/react";
-import { useMemo } from "react";
+import { type NodeMouseHandler, ReactFlow } from "@xyflow/react";
+import { useCallback, useMemo } from "react";
 
 import type { BoardView } from "./bindings";
 import { useBoardNodes } from "./boardNodes";
 import { toEdges } from "./edges";
-import { ElementBox } from "./ElementBox";
-import type { Move } from "./nodes";
+import { ElementBox, OpenBoard } from "./ElementBox";
+import type { ElementNode, Move } from "./nodes";
 
 /** The one node type the canvas knows. */
 const NODE_TYPES = { element: ElementBox };
@@ -21,23 +21,37 @@ export function BoardCanvas({
   view,
   move,
   onMoveFailed,
+  onOpen,
 }: {
   view: BoardView;
   move: (moves: Move[]) => Promise<void>;
   onMoveFailed: (message: string) => void;
+  onOpen: (board: string) => void;
 }) {
   const { nodes, onNodesChange } = useBoardNodes(view, move, onMoveFailed);
   const edges = useMemo(() => toEdges(view), [view]);
+  const openFirstInnerBoard = useCallback<NodeMouseHandler<ElementNode>>(
+    (_event, node) => {
+      const [first] = node.data.innerBoards;
+      if (first !== undefined) {
+        onOpen(first.id);
+      }
+    },
+    [onOpen],
+  );
 
   return (
-    <ReactFlow
-      nodes={nodes}
-      edges={edges}
-      nodeTypes={NODE_TYPES}
-      onNodesChange={onNodesChange}
-      nodesConnectable={false}
-      deleteKeyCode={null}
-      fitView
-    />
+    <OpenBoard.Provider value={onOpen}>
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        nodeTypes={NODE_TYPES}
+        onNodesChange={onNodesChange}
+        onNodeDoubleClick={openFirstInnerBoard}
+        nodesConnectable={false}
+        deleteKeyCode={null}
+        fitView
+      />
+    </OpenBoard.Provider>
   );
 }

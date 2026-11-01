@@ -27,7 +27,7 @@ export function App({ client }: { client: AbymeClient }) {
         {open === null ? (
           <p>Open a board from the list.</p>
         ) : (
-          <BoardPane key={open} client={client} board={open} />
+          <BoardPane key={open} client={client} board={open} onOpen={setOpen} />
         )}
       </section>
     </main>

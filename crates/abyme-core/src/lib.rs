@@ -24,6 +24,8 @@ mod review;
 mod slug;
 mod statement;
 
+pub use board_tree::BoardTree;
+
 pub use apply::{
     Applied, ApplyError, Created, Kind, MAX_OPERATIONS, MAX_SHOWN_SOURCES, OperationProblem,
     RelationSources, Snapshot, Write, apply,

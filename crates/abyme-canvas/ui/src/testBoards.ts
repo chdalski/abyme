@@ -8,6 +8,7 @@ export function boardView(overrides: Partial<BoardView> = {}): BoardView {
     mode: null,
     placements: [],
     relations: [],
+    trail: [],
     ...overrides,
   };
 }
@@ -24,6 +25,7 @@ export function placedBox(
     width: 180,
     height: 90,
     shown: { kind: "missing" },
+    inner_boards: [],
     ...overrides,
   };
 }

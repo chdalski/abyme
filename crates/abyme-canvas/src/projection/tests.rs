@@ -88,6 +88,7 @@ fn shows_a_box_per_placement_with_its_rect_and_the_element_s_fields() {
                     width: 200,
                     height: 100,
                     shown: Shown::Missing,
+                    inner_boards: Vec::new(),
                 },
                 Placement {
                     element: element_id("payments"),
@@ -100,9 +101,11 @@ fn shows_a_box_per_placement_with_its_rect_and_the_element_s_fields() {
                         name: "Payment Service".to_owned(),
                         summary: Some("Payment processing".to_owned()),
                     },
+                    inner_boards: Vec::new(),
                 },
             ],
             relations: Vec::new(),
+            trail: Vec::new(),
         }
     );
 }
@@ -144,12 +147,20 @@ fn the_projection_carries_exactly_the_named_fields_and_no_body() {
     assert!(!json.to_string().contains("SECRET-BODY"));
     assert_eq!(
         keys(&json),
-        ["id", "mode", "placements", "relations", "title"]
+        ["id", "mode", "placements", "relations", "title", "trail"]
     );
     let placements = json["placements"].as_array().unwrap();
     assert_eq!(
         keys(&placements[0]),
-        ["element", "height", "shown", "width", "x", "y"]
+        [
+            "element",
+            "height",
+            "inner_boards",
+            "shown",
+            "width",
+            "x",
+            "y"
+        ]
     );
     assert_eq!(placements[0]["shown"], json!({"kind": "missing"}));
     assert_eq!(
@@ -242,4 +253,131 @@ fn leaves_out_a_relation_of_a_source_whose_file_is_missing() {
     let view = project(&snapshot, &board_id("context")).unwrap();
 
     assert_eq!(view.relations, []);
+}
+
+/// A board `id`, the inside of `owner`, placing `placed`, titled `<id> title`.
+fn tree_board(id: &str, owner: Option<&str>, placed: &[&str]) -> Board {
+    Board {
+        id: board_id(id),
+        title: format!("{id} title"),
+        owner: owner.map(element_id),
+        summary: Some("SECRET-SUMMARY".to_owned()),
+        zone: None,
+        placements: placed
+            .iter()
+            .map(|element| (element_id(element), placed_at_origin()))
+            .collect(),
+    }
+}
+
+fn placed_at_origin() -> abyme_model::Placement {
+    placed(0, 0, 1, 1)
+}
+
+/// A snapshot of `boards` and a file for each of `elements`.
+fn tree_snapshot(boards: Vec<Board>, elements: &[&str]) -> Snapshot {
+    Snapshot {
+        elements: elements
+            .iter()
+            .map(|id| (element_id(id), element(id, id, None, "SECRET-BODY")))
+            .collect(),
+        boards: boards
+            .into_iter()
+            .map(|board| (board.id.clone(), board))
+            .collect(),
+    }
+}
+
+/// The IDs of the trail of `board`.
+fn trail_of(snapshot: &Snapshot, board: &str) -> Vec<String> {
+    project(snapshot, &board_id(board))
+        .unwrap()
+        .trail
+        .iter()
+        .map(|entry| entry.id.as_str().to_owned())
+        .collect()
+}
+
+#[test]
+fn the_trail_names_the_boards_above_top_first() {
+    let snapshot = tree_snapshot(
+        vec![
+            tree_board("top", None, &["shop"]),
+            tree_board("middle", Some("shop"), &["orders"]),
+            tree_board("low", Some("orders"), &[]),
+        ],
+        &["shop", "orders"],
+    );
+
+    assert_eq!(trail_of(&snapshot, "low"), ["top", "middle"]);
+    assert_eq!(trail_of(&snapshot, "middle"), ["top"]);
+    assert_eq!(trail_of(&snapshot, "top"), Vec::<String>::new());
+}
+
+#[test]
+fn the_trail_is_empty_on_a_cycle_and_on_a_board_that_owns_itself() {
+    let snapshot = tree_snapshot(
+        vec![
+            tree_board("loop-a", Some("in-b"), &["in-a"]),
+            tree_board("loop-b", Some("in-a"), &["in-b"]),
+            tree_board("own", Some("in-own"), &["in-own"]),
+        ],
+        &["in-a", "in-b", "in-own"],
+    );
+
+    assert_eq!(trail_of(&snapshot, "loop-a"), Vec::<String>::new());
+    assert_eq!(trail_of(&snapshot, "loop-b"), Vec::<String>::new());
+    assert_eq!(trail_of(&snapshot, "own"), Vec::<String>::new());
+}
+
+#[test]
+fn the_trail_of_a_board_below_a_cycle_ends_at_the_first_board_of_the_cycle() {
+    let snapshot = tree_snapshot(
+        vec![
+            tree_board("loop-a", Some("in-b"), &["in-a", "hang"]),
+            tree_board("loop-b", Some("in-a"), &["in-b"]),
+            tree_board("below", Some("hang"), &[]),
+        ],
+        &["in-a", "in-b", "hang"],
+    );
+
+    assert_eq!(trail_of(&snapshot, "below"), ["loop-a"]);
+}
+
+#[test]
+fn the_trail_ends_at_an_owner_without_a_file_or_a_home() {
+    let snapshot = tree_snapshot(
+        vec![
+            tree_board("top", None, &["no-file"]),
+            tree_board("unfiled", Some("no-file"), &[]),
+            tree_board("homeless", Some("nowhere"), &[]),
+        ],
+        &["nowhere"],
+    );
+
+    assert_eq!(trail_of(&snapshot, "unfiled"), Vec::<String>::new());
+    assert_eq!(trail_of(&snapshot, "homeless"), Vec::<String>::new());
+}
+
+#[test]
+fn a_placement_names_the_boards_its_element_owns_with_only_id_and_title() {
+    let snapshot = tree_snapshot(
+        vec![
+            tree_board("top", None, &["shop", "plain"]),
+            tree_board("first", Some("shop"), &[]),
+            tree_board("second", Some("shop"), &[]),
+        ],
+        &["shop", "plain"],
+    );
+
+    let view = project(&snapshot, &board_id("top")).unwrap();
+    let json = serde_json::to_value(&view).unwrap();
+
+    assert_eq!(
+        json["placements"][1]["inner_boards"],
+        json!([{"id": "first", "title": "first title"},
+               {"id": "second", "title": "second title"}])
+    );
+    assert_eq!(json["placements"][0]["inner_boards"], json!([]));
+    assert!(!json.to_string().contains("SECRET"), "{json}");
 }

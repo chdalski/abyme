@@ -5,9 +5,13 @@
 //! element's body: the UI shows a box per placement, and the body is not
 //! part of it.
 
-use abyme_core::{ShownRelation, Snapshot, UnknownBoard, relations_on};
+use std::iter::successors;
+
+use abyme_core::{BoardTree, ShownRelation, Snapshot, UnknownBoard, relations_on};
 use abyme_model::{BoardId, Element, ElementId, Mode, Rect, RelationKind};
 use serde::Serialize;
+
+use crate::boards::BoardEntry;
 
 #[cfg(test)]
 mod tests;
@@ -27,6 +31,10 @@ pub struct BoardView {
     pub placements: Vec<Placement>,
     /// One entry per relation the board shows, as `read_board` shows them.
     pub relations: Vec<Relation>,
+    /// The boards above this one, top first, as `overview` places them. It
+    /// ends where the tree is broken, by a cycle or an owner without a file
+    /// or a home.
+    pub trail: Vec<BoardEntry>,
 }
 
 /// A relation the board shows, which the UI draws as an arrow.
@@ -60,6 +68,9 @@ pub struct Placement {
     pub height: u32,
     /// What the box shows.
     pub shown: Shown,
+    /// The boards the element owns, by ID. More than one only after a merge
+    /// or a hand edit.
+    pub inner_boards: Vec<BoardEntry>,
 }
 
 /// What the box of a placement shows.
@@ -90,6 +101,7 @@ pub fn project(snapshot: &Snapshot, board: &BoardId) -> Result<BoardView, Unknow
         .boards
         .get(board)
         .ok_or_else(|| UnknownBoard(board.clone()))?;
+    let tree = BoardTree::of(&snapshot.boards);
     Ok(BoardView {
         id: found.id.clone(),
         title: found.title.clone(),
@@ -97,11 +109,31 @@ pub fn project(snapshot: &Snapshot, board: &BoardId) -> Result<BoardView, Unknow
         placements: found
             .placements
             .iter()
-            .map(|(element, placed)| {
-                placement(element, &placed.rect, snapshot.elements.get(element))
-            })
+            .map(|(element, placed)| placement(snapshot, &tree, element, &placed.rect))
             .collect(),
         relations: relations_on(snapshot, found).map(relation).collect(),
+        trail: trail(snapshot, &tree, board),
+    })
+}
+
+/// The entries of the boards above `board`, top first. A walk along
+/// [`BoardTree::above`] cannot loop, since a board inside a cycle has none above.
+fn trail(snapshot: &Snapshot, tree: &BoardTree, board: &BoardId) -> Vec<BoardEntry> {
+    let has_file = |element: &ElementId| snapshot.elements.contains_key(element);
+    let mut entries: Vec<BoardEntry> = successors(tree.above(board, has_file), |upper| {
+        tree.above(upper, has_file)
+    })
+    .filter_map(|upper| entry(snapshot, upper))
+    .collect();
+    entries.reverse();
+    entries
+}
+
+/// The ID and the title of `board`, and nothing else of it.
+fn entry(snapshot: &Snapshot, board: &BoardId) -> Option<BoardEntry> {
+    snapshot.boards.get(board).map(|found| BoardEntry {
+        id: found.id.clone(),
+        title: found.title.clone(),
     })
 }
 
@@ -114,7 +146,8 @@ fn relation(shown: ShownRelation<'_>) -> Relation {
     }
 }
 
-fn placement(id: &ElementId, rect: &Rect, element: Option<&Element>) -> Placement {
+fn placement(snapshot: &Snapshot, tree: &BoardTree, id: &ElementId, rect: &Rect) -> Placement {
+    let element: Option<&Element> = snapshot.elements.get(id);
     Placement {
         element: id.clone(),
         x: rect.x,
@@ -126,5 +159,9 @@ fn placement(id: &ElementId, rect: &Rect, element: Option<&Element>) -> Placemen
             name: element.name().to_owned(),
             summary: element.summary().map(str::to_owned),
         }),
+        inner_boards: tree
+            .owned_by(id)
+            .filter_map(|board| entry(snapshot, board))
+            .collect(),
     }
 }

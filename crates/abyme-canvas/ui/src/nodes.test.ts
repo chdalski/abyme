@@ -65,6 +65,7 @@ describe("toNodes", () => {
         element: "orders",
         shown: { kind: "missing" },
         home: { x: -20, y: 300 },
+        innerBoards: [],
       },
       {
         element: "payments",
@@ -75,6 +76,7 @@ describe("toNodes", () => {
           summary: null,
         },
         home: { x: 40, y: 80 },
+        innerBoards: [],
       },
     ]);
   });

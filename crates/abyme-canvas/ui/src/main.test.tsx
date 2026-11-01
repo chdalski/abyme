@@ -23,6 +23,7 @@ const shop = vi.hoisted(() => ({
         width: 180,
         height: 90,
         shown: { kind: "missing" as const },
+        inner_boards: [],
       },
       {
         element: "orders",
@@ -31,6 +32,7 @@ const shop = vi.hoisted(() => ({
         width: 180,
         height: 90,
         shown: { kind: "missing" as const },
+        inner_boards: [],
       },
     ],
     relations: [
@@ -41,6 +43,7 @@ const shop = vi.hoisted(() => ({
         label: "constructor",
       },
     ],
+    trail: [],
   },
   view: {
     id: "online-shop",
@@ -54,6 +57,7 @@ const shop = vi.hoisted(() => ({
         width: 180,
         height: 90,
         shown: { kind: "missing" as const },
+        inner_boards: [],
       },
       {
         element: "web-shop",
@@ -67,9 +71,11 @@ const shop = vi.hoisted(() => ({
           name: "Web Shop",
           summary: "Where customers order",
         },
+        inner_boards: [],
       },
     ],
     relations: [],
+    trail: [],
   },
 }));
 

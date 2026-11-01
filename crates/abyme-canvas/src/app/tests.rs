@@ -247,6 +247,40 @@ fn open_board_returns_the_relations_the_board_shows() {
 }
 
 #[test]
+fn open_board_names_the_boards_above_and_inside_with_only_id_and_title() {
+    let root = tempfile::tempdir().unwrap();
+    project_with_a_board(root.path());
+    let operations: Vec<Operation> = serde_json::from_value(json!([
+        {"op": "create_board", "key": "i", "title": "Inside",
+         "owner": {"existing": "payment-service"}, "summary": "SECRET-SUMMARY"},
+    ]))
+    .unwrap();
+    Project::discover(root.path())
+        .unwrap()
+        .apply(&operations)
+        .unwrap();
+    let (_app, window) = canvas(root.path());
+
+    let above = open_board_from(&window, json!({"board": "context"})).unwrap();
+    let inside = open_board_from(&window, json!({"board": "inside"})).unwrap();
+
+    assert_eq!(above["trail"], json!([]));
+    let boxes = above["placements"].as_array().unwrap();
+    assert_eq!(boxes[0]["inner_boards"], json!([]));
+    assert_eq!(
+        boxes[1]["inner_boards"],
+        json!([{"id": "inside", "title": "Inside"}])
+    );
+    assert_eq!(
+        inside["trail"],
+        json!([{"id": "context", "title": "Context"}])
+    );
+    for view in [above, inside] {
+        assert!(!view.to_string().contains("SECRET"), "{view}");
+    }
+}
+
+#[test]
 fn open_board_names_only_the_id_of_an_unknown_board() {
     let root = tempfile::tempdir().unwrap();
     project_with_a_board(root.path());

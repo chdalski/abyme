@@ -15,9 +15,11 @@ import type { Move } from "./nodes";
 export function BoardPane({
   client,
   board,
+  onOpen,
 }: {
   client: AbymeClient;
   board: string;
+  onOpen: (board: string) => void;
 }) {
   const load = useCallback(() => loadBoard(client, board), [client, board]);
   const state = useLive<BoardState>(client, load, { kind: "loading" });
@@ -51,6 +53,19 @@ export function BoardPane({
     case "loaded":
       return (
         <>
+          {state.view.trail.length > 0 && (
+            <nav aria-label="Boards above" className="breadcrumb">
+              <ol>
+                {state.view.trail.map((above) => (
+                  <li key={above.id}>
+                    <button type="button" onClick={() => onOpen(above.id)}>
+                      {above.title}
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            </nav>
+          )}
           <h2>{state.view.title}</h2>
           {moveFailure !== null && <p role="alert">{moveFailure}</p>}
           <div className="flow">
@@ -58,6 +73,7 @@ export function BoardPane({
               view={state.view}
               move={move}
               onMoveFailed={setMoveFailure}
+              onOpen={onOpen}
             />
           </div>
         </>

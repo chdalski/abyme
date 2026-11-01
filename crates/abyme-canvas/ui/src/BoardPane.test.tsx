@@ -41,7 +41,9 @@ const VIEW: BoardView = boardView({
 });
 
 async function openPane(client: FakeClient) {
-  const rendered = render(<BoardPane client={client} board="context" />);
+  const rendered = render(
+    <BoardPane client={client} board="context" onOpen={() => {}} />,
+  );
   await screen.findByRole("heading", { name: "Context" });
   return rendered;
 }

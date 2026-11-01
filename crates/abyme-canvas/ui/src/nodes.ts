@@ -5,13 +5,19 @@ import {
   type XYPosition,
 } from "@xyflow/react";
 
-import type { BoardView, Shown } from "./bindings";
+import type { BoardEntry, BoardView, Shown } from "./bindings";
 
 /**
  * What a box shows: its element's ID and what the projection says of it,
- * and its position in the board file, where it returns when a move fails.
+ * its position in the board file, where it returns when a move fails, and
+ * the boards its element owns.
  */
-export type ElementData = { element: string; shown: Shown; home: XYPosition };
+export type ElementData = {
+  element: string;
+  shown: Shown;
+  home: XYPosition;
+  innerBoards: BoardEntry[];
+};
 
 /** A box on the canvas. */
 export type ElementNode = Node<ElementData, "element">;
@@ -37,7 +43,12 @@ export function toNodes(view: BoardView): ElementNode[] {
       position: home,
       width: placement.width,
       height: placement.height,
-      data: { element: placement.element, shown: placement.shown, home },
+      data: {
+        element: placement.element,
+        shown: placement.shown,
+        home,
+        innerBoards: placement.inner_boards,
+      },
       draggable: view.mode !== "mirrored",
       connectable: false,
       handles: [

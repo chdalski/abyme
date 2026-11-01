@@ -57,7 +57,7 @@ The Rust side watches the project's files itself: `abyme/`, `abyme/elements/`, a
 
 ## Security
 
-- **No raw HTML:** The canvas shows names, summaries, descriptions, notes, and relation labels as text and renders no raw HTML from them. ESLint rejects the ways to write HTML into the page.
+- **No raw HTML:** The canvas shows names, summaries, descriptions, notes, relation labels, and the titles of other boards as text and renders no raw HTML from them. ESLint rejects the ways to write HTML into the page.
 - **Only Abyme's own commands:** The webview reaches the Rust side only through the commands in [[#Commands]] and listening to events, not through plugins for files or the shell. The capability grants exactly these; a page from another origin reaches none of them. What the webview can write is limited to the operations `apply` admits.
 - **Only its own pages:** The window navigates only to the canvas's own origin, and to the dev server's while it is developed; it opens no other window.
 - **Only its own scripts:** The page's content security policy, in `ui/index.html`, lets it run only its own scripts. During development, Vite's dev server also sends the policy as a header, so that it covers the scripts Vite puts into the page. Once the page's modules have loaded, it freezes `Object.prototype`.
@@ -77,13 +77,13 @@ So that it still feels fast, sketching creates elements right away:
 - An arrow that ends in empty space creates a new element there.
 - Shapes without meaning, scribbles, and freehand do not exist for now.
 
-This includes camera, selection, moving, resizing, snapping, editing text in place, arrows, frames, references, zooming in with a breadcrumb bar, undo, and keyboard shortcuts. Later additions: highlighting the AI's changes live, handing the selection to the AI (`get_selection`), and letting the AI point at elements (`focus`), see [[Ideas#Visual Collaboration with the AI]].
+This includes camera, selection, moving, resizing, snapping, editing text in place, frames, references, undo, and keyboard shortcuts; arrows and moving between boards with a breadcrumb are built. Later additions: highlighting the AI's changes live, handing the selection to the AI (`get_selection`), and letting the AI point at elements (`focus`), see [[Ideas#Visual Collaboration with the AI]].
 
 ## Projecting a Board
 
 React Flow knows only one surface, no [[Board Graph]]. That fits, because the graph lives in the core. The canvas always shows one board as a projection: the elements and references on it and the arrows between them. Edits go back to the core as operations, and the core sends the new projection.
 
-The canvas computes a board's projection from the core's snapshot, with pure functions in `src/projection.rs`: the command `open_board` takes a board ID and returns the board's mode, one entry per placement, with its rect from the board file and the element's type, name, and summary, or a mark that the element's file is missing, and the relations the board shows, as `read_board` shows them. The projection names its fields one by one and never carries an element's body. Each entry becomes a box of the one node type `element`, at its position and size, and a box on a mirrored board cannot be dragged or moved with the arrow keys. Each relation becomes an arrow from the bottom of its source to the top of its target, with React Flow's built-in edges, so arrows are not routed around boxes. An arrow shows the relation's label, cut after 40 characters, and no other text, and a `see_also` is dashed. Arrows cannot be selected, deleted, or reconnected, and a relation to an element on another board has none.
+The canvas computes a board's projection from the core's snapshot, with pure functions in `src/projection.rs`: the command `open_board` takes a board ID and returns the board's mode; one entry per placement, with its rect from the board file, the element's type, name, and summary, or a mark that the element's file is missing, and the boards the element owns; the relations the board shows, as `read_board` shows them; and the boards above it. Of the boards above and inside it names only the ID and the title. The projection names its fields one by one and never carries an element's body. Each entry becomes a box of the one node type `element`, at its position and size, and a box on a mirrored board cannot be dragged or moved with the arrow keys. A box shows one `▸` button per board its element owns, and the open board shows a breadcrumb of the boards above it, as `overview` places them; both open a board and write nothing. Where a merge or a hand edit broke the tree, the breadcrumb ends there and the board stays reachable through the list. Each relation becomes an arrow from the bottom of its source to the top of its target, with React Flow's built-in edges, so arrows are not routed around boxes. An arrow shows the relation's label, cut after 40 characters, and no other text, and a `see_also` is dashed. Arrows cannot be selected, deleted, or reconnected, and a relation to an element on another board has none.
 
 | Abyme | in React Flow |
 |---|---|
@@ -93,7 +93,7 @@ The canvas computes a board's projection from the core's snapshot, with pure fun
 | reference | the same node type with a marker. It fetches name and content through the element ID, so a rename shows up everywhere at once |
 | relation | edge, computed from the relations |
 | relation to another board | later a stub as its own node on the element; today no arrow |
-| zooming in | double-click, the camera moves into the element, then the inner board is loaded |
+| zooming in | a `▸` button on the box, or a double-click for its first inner board; the inner board then opens with a fitted view |
 | preview of the inner board | image from `abyme-render` in the node |
 | locked or mirrored zone | `draggable`, `connectable`, and `deletable` per node |
 | attached sticky note | child node of the element it hangs on |

@@ -24,6 +24,7 @@ The docs, the UI, and the code use these terms alike. The type names are in [[Da
 | [[Board Graph\|Home]] | board or frame an element lies on |
 | [[Board Graph\|Reference]] | display of an element outside its home |
 | [[Board Graph\|Inner board]] | the inside of an element, reached by zooming in |
+| [[Canvas#Projecting a Board\|Breadcrumb]] | the boards above the open board on the canvas, top first; a click opens one |
 | [[Board Graph#Relations Across Boards\|Stub]] | short arrow for a relation to an element that is not on the board |
 | [[Board Graph#Relations Across Boards\|Implied relation]] | arrow on the parent board derived from an inner board, not stored |
 | [[Relations\|Relation]] | typed edge from one element to another, with an optional label |
