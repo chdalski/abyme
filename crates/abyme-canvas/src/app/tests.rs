@@ -313,6 +313,24 @@ fn apply_writes_a_move_into_the_board_file() {
 }
 
 #[test]
+fn a_request_with_a_layout_writes_nothing() {
+    let root = tempfile::tempdir().unwrap();
+    project_with_a_board(root.path());
+    let before = project_files(root.path());
+    let (_app, window) = canvas(root.path());
+    let layout = json!({"op": "layout_board", "board": {"existing": "context"}});
+
+    let applied = apply_from(&window, &json!([a_move(400, 200), layout]));
+
+    let error = applied.unwrap_err().to_string();
+    assert!(
+        error.contains("operation 2: the canvas may not send layout_board"),
+        "{error}"
+    );
+    assert_eq!(project_files(root.path()), before);
+}
+
+#[test]
 fn a_request_with_a_move_that_does_not_pin_writes_nothing() {
     let root = tempfile::tempdir().unwrap();
     project_with_a_board(root.path());

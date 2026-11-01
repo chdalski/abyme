@@ -37,7 +37,7 @@ person placed by hand where it is.
 - [x] Free-space placement takes a size
 - [x] Pinned placements
 - [x] Box sizes from text
-- [ ] `layout_board`
+- [x] `layout_board`
 
 ## Tasks
 
@@ -170,45 +170,50 @@ it as a layered diagram, in order with the request's other operations.
 
 Review path: Security-Hybrid
 
-- [ ] `layout_board` takes a board, also one the same request creates, and no
+- [x] `layout_board` takes a board, also one the same request creates, and no
       other field, and sees the elements, relations, and placements of the request
       as it stands at that operation. It writes only the board file, so no
       verification stamp changes.
-- [ ] A relation of the kind `uses`, `depends_on`, `describes`, or `concerns`
+- [x] A relation of the kind `uses`, `depends_on`, `describes`, or `concerns`
       between two elements on the board ranks its source above its target. A walk
       over the elements in ID order leaves out, for the ranks only, each relation
       that would close a cycle; every other relation holds, so a tree hanging off a
       cycle stays ranked. `see_also` only influences the order within a rank.
       Relations to elements not on the board count for nothing.
-- [ ] Between two unpinned boxes, the box of a relation's source lies entirely
+- [x] Between two unpinned boxes, the box of a relation's source lies entirely
       above the box of its target, for every relation the walk does not leave out.
-- [ ] A pinned element takes part in the ranks like any other, so a chain through
+- [x] A pinned element takes part in the ranks like any other, so a chain through
       it stays connected, but it keeps its position and size. No unpinned box
       overlaps a pinned one or another unpinned one.
-- [ ] Each connected part of the board is laid out on its own, the parts side
+- [x] Each connected part of the board is laid out on its own, the parts side
       by side by their smallest element ID, and boxes without relations stand in a
       grid below them.
-- [ ] Every unpinned box gets the size of its text, or 180 × 90 when its element
+- [x] Every unpinned box gets the size of its text, or 180 × 90 when its element
       has no file.
-- [ ] The result depends only on IDs, sizes, relations, and pins: laying out a
+- [x] The result depends only on IDs, sizes, relations, and pins: laying out a
       board twice writes the same bytes. Every unpinned box lies within ±1,000,000,
       the range of `move_element`; pinned boxes do not count. A layout that cannot
       keep to it rejects the request with the existing `BoardFull`.
-- [ ] A `place_element` after `layout_board` in the same request overlaps no box
+- [x] A `place_element` after `layout_board` in the same request overlaps no box
       the layout produced.
-- [ ] The canvas refuses `layout_board` as it refuses the other operations it
+- [x] The layouts of one request share a limit on their work: a request beyond
+      it fails with `LayoutTooLarge`, which names the board and writes nothing.
+      A request that exhausts the limit takes at most 2 s in a release build,
+      measured for many relations, text without width, rows times pins, and many
+      layouts of a large board.
+- [x] The canvas refuses `layout_board` as it refuses the other operations it
       may not send.
-- [ ] Unit and property tests cover ranks, cycles with a tree hanging off them,
+- [x] Unit and property tests cover ranks, cycles with a tree hanging off them,
       disconnected parts, pinned elements, repeating a layout, the range, and a
       `place_element` after a layout; an integration test through the MCP tool
       `apply` builds a board with relations and lays it out in one request, reads
       the board file back, then lays it out again with a pinned element.
-- [ ] A reader of Placement and Layout, MCP Server, Data Model, Decisions, the
+- [x] A reader of Placement and Layout, MCP Server, Data Model, Decisions, the
       Glossary, the `apply` description, the server's instructions, and the MCP
       README can use `layout_board` and sees that semantic placement and a tool
       `place` are not built yet; the root `CLAUDE.md` Components table names the
       layout.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
       `cargo fmt --all --check`, and `pnpm --dir crates/abyme-canvas/ui check`
       pass.
 
@@ -254,6 +259,10 @@ Review path: Security-Hybrid
   turns `!overlaps(&a, &b)` into `!a.overlaps(&b)`, with the same arguments and
   expected values. At the Reviewer's demand, the task also adds a test for a box
   below the board whose bottom alone would overflow `i32`.
+- **A limit on the work of a request's layouts, with `LayoutTooLarge`:** the
+  Security Engineer's demand on Task 6. 1000 `layout_board` of a large board would
+  otherwise run under the write lock with no way to stop them. `BoardFull` would
+  claim that no position is free, so the refusal has its own variant.
 
 ## Non-Goals
 

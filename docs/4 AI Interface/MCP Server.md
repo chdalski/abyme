@@ -27,12 +27,12 @@ The AI describes *what* it wants, and Abyme decides *where* it goes. Instead of 
 | `read_element` | element detail: description, boards, and relations in both directions |
 | `apply` | a package of create, change, delete, and link, transactional |
 | `create_from_template` | boards or frames from a template, e.g. C4 or Current/Target |
-| `place` | place semantically or apply auto-layout |
+| `place` | place semantically |
 | `render` | image of a board or a section |
 | `checks` / `resolve_check` | fetch review flags and change requests, resolve change requests |
 | `verify` | resolve a review flag and set a new verification stamp |
 
-The server offers `apply`, `overview`, `read_board`, `read_element`, `search`, `status`, and `verify` so far; the other tools come with the slices that need them. Its instructions tell the AI to start a session with `overview`. `status` counts the elements to review by their highest priority and lists them as in `search`, those with a task first, at most 50; when Git cannot be asked, it answers with an error that names the reason. `verify` takes an element ID and stamps the element as verified by the AI against the commit HEAD names in the repository its anchor lies in, nested or the project's; it refuses while files under the element's anchor differ from HEAD or are untracked, so the AI asks for a commit first, and it refuses an element whose anchor lies in a [[Reconciliation#Nested Repositories|nested repository]] that Abyme cannot read.
+The server offers `apply`, `overview`, `read_board`, `read_element`, `search`, `status`, and `verify` so far; the other tools come with the slices that need them. Auto-layout is the operation `layout_board` of `apply` (see [[Placement and Layout#Layered Layout]]), and semantic placement is not built yet. Its instructions tell the AI to start a session with `overview`. `status` counts the elements to review by their highest priority and lists them as in `search`, those with a task first, at most 50; when Git cannot be asked, it answers with an error that names the reason. `verify` takes an element ID and stamps the element as verified by the AI against the commit HEAD names in the repository its anchor lies in, nested or the project's; it refuses while files under the element's anchor differ from HEAD or are untracked, so the AI asks for a commit first, and it refuses an element whose anchor lies in a [[Reconciliation#Nested Repositories|nested repository]] that Abyme cannot read.
 
 Every writing response contains the consequences of the change, that is affected elements and new review flags (see [[Checks#Reports]]). For visual collaboration, tools like `get_selection` and `focus` would be added, see [[Ideas#Visual Collaboration with the AI]].
 

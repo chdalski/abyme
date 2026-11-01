@@ -1937,6 +1937,65 @@ async fn apply_moves_a_pinned_element_only_when_the_request_says_what_becomes_of
 }
 
 #[tokio::test]
+async fn apply_lays_out_a_board_by_its_relations_and_keeps_a_pin() -> TestResult {
+    let directory = project()?;
+    let session = start(directory.path()).await?;
+    let board_file = directory.path().join("abyme/boards/b.board.json");
+
+    let built = call(
+        &session,
+        "apply",
+        json!({"operations": [
+            {"op": "create_board", "key": "b", "title": "B"},
+            {"op": "create_element", "key": "lower", "type_ref": "c4/container", "name": "Lower"},
+            {"op": "create_element", "key": "upper", "type_ref": "c4/container", "name": "Upper"},
+            {"op": "place_element", "element": {"new": "lower"}, "board": {"new": "b"}},
+            {"op": "place_element", "element": {"new": "upper"}, "board": {"new": "b"}},
+            {"op": "create_relation", "from": {"new": "upper"}, "kind": "uses", "to": {"new": "lower"}},
+            {"op": "layout_board", "board": {"new": "b"}}
+        ]}),
+    )
+    .await??;
+
+    assert_eq!(built.is_error, Some(false), "{built:?}");
+    let board = fs::read_to_string(&board_file)?;
+    assert!(
+        board.contains(r#"{"element": "upper", "x": 0, "y": 0, "width": 180, "height": 90}"#),
+        "{board}"
+    );
+    assert!(
+        board.contains(r#"{"element": "lower", "x": 0, "y": 130, "width": 180, "height": 90}"#),
+        "{board}"
+    );
+
+    let pinned = call(
+        &session,
+        "apply",
+        json!({"operations": [
+            {"op": "move_element", "element": {"existing": "lower"}, "board": {"existing": "b"},
+             "x": 5000, "y": 6000, "pinned": true},
+            {"op": "layout_board", "board": {"existing": "b"}}
+        ]}),
+    )
+    .await??;
+
+    assert_eq!(pinned.is_error, Some(false), "{pinned:?}");
+    let board = fs::read_to_string(&board_file)?;
+    assert!(
+        board.contains(
+            r#"{"element": "lower", "x": 5000, "y": 6000, "width": 180, "height": 90, "pinned": true}"#
+        ),
+        "{board}"
+    );
+    assert!(
+        board.contains(r#"{"element": "upper", "x": 0, "y": 0, "width": 180, "height": 90}"#),
+        "{board}"
+    );
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+#[tokio::test]
 async fn read_board_shows_coordinates_only_on_request() -> TestResult {
     let directory = project()?;
     let session = start(directory.path()).await?;

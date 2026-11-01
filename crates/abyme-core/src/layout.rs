@@ -6,6 +6,7 @@ use abyme_model::Rect;
 
 pub mod box_size;
 pub mod free_space;
+pub mod layered;
 
 /// The size of a box on a board.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

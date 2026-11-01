@@ -280,6 +280,7 @@ fn deleted_existing_elements(operations: &[Operation]) -> BTreeSet<&ElementId> {
             | Operation::UpdateBoard { .. }
             | Operation::PlaceElement { .. }
             | Operation::MoveElement { .. }
+            | Operation::LayoutBoard { .. }
             | Operation::UpdateElement { .. }
             | Operation::DeleteElement { .. }
             | Operation::CreateRelation { .. }
@@ -312,6 +313,7 @@ fn named_existing_elements(operations: &[Operation]) -> BTreeSet<&ElementId> {
             | Operation::UpdateBoard { .. }
             | Operation::PlaceElement { .. }
             | Operation::MoveElement { .. }
+            | Operation::LayoutBoard { .. }
             | Operation::UpdateElement { .. }
             | Operation::DeleteElement { .. }
             | Operation::CreateRelation { .. }
@@ -334,6 +336,7 @@ fn updated_existing_boards(operations: &[Operation]) -> BTreeSet<&BoardId> {
             | Operation::UpdateBoard { .. }
             | Operation::PlaceElement { .. }
             | Operation::MoveElement { .. }
+            | Operation::LayoutBoard { .. }
             | Operation::UpdateElement { .. }
             | Operation::DeleteElement { .. }
             | Operation::CreateRelation { .. }
@@ -472,6 +475,7 @@ fn deleted_keys(operations: &[Operation]) -> BTreeSet<&LocalKey> {
             | Operation::UpdateBoard { .. }
             | Operation::PlaceElement { .. }
             | Operation::MoveElement { .. }
+            | Operation::LayoutBoard { .. }
             | Operation::UpdateElement { .. }
             | Operation::DeleteElement { .. }
             | Operation::CreateRelation { .. }
@@ -735,6 +739,44 @@ fn board_with_pins(
 }
 
 proptest! {
+    #[test]
+    fn a_layout_keeps_pins_overlaps_nothing_and_changes_no_byte_when_repeated(
+        snapshot in snapshot(),
+        operations in prop::collection::vec(operation(), 0..6),
+        board in prop::sample::select(BOARD_IDS.to_vec()),
+    ) {
+        let id: BoardId = board.parse().unwrap();
+        let layout = Operation::LayoutBoard {
+            board: Ref::Existing(id.clone()),
+        };
+        let once: Vec<Operation> = operations.into_iter().chain([layout.clone()]).collect();
+        let twice: Vec<Operation> = once.iter().cloned().chain([layout]).collect();
+
+        if let (Ok(first), Ok(second)) = (apply(&snapshot, &once), apply(&snapshot, &twice)) {
+            let laid_out = |applied: &Applied| {
+                applied.writes.iter().find_map(|write| match write {
+                    Write::Board(board) if board.id == id => Some(board.clone()),
+                    Write::Board(_) | Write::Element(_) | Write::RemoveElement(_) => None,
+                })
+            };
+            let (board, repeated) = (laid_out(&first).unwrap(), laid_out(&second).unwrap());
+            prop_assert_eq!(board.to_json(), repeated.to_json());
+            let before = &snapshot.boards[&id].placements;
+            for (element, placement) in &board.placements {
+                if placement.pinned {
+                    prop_assert_eq!(before.get(element), Some(placement));
+                    continue;
+                }
+                for (other_id, other) in &board.placements {
+                    prop_assert!(
+                        other_id == element || !placement.rect.overlaps(&other.rect),
+                        "{element} overlaps {other_id}"
+                    );
+                }
+            }
+        }
+    }
+
     #[test]
     fn a_move_changes_a_pin_only_by_saying_so_and_a_pinned_box_only_with_a_pin(
         pins in (any::<bool>(), any::<bool>()),

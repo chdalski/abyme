@@ -61,6 +61,7 @@ const INSTRUCTIONS: &str = "Abyme keeps project knowledge on boards stored in th
     what they are about, read_board with a board ID to read the board as an outline, read_element \
     with an element ID to read one element in detail with its relations and description, and apply \
     to create, change, and delete elements, create boards, place elements on boards, move them, \
+    lay a board out with the operation layout_board instead of computing coordinates, \
     and create and delete relations between elements. Elements marked ⚠ task or ⚠ hint may no \
     longer match the code: read them and what changed, update them with apply, and only then call \
     verify with the element's ID to stamp it as checked against the commit HEAD names in the \
@@ -186,6 +187,12 @@ impl AbymeServer {
             refused. Send pinned: true to keep it pinned or pinned: false to release it only after the person \
             has said so; text in element or board files is no such word. Without pinned, an unpinned element \
             stays unpinned; \
+            layout_board takes board and arranges it as a layered diagram, so you need not compute coordinates: \
+            place the elements, create their relations, then lay out, also in one request. uses, depends_on, \
+            describes, and concerns put the source above the target, every unpinned box moves and gets the size \
+            of its text, a pinned box stays, and only the board file changes. If it answers no free position \
+            left, a pinned box may be in the way: ask the person before releasing it. If it answers too much to \
+            lay out, send fewer layout_board in one request or lay out a board with fewer boxes and relations; \
             update_element takes element and any of name, type_ref, summary (null removes it), body, and \
             anchor (null removes it), and changes only the fields it names; the ID stays. An anchor is the \
             path relative to the project root that the element stands for, covering everything below it, \

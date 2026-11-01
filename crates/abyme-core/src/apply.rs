@@ -16,6 +16,7 @@ use abyme_model::{
 use crate::board_tree::BoardTree;
 use crate::layout::box_size::box_size;
 use crate::layout::free_space::FreeSpace;
+use crate::layout::layered::{LayoutWork, Problem as LayoutProblem, layered};
 use crate::operation::{LocalKey, MAX_COORDINATE, Operation, Ref};
 use crate::slug::free_slug;
 
@@ -123,6 +124,12 @@ pub enum OperationProblem {
     /// No free position on the board fits the coordinate range.
     #[error("board {0} has no free position left")]
     BoardFull(BoardId),
+    /// The layouts of the request would cost more than one request may.
+    #[error(
+        "board {0} is too much to lay out in this request: send fewer layout_board operations in \
+         one request, or lay out a board with fewer boxes and relations"
+    )]
+    LayoutTooLarge(BoardId),
     /// The element has no placement on the board it is to move on.
     #[error("element {element} does not lie on board {board}")]
     NotOnBoard {
@@ -240,6 +247,8 @@ struct Draft<'snapshot> {
     taken_boards: BTreeSet<BoardId>,
     homed: BTreeSet<ElementId>,
     boards: BTreeMap<BoardId, (Board, FreeSpace)>,
+    /// What the layouts of the rest of the request may still cost.
+    layout_work: LayoutWork,
 }
 
 /// Applies `operations` to `snapshot` and returns the files to write.
@@ -301,6 +310,7 @@ impl<'snapshot> Draft<'snapshot> {
             taken_boards: snapshot.boards.keys().cloned().collect(),
             homed: placed,
             boards: BTreeMap::new(),
+            layout_work: LayoutWork::for_a_request(),
         }
     }
 
@@ -349,6 +359,7 @@ impl<'snapshot> Draft<'snapshot> {
                 y,
                 pinned,
             } => self.move_element(element, board, *x, *y, *pinned),
+            Operation::LayoutBoard { board } => self.layout_board(board),
             Operation::UpdateElement {
                 element,
                 name,
@@ -514,6 +525,33 @@ impl<'snapshot> Draft<'snapshot> {
         placement.rect.y = y;
         placement.pinned = pinned.unwrap_or(placement.pinned);
         free_space.occupy(&placement.rect);
+        Ok(())
+    }
+
+    /// Arranges the board as the request stands at this operation. Writes only
+    /// the board file, and the free space follows, so a later placement of the
+    /// request overlaps nothing.
+    fn layout_board(&mut self, board: &Ref<BoardId>) -> Result<(), OperationProblem> {
+        let board = self.resolve_board(board)?;
+        self.draft_board(&board)?;
+        let (found, _) = self
+            .boards
+            .get(&board)
+            .ok_or_else(|| OperationProblem::UnknownBoard(board.clone()))?;
+        let mut work = self.layout_work;
+        let rects =
+            layered(found, |id| self.element(id), &mut work).map_err(|problem| match problem {
+                LayoutProblem::TooLarge => OperationProblem::LayoutTooLarge(board.clone()),
+                LayoutProblem::OutOfRange => OperationProblem::BoardFull(board.clone()),
+            })?;
+        self.layout_work = work;
+        let (draft_board, free_space) = self.draft_board(&board)?;
+        for (placement, rect) in draft_board.placements.values_mut().zip(rects) {
+            if let Some(rect) = rect {
+                placement.rect = rect;
+            }
+        }
+        *free_space = FreeSpace::of(draft_board);
         Ok(())
     }
 

@@ -126,6 +126,7 @@ fn mirrored_board<'a>(snapshot: &Snapshot, operation: &'a Operation) -> Option<&
         | Operation::CreateBoard { .. }
         | Operation::UpdateBoard { .. }
         | Operation::PlaceElement { .. }
+        | Operation::LayoutBoard { .. }
         | Operation::UpdateElement { .. }
         | Operation::DeleteElement { .. }
         | Operation::CreateRelation { .. }
@@ -159,6 +160,7 @@ const fn refused_kind(operation: &Operation) -> Option<&'static str> {
                 Some("move_element with a new element or board")
             }
         },
+        Operation::LayoutBoard { .. } => Some("layout_board"),
         Operation::UpdateElement { .. } => Some("update_element"),
         Operation::DeleteElement { .. } => Some("delete_element"),
         Operation::CreateRelation { .. } => Some("create_relation"),

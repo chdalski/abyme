@@ -200,6 +200,7 @@ A request is a list of operations, each a JSON object with the field `op`:
   {"op": "place_element", "element": {"new": "pay"}, "board": {"new": "b"}},
   {"op": "place_element", "element": {"existing": "orders-db"}, "board": {"new": "b"}},
   {"op": "move_element", "element": {"existing": "orders-db"}, "board": {"new": "b"}, "x": 400, "y": 200},
+  {"op": "layout_board", "board": {"new": "b"}},
   {"op": "update_element", "element": {"existing": "orders-db"}, "summary": null, "body": "Orders and payments.",
    "anchor": "migrations"},
   {"op": "delete_element", "element": {"existing": "legacy-mailer"}},
@@ -209,7 +210,7 @@ A request is a list of operations, each a JSON object with the field `op`:
 ]
 ```
 
-- **`create_element`** takes a key, `type_ref`, `name`, and optionally `summary`, `body`, and `anchor`; **`create_board`** takes a key, `title`, and optionally `summary`, `owner`, the element whose inside the board is, and `zone`, such as `{"mode": "mirrored", "statement": "current"}`; **`place_element`** gives an element its home on a board; **`move_element`** sets the position of an element on a board where it lies, with `x` and `y` from -1,000,000 to 1,000,000, and keeps its size; `"pinned": true` also pins it, `"pinned": false` releases it, and without `pinned` a pinned element is refused and an unpinned one stays unpinned (see [[Placement and Layout#Rules]]). Other fields are rejected.
+- **`create_element`** takes a key, `type_ref`, `name`, and optionally `summary`, `body`, and `anchor`; **`create_board`** takes a key, `title`, and optionally `summary`, `owner`, the element whose inside the board is, and `zone`, such as `{"mode": "mirrored", "statement": "current"}`; **`place_element`** gives an element its home on a board; **`move_element`** sets the position of an element on a board where it lies, with `x` and `y` from -1,000,000 to 1,000,000, and keeps its size; `"pinned": true` also pins it, `"pinned": false` releases it, and without `pinned` a pinned element is refused and an unpinned one stays unpinned (see [[Placement and Layout#Rules]]); **`layout_board`** arranges a board as a layered diagram and takes only `board` (see [[Placement and Layout#Layered Layout]]). Other fields are rejected.
 - **`update_element`** changes only the fields it names among `name`, `type_ref`, `summary`, `body`, and `anchor`; `"summary": null` and `"anchor": null` remove them, and `null` is rejected for the others. The element keeps its ID and its relations, also when its name changes, and an update that names no field is rejected. Text is stored exactly as sent.
 - **`update_board`** changes only the fields it names among `title`, `summary`, `owner`, and `zone`; `"summary": null`, `"owner": null`, and `"zone": null` remove them, and `null` is rejected for the title. The board keeps its ID and its placements, and an update that names no field is rejected.
 - **Inner boards in a request:** `create_board`, `update_board`, and `place_element` are rejected when, as the request stands, they would make an element own a second board or a board lie inside itself, or name an owner that is no element. A breach that the files already hold rejects nothing else, so a request can repair it step by step.
@@ -219,7 +220,7 @@ A request is a list of operations, each a JSON object with the field `op`:
 - **References:** `{"new": "<key>"}` names what an earlier operation of the same request creates, `{"existing": "<id>"}` what already exists. A **local key** has 1 to 64 ASCII letters, digits, hyphens, and underscores, is valid only within its request, and elements and boards share one set of keys.
 - **All or nothing:** Operations run in order. If one fails, for example because a key is unknown or an element already has a home, the request writes nothing, and the error names the operation's position. A request has at most 1000 operations.
 - **The result** names the ID each key received; the canvas and the AI refer to the new elements and boards by these IDs from then on.
-- **Placement:** `place_element` gives an element a box of the size of its type, name, and summary (see [[Placement and Layout#Rules]]) and the first free place in a grid near the board's origin, or a position below everything else. `move_element` and `update_element` leave the size as it is, so a box can cut off a text that grew, as it can where the estimate falls short. A placement never overlaps an element that an earlier operation of the same request moved.
+- **Placement:** `place_element` gives an element a box of the size of its type, name, and summary (see [[Placement and Layout#Rules]]) and the first free place in a grid near the board's origin, or a position below everything else. `move_element` and `update_element` leave the size as it is, so a box can cut off a text that grew until `layout_board` sizes it again, as it can where the estimate falls short. A placement never overlaps an element that an earlier operation of the same request moved.
 
 The MCP server and the canvas use the same core functions:
 

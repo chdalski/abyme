@@ -140,6 +140,13 @@ pub enum Operation {
         #[cfg_attr(feature = "json-schema", schemars(with = "bool"))]
         pinned: Option<bool>,
     },
+    /// Arranges a board as a layered diagram from its elements and relations:
+    /// every unpinned box gets the size of its text and a new position, and a
+    /// pinned box stays as it is.
+    LayoutBoard {
+        /// The board to lay out.
+        board: Ref<BoardId>,
+    },
     /// Changes the fields it names of an element; the others stay as they
     /// are. The element keeps its ID, also when its name changes, and loses
     /// its verification stamp.
@@ -664,6 +671,21 @@ mod tests {
     #[case::create_board_as_array(r#"[["create_board", "k", "t"]]"#)]
     #[case::create_element_as_array(r#"[["create_element", "k", "t", "n", null, ""]]"#)]
     #[case::place_element_as_array(r#"[["place_element", {"new": "a"}, {"new": "b"}]]"#)]
+    #[case::layout_board_without_a_board(r#"[{"op": "layout_board"}]"#)]
+    #[case::layout_board_with_a_null_board(r#"[{"op": "layout_board", "board": null}]"#)]
+    #[case::layout_board_with_two_boards(
+        r#"[{"op": "layout_board", "board": {"new": "a"}, "board": {"new": "b"}}]"#
+    )]
+    #[case::layout_board_with_another_field(
+        r#"[{"op": "layout_board", "board": {"new": "a"}, "pinned": true}]"#
+    )]
+    #[case::layout_board_with_a_position(
+        r#"[{"op": "layout_board", "board": {"new": "a"}, "x": 0}]"#
+    )]
+    #[case::layout_board_as_array(r#"[["layout_board", {"new": "a"}]]"#)]
+    #[case::layout_board_with_an_invalid_id(
+        r#"[{"op": "layout_board", "board": {"existing": "../x"}}]"#
+    )]
     #[case::pinned_null(
         r#"[{"op": "move_element", "element": {"new": "a"}, "board": {"new": "b"}, "x": 0, "y": 0, "pinned": null}]"#
     )]
@@ -902,7 +924,7 @@ mod tests {
             .flatten()
             .filter(|variant| variant.pointer("/type") == Some(&serde_json::json!("object")))
             .collect();
-        assert_eq!(variants.len(), 9 + 2 + 2, "{schema}");
+        assert_eq!(variants.len(), 10 + 2 + 2, "{schema}");
         for variant in variants {
             assert_eq!(
                 variant.pointer("/additionalProperties"),

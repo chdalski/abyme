@@ -102,6 +102,10 @@ fn every_other_operation_is_refused_by_its_position_and_kind() {
             "move_element with a new element or board",
         ),
         (
+            json!({"op": "layout_board", "board": {"existing": "secret-id"}}),
+            "layout_board",
+        ),
+        (
             json!({"op": "update_element", "element": {"existing": "secret-id"}, "name": "SECRET-NAME"}),
             "update_element",
         ),
