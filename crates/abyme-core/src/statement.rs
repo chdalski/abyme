@@ -1,38 +1,52 @@
-//! The statement kind of each element: the kind of its home board's zone.
+//! The statement kind of each element: its own kind if it holds one, otherwise
+//! the kind of its home board's zone.
 //!
-//! An element takes its kind from its home alone. Without a home, or when
-//! its home is no zone, it has none, and no other board that places it and
-//! no board above stands in.
+//! Without an own kind and without a home, or when its home is no zone, an
+//! element has none, and no other board that places it and no board above
+//! stands in. This is the one place that decides an element's kind.
 
 use std::collections::BTreeMap;
 
-use abyme_model::{BoardId, ElementId, StatementKind};
+use abyme_model::{BoardId, Element, ElementId, StatementKind};
 
 use crate::apply::Snapshot;
 use crate::board_tree::BoardTree;
 
-/// The statement kind of every element with a file whose home is a zone, by
-/// element.
+/// Where an element's statement kind comes from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KindSource<'a> {
+    /// The element holds it itself.
+    Element,
+    /// It is the kind of the zone of this board, the element's home.
+    Home(&'a BoardId),
+}
+
+/// The statement kind of every element with a file that has one, by element.
 #[must_use]
 pub fn statement_kinds(snapshot: &Snapshot) -> BTreeMap<ElementId, StatementKind> {
     let tree = BoardTree::of(&snapshot.boards);
     snapshot
         .elements
-        .keys()
-        .filter_map(|id| kind_of(snapshot, &tree, id).map(|(kind, _)| (id.clone(), kind)))
+        .iter()
+        .filter_map(|(id, element)| {
+            kind_of(snapshot, &tree, element).map(|(kind, _)| (id.clone(), kind))
+        })
         .collect()
 }
 
-/// The statement kind of `element` and the home board it comes from, if the
-/// home is a zone. `tree` must have been built from `snapshot`'s boards.
+/// The statement kind of `element` and where it comes from, if it has one.
+/// `tree` must have been built from `snapshot`'s boards.
 pub fn kind_of<'a>(
     snapshot: &Snapshot,
     tree: &'a BoardTree,
-    element: &ElementId,
-) -> Option<(StatementKind, &'a BoardId)> {
-    let home = tree.home(element)?;
+    element: &Element,
+) -> Option<(StatementKind, KindSource<'a>)> {
+    if let Some(kind) = element.statement() {
+        return Some((kind, KindSource::Element));
+    }
+    let home = tree.home(element.id())?;
     let zone = snapshot.boards.get(home)?.zone?;
-    Some((zone.statement, home))
+    Some((zone.statement, KindSource::Home(home)))
 }
 
 #[cfg(test)]

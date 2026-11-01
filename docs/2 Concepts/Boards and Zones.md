@@ -33,11 +33,11 @@ Abyme knows the modes free and mirrored so far. In the [[Canvas]], a person cann
 
 ## Statement Kind
 
-So that the AI weighs content correctly, content carries a statement kind, from the zone it has its home in (see [[#Inheritance]]). It does not say how finished something is, but what kind of statement it is.
+So that the AI weighs content correctly, content carries a statement kind, normally from the zone it has its home in (see [[#Inheritance]]). It says what the content claims, not that it was checked. It does not say how finished something is, but what kind of statement it is.
 
 | Kind | Meaning | How the AI treats it |
 |---|---|---|
-| **current** | describes today's reality | counts as fact, must match reality, gets checked |
+| **current** | describes today's reality | counts as fact, must match reality; review flags check it where it has an anchor |
 | **target** | agreed goal | goal of the implementation, not yet reality |
 | **decision** | was made, with reasons | holds until it is superseded |
 | **idea** | non-binding | only as a suggestion, never quoted as fact |
@@ -64,7 +64,7 @@ The AI sets the zone itself when it creates a board, because it knows what the b
 
 ## Inheritance
 
-An element takes the statement kind of the zone it has its home in, its home board. Without a home, or when its home board is no zone, it has none: no other board that shows it and no board above stands in, so nothing becomes a fact by accident. The AI sees each element's kind in the [[MCP Server#Detail Levels|detail levels]].
+An element takes the statement kind of the zone it has its home in, its home board. Without a home, or when its home board is no zone, it has none: no other board that shows it and no board above stands in, so nothing becomes a fact by accident. As the exception, an element can hold a kind of its own, such as a question on a board of current facts, which takes precedence over the zone and needs no home; that is a deliberate claim, visible in the diff, not a check. The AI sees each element's kind and, in `read_element`, where it comes from in the [[MCP Server#Detail Levels|detail levels]].
 
 > [!question] Proposal
-> Frames and elements get settings of their own, and some element types bring their own kind: question, ADR (= decision), and knowledge note (= knowledge). Frame settings take precedence over board settings, element settings over both; overriding them by hand is rarely necessary.
+> Frames get settings of their own, and some element types bring their own kind: question, ADR (= decision), and knowledge note (= knowledge). Frame settings take precedence over board settings.

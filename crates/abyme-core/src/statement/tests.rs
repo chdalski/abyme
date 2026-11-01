@@ -116,8 +116,12 @@ fn takes_the_kind_of_the_lower_board_when_two_place_an_element() {
     let tree = BoardTree::of(&lower_is_a_zone.boards);
 
     assert_eq!(
-        kind_of(&lower_is_a_zone, &tree, &element_id("x")),
-        Some((StatementKind::Current, &board_id("alpha")))
+        kind_of(
+            &lower_is_a_zone,
+            &tree,
+            &lower_is_a_zone.elements[&element_id("x")]
+        ),
+        Some((StatementKind::Current, KindSource::Home(&board_id("alpha"))))
     );
     assert_eq!(statement_kinds(&lower_is_none), BTreeMap::new());
 }
@@ -147,5 +151,82 @@ fn takes_no_kind_from_the_board_above() {
     assert_eq!(
         statement_kinds(&snapshot),
         BTreeMap::from([(element_id("shop"), StatementKind::Current)])
+    );
+}
+
+/// `element(id)` holding `kind` itself.
+fn holding(id: &str, kind: StatementKind) -> Element {
+    let mut fields = element(id).into_fields();
+    fields.statement = Some(kind);
+    Element::new(element_id(id), fields).unwrap()
+}
+
+/// The kind `statement_kinds` gives `x`, an element holding `kind`, and the
+/// source `kind_of` names, on `boards`.
+fn own_kind_on(boards: Vec<Board>, kind: StatementKind) -> (Option<StatementKind>, bool) {
+    let mut snapshot = snapshot(boards, &[]);
+    snapshot
+        .elements
+        .insert(element_id("x"), holding("x", kind));
+    let tree = BoardTree::of(&snapshot.boards);
+    let from_the_element = matches!(
+        kind_of(&snapshot, &tree, &snapshot.elements[&element_id("x")]),
+        Some((_, KindSource::Element))
+    );
+    (
+        statement_kinds(&snapshot).get(&element_id("x")).copied(),
+        from_the_element,
+    )
+}
+
+#[test]
+fn an_own_kind_needs_no_home() {
+    assert_eq!(
+        own_kind_on(Vec::new(), StatementKind::Question),
+        (Some(StatementKind::Question), true)
+    );
+}
+
+#[test]
+fn an_own_kind_counts_on_a_home_that_is_no_zone() {
+    assert_eq!(
+        own_kind_on(vec![board("b", None, None, &["x"])], StatementKind::Idea),
+        (Some(StatementKind::Idea), true)
+    );
+}
+
+#[test]
+fn an_own_kind_wins_over_a_zone_of_another_kind() {
+    assert_eq!(
+        own_kind_on(
+            vec![board("b", Some(StatementKind::Current), None, &["x"])],
+            StatementKind::Idea
+        ),
+        (Some(StatementKind::Idea), true)
+    );
+}
+
+#[test]
+fn an_own_kind_on_a_zone_of_the_same_kind_comes_from_the_element() {
+    assert_eq!(
+        own_kind_on(
+            vec![board("b", Some(StatementKind::Idea), None, &["x"])],
+            StatementKind::Idea
+        ),
+        (Some(StatementKind::Idea), true)
+    );
+}
+
+#[test]
+fn an_own_kind_counts_on_an_element_several_boards_place() {
+    assert_eq!(
+        own_kind_on(
+            vec![
+                board("alpha", Some(StatementKind::Current), None, &["x"]),
+                board("beta", Some(StatementKind::Target), None, &["x"]),
+            ],
+            StatementKind::Decision
+        ),
+        (Some(StatementKind::Decision), true)
     );
 }

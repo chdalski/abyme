@@ -2040,6 +2040,72 @@ async fn apply_gives_an_element_a_statement_kind_of_its_own() -> TestResult {
 }
 
 #[tokio::test]
+async fn an_own_kind_wins_over_the_zone_in_the_read_tools() -> TestResult {
+    let directory = project()?;
+    let session = start(directory.path()).await?;
+    let built = call(
+        &session,
+        "apply",
+        json!({"operations": [
+            {"op": "create_board", "key": "b", "title": "B",
+             "zone": {"mode": "mirrored", "statement": "current"}},
+            {"op": "create_element", "key": "q", "type_ref": "note", "name": "Open point",
+             "statement": "question"},
+            {"op": "create_element", "key": "f", "type_ref": "note", "name": "Plain fact"},
+            {"op": "place_element", "element": {"new": "q"}, "board": {"new": "b"}},
+            {"op": "place_element", "element": {"new": "f"}, "board": {"new": "b"}}
+        ]}),
+    )
+    .await??;
+    assert_eq!(built.is_error, Some(false), "{built:?}");
+
+    let board = call(&session, "read_board", json!({"board": "b"})).await??;
+    let detail = call(&session, "read_element", json!({"element": "open-point"})).await??;
+    let plain = call(&session, "read_element", json!({"element": "plain-fact"})).await??;
+
+    let line_of = |id: &str| {
+        text(&board)
+            .lines()
+            .find(|line| line.starts_with(id))
+            .map(str::to_owned)
+    };
+    assert!(
+        line_of("open-point").is_some_and(|line| line.contains("question")),
+        "{board:?}"
+    );
+    assert!(
+        line_of("plain-fact").is_some_and(|line| line.contains("current")),
+        "{board:?}"
+    );
+    assert!(
+        text(&detail).contains("\nStatement kind: question, from the element\n"),
+        "{detail:?}"
+    );
+    assert!(
+        text(&plain).contains("\nStatement kind: current, from board b\n"),
+        "{plain:?}"
+    );
+
+    let changed = call(
+        &session,
+        "apply",
+        json!({"operations": [{"op": "update_element", "element": {"existing": "open-point"},
+                               "statement": "decision"}]}),
+    )
+    .await??;
+    assert_eq!(changed.is_error, Some(false), "{changed:?}");
+    let detail = call(&session, "read_element", json!({"element": "open-point"})).await??;
+
+    assert!(
+        text(&detail).contains("\nStatement kind: decision, from the element\n"),
+        "{detail:?}"
+    );
+    assert!(text(&detail).contains("\nVerified: none\n"), "{detail:?}");
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+#[tokio::test]
 async fn read_board_shows_coordinates_only_on_request() -> TestResult {
     let directory = project()?;
     let session = start(directory.path()).await?;

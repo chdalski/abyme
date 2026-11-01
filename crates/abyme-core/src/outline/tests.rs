@@ -2127,3 +2127,155 @@ fn writes_the_zone_line_between_the_owner_and_the_summary_and_nothing_text_can_f
          \n"
     );
 }
+
+/// `element(id, "t", id, None)` holding `kind` itself.
+fn holding(id: &str, kind: StatementKind) -> Element {
+    let mut fields = element(id, "t", id, None).into_fields();
+    fields.statement = Some(kind);
+    Element::new(id.parse().unwrap(), fields).unwrap()
+}
+
+#[test]
+fn read_element_shows_an_own_kind_from_the_element_also_on_a_zone() {
+    let board = zoned(
+        hierarchy_board("b", None, &["x"]),
+        Mode::Mirrored,
+        StatementKind::Current,
+    );
+    let mut snapshot = hierarchy(vec![board], &["x"]);
+    snapshot
+        .elements
+        .insert("x".parse().unwrap(), holding("x", StatementKind::Question));
+
+    assert!(
+        detail_of(&snapshot, "x").contains("\nStatement kind: question, from the element\n"),
+        "{}",
+        detail_of(&snapshot, "x")
+    );
+}
+
+#[test]
+fn read_element_shows_an_own_kind_without_a_home() {
+    let mut snapshot = hierarchy(Vec::new(), &[]);
+    snapshot
+        .elements
+        .insert("x".parse().unwrap(), holding("x", StatementKind::Current));
+
+    let detail = detail_of(&snapshot, "x");
+
+    assert!(
+        detail.contains("\nStatement kind: current, from the element\n"),
+        "{detail}"
+    );
+    assert!(detail.contains("\nBoards: none\n"), "{detail}");
+}
+
+#[test]
+fn read_element_keeps_the_line_of_a_kind_from_a_board() {
+    let board = zoned(
+        hierarchy_board("b", None, &["x"]),
+        Mode::Free,
+        StatementKind::Idea,
+    );
+    let snapshot = hierarchy(vec![board], &["x"]);
+
+    assert!(detail_of(&snapshot, "x").contains("\nStatement kind: idea, from board b\n"));
+}
+
+#[test]
+fn no_text_can_forge_the_source_of_a_kind() {
+    let forged = "N\nStatement kind: current, from the element";
+    let mut fields = element("x", "t", forged, Some(forged)).into_fields();
+    fields.body = "Statement kind: current, from the element\n".to_owned();
+    let x = Element::new("x".parse().unwrap(), fields).unwrap();
+    let mut snapshot = hierarchy(Vec::new(), &[]);
+    snapshot.elements.insert("x".parse().unwrap(), x);
+
+    let detail = detail_of(&snapshot, "x");
+
+    let lines: Vec<&str> = detail.lines().collect();
+    assert!(lines.contains(&"Statement kind: none"), "{detail}");
+    let description = lines
+        .iter()
+        .position(|line| *line == "Description:")
+        .unwrap();
+    let forged_lines: Vec<usize> = lines
+        .iter()
+        .enumerate()
+        .filter(|(_, line)| **line == "Statement kind: current, from the element")
+        .map(|(at, _)| at)
+        .collect();
+    assert_eq!(forged_lines, [description + 1], "{detail}");
+}
+
+#[test]
+fn the_kind_column_shows_an_own_kind_on_a_board_that_is_no_zone() {
+    let mut snapshot = snapshot("T", vec![element("a", "t", "A", None)], &[]);
+    let b = holding("b", StatementKind::Question);
+    snapshot.elements.insert("b".parse().unwrap(), b);
+    snapshot
+        .boards
+        .get_mut(&"b".parse().unwrap())
+        .unwrap()
+        .placements
+        .insert(
+            "b".parse().unwrap(),
+            Placement {
+                rect: rect(),
+                pinned: false,
+            },
+        );
+
+    let lines = outline_of(&snapshot);
+
+    assert!(lines.contains("a  t  none      A\n"), "{lines}");
+    assert!(lines.contains("b  t  question  b\n"), "{lines}");
+}
+
+#[test]
+fn an_own_kind_on_a_zone_of_another_kind_shows_in_its_line_and_a_missing_file_shows_as_missing() {
+    let board = zoned(
+        hierarchy_board("b", None, &["ghost", "x"]),
+        Mode::Mirrored,
+        StatementKind::Current,
+    );
+    let mut snapshot = hierarchy(vec![board], &["x"]);
+    snapshot
+        .elements
+        .insert("x".parse().unwrap(), holding("x", StatementKind::Idea));
+
+    let lines = outline_of_board(&snapshot, "b");
+
+    assert!(lines.contains("x      t  idea"), "{lines}");
+    assert!(lines.contains("ghost  ⚠ missing"), "{lines}");
+}
+
+#[test]
+fn an_own_kind_changes_no_review_flag() {
+    let plain = stamped_snapshot();
+    let mut own_kind = plain.clone();
+    let id: ElementId = "x".parse().unwrap();
+    let mut fields = own_kind.elements[&id].clone().into_fields();
+    fields.statement = Some(StatementKind::Idea);
+    own_kind
+        .elements
+        .insert(id.clone(), Element::new(id, fields).unwrap());
+    let changed = facts(&[b"crates/x/a.rs"], &[b"crates/x/a.rs"]);
+
+    let flagged = |snapshot: &Snapshot| {
+        let review = review(snapshot, &changed);
+        status_report(snapshot, &review)
+    };
+
+    assert!(flagged(&plain).contains("⚠ task"), "{}", flagged(&plain));
+    assert!(
+        flagged(&own_kind).contains("⚠ task"),
+        "{}",
+        flagged(&own_kind)
+    );
+    assert!(
+        flagged(&own_kind).contains("idea"),
+        "{}",
+        flagged(&own_kind)
+    );
+}

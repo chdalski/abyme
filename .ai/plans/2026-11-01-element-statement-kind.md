@@ -30,7 +30,7 @@ that reads statement kinds follow it.
 - [x] The order of an element's errors is pinned
 - [x] Element parameters as one value
 - [x] An element file and a request can hold a statement kind
-- [ ] The element's own kind takes precedence
+- [x] The element's own kind takes precedence
 
 ## Tasks
 
@@ -117,29 +117,29 @@ this, and every reader of a kind follows.
 
 Review path: Security-Hybrid
 
-- [ ] An element's kind is its own if it has one, otherwise as before the kind of its home
+- [x] An element's kind is its own if it has one, otherwise as before the kind of its home
       board's zone, otherwise none. An element without an own kind reads as before in every
       output.
-- [ ] `read_element` shows `Statement kind: <kind>, from the element` for an own kind.
+- [x] `read_element` shows `Statement kind: <kind>, from the element` for an own kind.
       `read_board`, `search`, and `status` show the own kind in their kind column, and that
       column also appears on a board that is no zone when one of its elements has an own
       kind, `none` for the others.
-- [ ] `search` with `statement` finds an element by its own kind, also without a home; after
+- [x] `search` with `statement` finds an element by its own kind, also without a home; after
       an own kind is set, changed, or removed, the next `search` filters by the new kind, with
       no board change.
-- [ ] Tests cover each state: an own kind without a home, on a home that is no zone, on a zone
+- [x] Tests cover each state: an own kind without a home, on a home that is no zone, on a zone
       of another kind, on a zone of the same kind, and on an element several boards place.
       A test in `crates/abyme-index/tests/index.rs` covers setting, changing, and removing an
       own kind across refreshes of `search`. An integration test through the MCP tools `apply`,
       `read_board`, and `read_element` covers an own kind on a zone of another kind.
-- [ ] A reader of Boards and Zones, Data Model, MCP Server, Search and Index, the Decisions
+- [x] A reader of Boards and Zones, Data Model, MCP Server, Search and Index, the Decisions
       table, the descriptions of the read tools and `search`, and the MCP README can tell
       where an element's kind comes from, and sees that frames and element types bringing a
       kind are still a proposal.
-- [ ] The doc comments in `abyme-core`, `abyme-index`, and `abyme-mcp` that say where an
+- [x] The doc comments in `abyme-core`, `abyme-index`, and `abyme-mcp` that say where an
       element's kind comes from state the new rule, and "own kind" means only a kind the element
       itself holds.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
       `cargo fmt --all --check`, and `pnpm --dir crates/abyme-canvas/ui check` pass.
 
 ## Task Notes

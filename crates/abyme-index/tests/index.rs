@@ -1347,3 +1347,123 @@ async fn replaces_stored_values_that_are_no_kind() -> TestResult {
     );
     Ok(())
 }
+
+/// `element(id, name, body)` holding `kind` itself, if one is given.
+fn holding(id: &str, kind: Option<StatementKind>) -> TestResult<Element> {
+    let mut fields = element(id, "Thing", "shared word")?.into_fields();
+    fields.statement = kind;
+    Ok(Element::new(id.parse()?, fields)?)
+}
+
+/// The IDs a filtered search finds for "shared", after a refresh saw `snapshot`.
+async fn found_as(
+    lock: &abyme_index::IndexLock<'_>,
+    snapshot: &Snapshot,
+    kind: StatementKind,
+) -> TestResult<Vec<ElementId>> {
+    let mut embedder = WordsEmbedder::default();
+    lock.refresh(snapshot, &mut embedder).await?;
+    Ok(lock
+        .search(snapshot, "shared", Some(kind), &mut embedder, 10)
+        .await?)
+}
+
+#[tokio::test]
+async fn filters_by_an_own_kind_that_is_set_changed_and_removed_without_a_board_change()
+-> TestResult {
+    let (_directory, cache, root) = setup()?;
+    let index = Index::new(self::cache(&cache)?, &root, &SPEC);
+    let lock = index.lock()?;
+    let thing: ElementId = "thing".parse()?;
+    let on_kind = |kind| -> TestResult<Snapshot> { Ok(snapshot(vec![holding("thing", kind)?])) };
+
+    let none = on_kind(None)?;
+    assert_eq!(found_as(&lock, &none, StatementKind::Idea).await?, []);
+
+    let idea = on_kind(Some(StatementKind::Idea))?;
+    assert_eq!(
+        found_as(&lock, &idea, StatementKind::Idea).await?,
+        std::slice::from_ref(&thing)
+    );
+
+    let question = on_kind(Some(StatementKind::Question))?;
+    assert_eq!(found_as(&lock, &question, StatementKind::Idea).await?, []);
+    assert_eq!(
+        found_as(&lock, &question, StatementKind::Question).await?,
+        [thing]
+    );
+
+    assert_eq!(found_as(&lock, &none, StatementKind::Question).await?, []);
+    Ok(())
+}
+
+#[tokio::test]
+async fn takes_an_own_kind_from_the_snapshot_when_a_refresh_failed() -> TestResult {
+    let (_directory, cache, root) = setup()?;
+    let index = Index::new(self::cache(&cache)?, &root, &SPEC);
+    let lock = index.lock()?;
+    let mut embedder = WordsEmbedder::default();
+    let idea = snapshot(vec![holding("thing", Some(StatementKind::Idea))?]);
+    let current = snapshot(vec![holding("thing", Some(StatementKind::Current))?]);
+    let none = snapshot(vec![holding("thing", None)?]);
+    lock.refresh(&idea, &mut embedder).await?;
+    assert!(
+        lock.refresh(&current, &mut BrokenEmbedder::TooFew)
+            .await
+            .is_err()
+    );
+
+    let as_idea = lock
+        .search(
+            &current,
+            "shared",
+            Some(StatementKind::Idea),
+            &mut embedder,
+            10,
+        )
+        .await?;
+
+    assert_eq!(as_idea, Vec::<ElementId>::new());
+
+    lock.refresh(&current, &mut embedder).await?;
+    assert!(
+        lock.refresh(&none, &mut BrokenEmbedder::TooFew)
+            .await
+            .is_err()
+    );
+
+    let as_current = lock
+        .search(
+            &none,
+            "shared",
+            Some(StatementKind::Current),
+            &mut embedder,
+            10,
+        )
+        .await?;
+
+    assert_eq!(as_current, Vec::<ElementId>::new());
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_own_kind_on_a_zone_of_another_kind_is_found_by_the_own_kind_alone() -> TestResult {
+    let (_directory, cache, root) = setup()?;
+    let index = Index::new(self::cache(&cache)?, &root, &SPEC);
+    let lock = index.lock()?;
+    let thing: ElementId = "thing".parse()?;
+    let snapshot = zoned(
+        vec![holding("thing", Some(StatementKind::Idea))?],
+        &[("board", Some(StatementKind::Current), &["thing"])],
+    )?;
+
+    assert_eq!(
+        found_as(&lock, &snapshot, StatementKind::Current).await?,
+        []
+    );
+    assert_eq!(
+        found_as(&lock, &snapshot, StatementKind::Idea).await?,
+        std::slice::from_ref(&thing)
+    );
+    Ok(())
+}

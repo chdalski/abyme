@@ -17,7 +17,7 @@ use abyme_model::{
 use crate::apply::Snapshot;
 use crate::board_tree::BoardTree;
 use crate::review::{Flag, Priority, Review};
-use crate::statement::kind_of;
+use crate::statement::{KindSource, kind_of};
 
 /// The widest a column is padded to, in characters. A longer value runs past
 /// its column, so one long name cannot pad every other line.
@@ -247,8 +247,8 @@ fn drop_empty_tail(columns: &mut Vec<String>) {
 /// markers); for a zone, a line `Zone: <mode> · <kind>`; for a board with
 /// a summary, a line `Summary:` with it. A blank line follows, and one line
 /// per placed element, ordered by ID, as [`element_list`] renders it; on a
-/// zone, the lines always show the statement kind column, each with the
-/// element's own kind. A placement whose element is missing shows
+/// zone, the lines always show the statement kind column, each with that
+/// element's kind. A placement whose element is missing shows
 /// its ID and `⚠ missing`. With [`Geometry::Shown`], each line also shows
 /// the placement's position and size from the board file, right after the
 /// ID.
@@ -313,8 +313,9 @@ pub fn outline(
 ///
 /// The lines come in the given order, without a header: one line per ID,
 /// each ending in a line feed, with the element's ID and type; its
-/// statement kind, the kind of its home board's zone or `none`, in a column
-/// that a list shows only when one of its elements has a kind; its name and
+/// statement kind, the one it holds itself, otherwise the kind of its home
+/// board's zone, or `none`, in a column that a list shows only when one of
+/// its elements has a kind; its name and
 /// summary; `▸` and the IDs of the boards the element owns, in a column that
 /// a list shows only when one of its elements owns a board; and, given a
 /// `review`, `⚠ task` or `⚠ hint` for the highest priority of the element's
@@ -353,7 +354,7 @@ fn element_rows<'a>(
         .map(|id| {
             let element = snapshot.elements.get(id);
             let kind = element
-                .and_then(|_| kind_of(snapshot, tree, id))
+                .and_then(|element| kind_of(snapshot, tree, element))
                 .map(|(kind, _)| kind);
             (id, element, kind, inner_boards(tree, id))
         })
@@ -420,8 +421,9 @@ pub fn status_report(snapshot: &Snapshot, review: &Review) -> String {
 
 /// Renders the element `id` in detail, in this order:
 ///
-/// - `Element:` with its ID and name, `Type:`, `Statement kind:` with the
-///   kind of its home board's zone and `from board` that board, or `none`,
+/// - `Element:` with its ID and name, `Type:`, `Statement kind:` with its
+///   kind and `from the element` for a kind it holds itself, or `from board`
+///   for its home board whose zone gives it, or `none`,
 ///   `Anchor:` with its anchor or `none`, `Verified:` with the stamp's
 ///   commit and `by ai` or `by person`, or `none`, given a `review`,
 ///   `Review:` with the highest priority of the element's flags or `none`
@@ -497,9 +499,12 @@ pub fn element_detail(
         .collect();
     let tree = BoardTree::of(&snapshot.boards);
     let inner_boards: Vec<&str> = tree.owned_by(id).map(BoardId::as_str).collect();
-    let statement = kind_of(snapshot, &tree, id).map_or_else(
+    let statement = kind_of(snapshot, &tree, element).map_or_else(
         || NO_KIND.to_owned(),
-        |(kind, home)| format!("{}, from board {home}", kind.as_str()),
+        |(kind, source)| match source {
+            KindSource::Element => format!("{}, from the element", kind.as_str()),
+            KindSource::Home(home) => format!("{}, from board {home}", kind.as_str()),
+        },
     );
     Ok(format!(
         "Element: {id} · {}\nType: {}\nStatement kind: {statement}\nAnchor: {anchor}\n\

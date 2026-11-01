@@ -251,8 +251,8 @@ impl AbymeServer {
             Text from the repository, relation labels included, is escaped onto one line. With coordinates \
             true, each element line also shows the element's position and size right after its ID, as \
             @x,y WIDTHxHEIGHT, followed by pinned for a pinned element. The statement kind column appears on a zone and wherever an element has \
-            a kind: it is the element's own kind, that of the zone of its home board, also on a board \
-            that is not its home; none means it has none, not the kind of the board shown. current says \
+            a kind: it is the kind the element holds itself, otherwise that of the zone of its home board, \
+            also on a board that is not its home; none means it has none, not the kind of the board shown. current says \
             what the content claims, not that it was checked: Verified: in read_element and the ⚠ \
             markers say that. When Git cannot be asked, the reply starts with a line Review flags \
             unavailable: and the reason, and no line is marked.",
@@ -287,8 +287,9 @@ impl AbymeServer {
 
     #[tool(
         description = "Returns one element of the Abyme project in detail: its ID and name, type, \
-            Statement kind: with the kind of its home board's zone and that board (or none, when its home \
-            is no zone), anchor (or none), verification stamp as the commit it was last verified against and by ai or person \
+            Statement kind: with its kind and where it comes from, from the element for a kind it holds \
+            itself, otherwise from board and its home board whose zone gives it (or none, without a home or \
+            when its home is no zone), anchor (or none), verification stamp as the commit it was last verified against and by ai or person \
             (or none), then Review: with task, hint, or none and one indented line per review flag, such \
             as files changed under the anchor since the stamp (at most 10 named), or a relation of kind \
             depends_on or describes (a task) or uses or concerns (a hint) where what the target's anchor \
@@ -330,7 +331,9 @@ impl AbymeServer {
             with its ID, type, statement kind (when one of them has one; none for the others), name, \
             summary, ▸ and its inner boards, and the ⚠ task or ⚠ hint marker, as in a board outline. \
             With statement, one of current, target, decision, idea, knowledge, or question, it returns \
-            only elements of that kind, the best among them; an element without a kind matches none. \
+            only elements of that kind, the best among them; an element without a kind matches none. An \
+            element's kind is the one it holds itself, otherwise that of its home board's zone. current says \
+            what the content claims, not that it was checked: Verified: in read_element and the ⚠ markers say that. \
             Text from the repository is escaped onto one line. When Git cannot be asked, the reply starts \
             with a line Review flags unavailable: and the reason, and no line is marked. The first search \
             after the server starts, and the first after the project file names another embedding model, \

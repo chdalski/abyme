@@ -13,7 +13,7 @@ aliases:
 - **The index is derived.** It is brought up to date before each search and can be rebuilt from the data at any time. It is never the source of data and lives in the user's cache, not in the repository.
 - **Embeddings are computed locally** with fastembed, from a model that Abyme downloads once and checks itself (see [[#Embedding Model]]). After that, search works offline, and no text leaves the machine.
 - **What gets embedded** per element is its type, name, summary, and description. Coordinates are not part of it.
-- **The [[Boards and Zones#Statement Kind|statement kind]] is a filter:** `search` with a `statement` ranks only among the elements of that kind, so an idea is never found as a fact. An element without a kind matches no filter, and without a `statement` search finds every element.
+- **The [[Boards and Zones#Statement Kind|statement kind]] is a filter:** `search` with a `statement` ranks only among the elements of that kind, so an idea is never found as a fact. The kind is the one the element holds itself or that of its home board's zone. An element without a kind matches no filter, and without a `statement` search finds every element.
 
 For a single project, structure and full text already go a long way. Embeddings pay off for fuzzy questions such as “Where did we have that rate-limiting thing?” and for many projects.
 
@@ -37,7 +37,7 @@ Search keeps its files in the user's cache: in `$XDG_CACHE_HOME/abyme/` when `XD
 
 The index is a LanceDB table per project and model. The crate `abyme-index` builds it (see [[Hexagonal Architecture#Crates]]).
 
-**Only the MCP process owns the index.** Neither `apply` nor the core touches it. Before each `search`, the MCP process computes the text it would embed for every element and its [[Boards and Zones#Inheritance|statement kind]], and compares them with what is stored. It embeds only what changed and removes what is gone. Edits in the canvas, checkouts, and edits by hand can happen while no MCP process is running, so this catch-up is needed anyway. Comparing these rather than the element file also catches what does not live in the file, such as the statement kind, which comes from a board.
+**Only the MCP process owns the index.** Neither `apply` nor the core touches it. Before each `search`, the MCP process computes the text it would embed for every element and its [[Boards and Zones#Inheritance|statement kind]], and compares them with what is stored. It embeds only what changed and removes what is gone. Edits in the canvas, checkouts, and edits by hand can happen while no MCP process is running, so this catch-up is needed anyway. Comparing these rather than the element file also catches what does not live in the file, such as a statement kind that comes from a board.
 
 Table `elements`:
 
