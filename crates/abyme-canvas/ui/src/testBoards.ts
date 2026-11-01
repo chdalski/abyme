@@ -1,0 +1,28 @@
+import type { BoardView, Placement } from "./bindings";
+
+/** A board view for tests: the board `context`, with `overrides`. */
+export function boardView(overrides: Partial<BoardView> = {}): BoardView {
+  return {
+    id: "context",
+    title: "Context",
+    mode: null,
+    placements: [],
+    ...overrides,
+  };
+}
+
+/** A box of the default size at the origin whose file is missing, with `overrides`. */
+export function placedBox(
+  element: string,
+  overrides: Partial<Placement> = {},
+): Placement {
+  return {
+    element,
+    x: 0,
+    y: 0,
+    width: 180,
+    height: 90,
+    shown: { kind: "missing" },
+    ...overrides,
+  };
+}

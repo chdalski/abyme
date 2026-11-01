@@ -2,35 +2,23 @@ import { describe, expect, it } from "vitest";
 
 import type { BoardView } from "./bindings";
 import { finishedMoves, keepUiState, returnHome, toNodes } from "./nodes";
+import { boardView, placedBox } from "./testBoards";
 
-const VIEW: BoardView = {
-  id: "context",
-  title: "Context",
-  mode: null,
+const VIEW: BoardView = boardView({
   placements: [
-    {
-      element: "orders",
-      x: -20,
-      y: 300,
-      width: 200,
-      height: 100,
-      shown: { kind: "missing" },
-    },
-    {
-      element: "payments",
+    placedBox("orders", { x: -20, y: 300, width: 200, height: 100 }),
+    placedBox("payments", {
       x: 40,
       y: 80,
-      width: 180,
-      height: 90,
       shown: {
         kind: "element",
         type_ref: "__proto__",
         name: "Payments",
         summary: null,
       },
-    },
+    }),
   ],
-};
+});
 
 describe("toNodes", () => {
   it("makes one box per placement at its rect from the board file", () => {

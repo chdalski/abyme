@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { BoardView } from "./bindings";
 import { BoardPane } from "./BoardPane";
 import { FakeClient } from "./fakeClient";
+import { boardView, placedBox } from "./testBoards";
 import type { ElementNode } from "./nodes";
 
 // jsdom cannot drive React Flow's pointer drag, so React Flow is replaced by
@@ -24,27 +25,20 @@ vi.mock("@xyflow/react", async (original) => ({
 afterEach(cleanup);
 
 function placement(element: string, x: number) {
-  return {
-    element,
+  return placedBox(element, {
     x,
-    y: 0,
-    width: 180,
-    height: 90,
     shown: {
       kind: "element",
       type_ref: "c4/container",
       name: element,
       summary: null,
-    } as const,
-  };
+    },
+  });
 }
 
-const VIEW: BoardView = {
-  id: "context",
-  title: "Context",
-  mode: null,
+const VIEW: BoardView = boardView({
   placements: [placement("orders", 300), placement("payments", 0)],
-};
+});
 
 async function openPane(client: FakeClient) {
   const rendered = render(<BoardPane client={client} board="context" />);

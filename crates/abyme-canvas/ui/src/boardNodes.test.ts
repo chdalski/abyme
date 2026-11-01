@@ -5,18 +5,12 @@ import { describe, expect, it } from "vitest";
 import type { BoardView } from "./bindings";
 import { useBoardNodes } from "./boardNodes";
 import type { ElementNode, Move } from "./nodes";
+import { boardView, placedBox } from "./testBoards";
 
 function view(payments: XYPosition, orders: XYPosition): BoardView {
-  const shown = { kind: "missing" } as const;
-  return {
-    id: "context",
-    title: "Context",
-    mode: null,
-    placements: [
-      { element: "orders", ...orders, width: 180, height: 90, shown },
-      { element: "payments", ...payments, width: 180, height: 90, shown },
-    ],
-  };
+  return boardView({
+    placements: [placedBox("orders", orders), placedBox("payments", payments)],
+  });
 }
 
 function positions(nodes: ElementNode[]): Record<string, XYPosition> {

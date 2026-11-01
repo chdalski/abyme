@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { App } from "./App";
 import type { BoardView } from "./bindings";
 import { FakeClient } from "./fakeClient";
+import { boardView, placedBox } from "./testBoards";
 
 afterEach(cleanup);
 
@@ -17,19 +18,21 @@ const NO_PROJECT =
   "no Abyme project in this directory or above it: run `abyme-mcp init` in the directory that is to become the project's root";
 
 function view(id: string, title: string, names: string[] = []): BoardView {
-  return {
+  return boardView({
     id,
     title,
-    mode: null,
-    placements: names.map((name, index) => ({
-      element: name.toLowerCase(),
-      x: index * 200,
-      y: 0,
-      width: 180,
-      height: 90,
-      shown: { kind: "element", type_ref: "c4/container", name, summary: null },
-    })),
-  };
+    placements: names.map((name, index) =>
+      placedBox(name.toLowerCase(), {
+        x: index * 200,
+        shown: {
+          kind: "element",
+          type_ref: "c4/container",
+          name,
+          summary: null,
+        },
+      }),
+    ),
+  });
 }
 
 function clientWithBoards(): FakeClient {

@@ -3,25 +3,16 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { BoardView } from "./bindings";
 import { BoardCanvas } from "./BoardCanvas";
+import { boardView, placedBox } from "./testBoards";
 
 afterEach(cleanup);
 
 /** A board of two boxes in the given mode. */
 function boardIn(mode: BoardView["mode"]): BoardView {
-  const placement = (element: string, x: number) => ({
-    element,
-    x,
-    y: 0,
-    width: 180,
-    height: 90,
-    shown: { kind: "missing" as const },
-  });
-  return {
-    id: "context",
-    title: "Context",
+  return boardView({
     mode,
-    placements: [placement("orders", 0), placement("payments", 200)],
-  };
+    placements: [placedBox("orders"), placedBox("payments", { x: 200 })],
+  });
 }
 
 /** A sized canvas of `view`. */
@@ -82,34 +73,20 @@ describe("BoardCanvas", () => {
   });
 
   it("shows one box per placement with what the projection says of it", () => {
-    const view: BoardView = {
-      id: "context",
-      title: "Context",
-      mode: null,
+    const view = boardView({
       placements: [
-        {
-          element: "orders",
-          x: 0,
-          y: 0,
-          width: 180,
-          height: 90,
-          shown: { kind: "missing" },
-        },
-        {
-          element: "payments",
+        placedBox("orders"),
+        placedBox("payments", {
           x: 200,
-          y: 0,
-          width: 180,
-          height: 90,
           shown: {
             kind: "element",
             type_ref: "c4/container",
             name: "Payments",
             summary: null,
           },
-        },
+        }),
       ],
-    };
+    });
 
     const { container } = render(
       <div style={{ width: 800, height: 600 }}>

@@ -1,5 +1,5 @@
 **Repository:** root
-**Status:** NotStarted
+**Status:** InProgress
 **Created:** 2026-11-01
 
 ## Goal
@@ -24,7 +24,7 @@ elements with a breadcrumb, see review flags and pins, and release a pin.
 
 ## Steps
 
-- [ ] One test fixture for what the UI receives
+- [x] One test fixture for what the UI receives
 - [ ] One rule for the relations a board shows
 - [ ] One way up the board tree
 - [ ] Relations as arrows
@@ -44,10 +44,10 @@ unchanged, and only tests change.
 
 Review path: Reviewer-only
 
-- [ ] A fixture module gives a board view and a placement with overrides, and the tests that
+- [x] A fixture module gives a board view and a placement with overrides, and the tests that
       build them use it, except `main.test.tsx`, whose literal lies in a hoisted mock.
-- [ ] What the tests assert does not change.
-- [ ] `pnpm --dir crates/abyme-canvas/ui check` and `pnpm --dir crates/abyme-canvas/ui test` pass.
+- [x] What the tests assert does not change.
+- [x] `pnpm --dir crates/abyme-canvas/ui check` and `pnpm --dir crates/abyme-canvas/ui test` pass.
 
 ### Task 2: One rule for the relations a board shows
 
