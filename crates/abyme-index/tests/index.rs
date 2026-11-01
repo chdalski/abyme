@@ -150,6 +150,7 @@ fn element(id: &str, name: &str, body: &str) -> TestResult<Element> {
     Ok(Element::new(
         id.parse()?,
         ElementFields {
+            statement: None,
             type_ref: TypeRef::try_from("c4/container".to_owned())?,
             name: name.to_owned(),
             summary: None,

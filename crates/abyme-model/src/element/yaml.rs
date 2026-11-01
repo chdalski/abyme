@@ -28,6 +28,7 @@ pub struct Fields {
     pub name: String,
     pub summary: Option<String>,
     pub anchor: Option<String>,
+    pub statement: Option<String>,
     pub verified: Option<String>,
     pub verified_by: Option<String>,
     pub relations: Relations,
@@ -97,6 +98,7 @@ fn collect_fields(entries: &Entries) -> Result<Fields, ElementProblem> {
     let mut name = None;
     let mut summary = None;
     let mut anchor = None;
+    let mut statement = None;
     let mut verified = None;
     let mut verified_by = None;
     let mut relations = Relations::new();
@@ -126,6 +128,7 @@ fn collect_fields(entries: &Entries) -> Result<Fields, ElementProblem> {
             "name" => &mut name,
             "summary" => &mut summary,
             "anchor" => &mut anchor,
+            "statement" => &mut statement,
             "verified" => &mut verified,
             "verified_by" => &mut verified_by,
             unknown => {
@@ -142,6 +145,7 @@ fn collect_fields(entries: &Entries) -> Result<Fields, ElementProblem> {
         name: name.ok_or(ElementProblem::MissingKey { key: "name" })?,
         summary,
         anchor,
+        statement,
         verified,
         verified_by,
         relations,

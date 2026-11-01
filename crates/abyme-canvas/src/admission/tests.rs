@@ -110,6 +110,10 @@ fn every_other_operation_is_refused_by_its_position_and_kind() {
             "update_element",
         ),
         (
+            json!({"op": "update_element", "element": {"existing": "secret-id"}, "statement": "idea"}),
+            "update_element",
+        ),
+        (
             json!({"op": "update_element", "element": {"new": "secret-key"}, "body": "SECRET-BODY"}),
             "update_element",
         ),

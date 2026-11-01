@@ -10,7 +10,7 @@ use std::fmt;
 
 use abyme_model::{
     Anchor, Board, BoardId, Element, ElementFields, ElementId, ElementProblem, Placement,
-    RelationKind, Relations, TypeRef, Zone,
+    RelationKind, Relations, StatementKind, TypeRef, Zone,
 };
 
 use crate::board_tree::BoardTree;
@@ -240,12 +240,13 @@ struct NewElement<'a> {
     summary: Option<&'a str>,
     body: &'a str,
     anchor: Option<&'a str>,
+    statement: Option<StatementKind>,
 }
 
 /// What an `update_element` changes: a field that is `None` stays as it is.
 #[expect(
     clippy::option_option,
-    reason = "a missing summary or anchor keeps it, `Some(None)` removes it, and a text replaces it"
+    reason = "a missing summary, anchor, or statement keeps it, `Some(None)` removes it, and a value replaces it"
 )]
 #[derive(Default, PartialEq, Eq)]
 struct ElementChanges<'a> {
@@ -254,6 +255,7 @@ struct ElementChanges<'a> {
     summary: Option<Option<&'a str>>,
     body: Option<&'a str>,
     anchor: Option<Option<&'a str>>,
+    statement: Option<Option<StatementKind>>,
 }
 
 /// The request's changes as they build up, operation by operation.
@@ -346,6 +348,7 @@ impl<'snapshot> Draft<'snapshot> {
                 summary,
                 body,
                 anchor,
+                statement,
             } => self.create_element(
                 key,
                 &NewElement {
@@ -354,6 +357,7 @@ impl<'snapshot> Draft<'snapshot> {
                     summary: summary.as_deref(),
                     body,
                     anchor: anchor.as_deref(),
+                    statement: *statement,
                 },
             ),
             Operation::CreateBoard {
@@ -392,6 +396,7 @@ impl<'snapshot> Draft<'snapshot> {
                 summary,
                 body,
                 anchor,
+                statement,
             } => self.update_element(
                 element,
                 &ElementChanges {
@@ -400,6 +405,7 @@ impl<'snapshot> Draft<'snapshot> {
                     summary: summary.as_ref().map(Option::as_deref),
                     body: body.as_deref(),
                     anchor: anchor.as_ref().map(Option::as_deref),
+                    statement: *statement,
                 },
             ),
             Operation::CreateRelation {
@@ -424,6 +430,7 @@ impl<'snapshot> Draft<'snapshot> {
             summary,
             body,
             anchor,
+            statement,
         } = *new;
         self.check_new_key(key)?;
         let type_ref =
@@ -443,6 +450,7 @@ impl<'snapshot> Draft<'snapshot> {
                 body: body.to_owned(),
                 relations: Relations::new(),
                 anchor,
+                statement,
                 verified: None,
             },
         )
@@ -602,6 +610,7 @@ impl<'snapshot> Draft<'snapshot> {
             summary,
             body,
             anchor,
+            statement,
         } = *changes;
         let type_ref = type_ref
             .map(|type_ref| TypeRef::try_from(type_ref.to_owned()))
@@ -630,6 +639,9 @@ impl<'snapshot> Draft<'snapshot> {
             }
             if let Some(anchor) = anchor {
                 fields.anchor = anchor;
+            }
+            if let Some(statement) = statement {
+                fields.statement = statement;
             }
             Ok(())
         })

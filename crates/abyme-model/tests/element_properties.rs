@@ -1,8 +1,8 @@
 //! Properties of the element file that hold for any element and any input.
 
 use abyme_model::{
-    Anchor, CommitId, Element, ElementFields, ElementId, RelationKind, Relations, TypeRef,
-    Verification, Verifier,
+    Anchor, CommitId, Element, ElementFields, ElementId, RelationKind, Relations, StatementKind,
+    TypeRef, Verification, Verifier,
 };
 use proptest::prelude::*;
 
@@ -106,9 +106,10 @@ fn element() -> impl Strategy<Value = Element> {
         relations(),
         proptest::option::of(anchor()),
         proptest::option::of(stamp()),
+        proptest::option::of(prop::sample::select(StatementKind::ALL.as_slice())),
     )
         .prop_map(
-            |(id, type_ref, name, summary, body, relations, anchor, verified)| {
+            |(id, type_ref, name, summary, body, relations, anchor, verified, statement)| {
                 Element::new(
                     id,
                     ElementFields {
@@ -118,6 +119,7 @@ fn element() -> impl Strategy<Value = Element> {
                         body,
                         relations,
                         anchor,
+                        statement,
                         verified,
                     },
                 )

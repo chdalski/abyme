@@ -31,6 +31,7 @@ fn element(id: &str, name: &str, summary: Option<&str>, body: &str) -> Element {
     Element::new(
         element_id(id),
         ElementFields {
+            statement: None,
             type_ref: TypeRef::try_from("c4/container".to_owned()).unwrap(),
             name: name.to_owned(),
             summary: summary.map(str::to_owned),

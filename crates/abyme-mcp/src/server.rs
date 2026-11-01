@@ -181,7 +181,7 @@ impl AbymeServer {
             the presets are Current (mirrored, current) for what exists today, Target (free, target) for \
             what is agreed but not built, and Brainstorm (free, idea) for ideas. \
             create_element takes a key, type_ref, name, and optionally \
-            summary, body, and anchor; place_element gives an element its home on a board; move_element takes an \
+            summary, body, anchor, and statement; place_element gives an element its home on a board; move_element takes an \
             element, the board it lies on, a new x and y from -1000000 to 1000000, and optionally pinned, and \
             keeps its size. A pinned element is one a person placed by hand: a move of it without pinned is \
             refused. Send pinned: true to keep it pinned or pinned: false to release it only after the person \
@@ -193,8 +193,11 @@ impl AbymeServer {
             of its text, a pinned box stays, and only the board file changes. If it answers no free position \
             left, a pinned box may be in the way: ask the person before releasing it. If it answers too much to \
             lay out, send fewer layout_board in one request or lay out a board with fewer boxes and relations; \
-            update_element takes element and any of name, type_ref, summary (null removes it), body, and \
-            anchor (null removes it), and changes only the fields it names; the ID stays. An anchor is the \
+            update_element takes element and any of name, type_ref, summary (null removes it), body, \
+            anchor (null removes it), and statement (null removes it), and changes only the fields it names; \
+            the ID stays. An element normally takes the statement kind of its home board's zone: give it a \
+            statement of its own, one of the kinds above, only as the exception, such as a question on a board \
+            of current facts. An anchor is the \
             path relative to the project root that the element stands for, covering everything below it, \
             such as crates/payment-service: no leading or trailing /, no . or .. segment, no backslash or \
             colon, and nothing in abyme/, .abyme/, or a .git folder; Abyme does not check that the path \

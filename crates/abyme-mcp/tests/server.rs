@@ -1996,6 +1996,50 @@ async fn apply_lays_out_a_board_by_its_relations_and_keeps_a_pin() -> TestResult
 }
 
 #[tokio::test]
+async fn apply_gives_an_element_a_statement_kind_of_its_own() -> TestResult {
+    let directory = project()?;
+    let session = start(directory.path()).await?;
+    let file = directory.path().join("abyme/elements/note.md");
+    let applied = |operation: Value| json!({"operations": [operation]});
+    let update = |statement: Value| {
+        applied(
+            json!({"op": "update_element", "element": {"existing": "note"}, "statement": statement}),
+        )
+    };
+
+    let created = call(
+        &session,
+        "apply",
+        applied(
+            json!({"op": "create_element", "key": "n", "type_ref": "note", "name": "Note",
+                       "statement": "question"}),
+        ),
+    )
+    .await??;
+
+    assert_eq!(created.is_error, Some(false), "{created:?}");
+    assert!(fs::read_to_string(&file)?.contains("statement: \"question\"\n"));
+
+    let changed = call(&session, "apply", update(json!("decision"))).await??;
+
+    assert_eq!(changed.is_error, Some(false), "{changed:?}");
+    assert!(fs::read_to_string(&file)?.contains("statement: \"decision\"\n"));
+
+    let before = fs::read(&file)?;
+    let refused = call(&session, "apply", update(json!("historic"))).await??;
+
+    assert_eq!(refused.is_error, Some(true), "{refused:?}");
+    assert_eq!(fs::read(&file)?, before);
+
+    let removed = call(&session, "apply", update(Value::Null)).await??;
+
+    assert_eq!(removed.is_error, Some(false), "{removed:?}");
+    assert!(!fs::read_to_string(&file)?.contains("statement"));
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+#[tokio::test]
 async fn read_board_shows_coordinates_only_on_request() -> TestResult {
     let directory = project()?;
     let session = start(directory.path()).await?;

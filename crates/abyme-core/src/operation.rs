@@ -7,7 +7,7 @@
 
 use std::fmt;
 
-use abyme_model::{BoardId, ElementId, ObjectOnly, RelationKind, Zone, shown};
+use abyme_model::{BoardId, ElementId, ObjectOnly, RelationKind, StatementKind, Zone, shown};
 use serde::{Deserialize, Serialize};
 
 /// The longest local key, in characters.
@@ -44,6 +44,10 @@ pub enum Operation {
         /// for, such as `crates/payment-service`.
         #[serde(default)]
         anchor: Option<String>,
+        /// The element's own statement kind, the exception: an element
+        /// normally takes the kind of its home board's zone.
+        #[serde(default)]
+        statement: Option<StatementKind>,
     },
     /// Creates a board. Its ID is derived from the title.
     CreateBoard {
@@ -194,6 +198,15 @@ pub enum Operation {
         )]
         #[cfg_attr(feature = "json-schema", schemars(with = "Option<String>"))]
         anchor: Option<Option<String>>,
+        /// The element's own statement kind, the exception: an element
+        /// normally takes the kind of its home board's zone. `null` removes it.
+        #[serde(
+            default,
+            deserialize_with = "present",
+            skip_serializing_if = "Option::is_none"
+        )]
+        #[cfg_attr(feature = "json-schema", schemars(with = "Option<StatementKind>"))]
+        statement: Option<Option<StatementKind>>,
     },
     /// Deletes an element: its file, its placement on every board, and its
     /// own relations. It is rejected while other elements still relate to it.
@@ -368,6 +381,7 @@ mod tests {
         assert_eq!(
             operations.get(1),
             Some(&Operation::CreateElement {
+                statement: None,
                 key: LocalKey::try_from("pay".to_owned()).unwrap(),
                 type_ref: "c4/container".to_owned(),
                 name: "Payment Service".to_owned(),
@@ -521,6 +535,7 @@ mod tests {
         assert_eq!(
             read(json).unwrap(),
             vec![Operation::UpdateElement {
+                statement: None,
                 element: Ref::New(LocalKey::try_from("pay".to_owned()).unwrap()),
                 name: Some("Payments".to_owned()),
                 type_ref: Some("c4/component".to_owned()),
@@ -970,6 +985,76 @@ mod tests {
                 "{update}"
             );
         }
+        let statement = update.pointer("/properties/statement").unwrap().to_string();
+        assert!(statement.contains("null"), "{statement}");
+        assert!(statement.contains("StatementKind"), "{statement}");
+    }
+
+    #[cfg(feature = "json-schema")]
+    #[test]
+    fn schema_makes_the_statement_of_a_new_element_an_optional_kind() {
+        let schema = serde_json::to_value(schemars::schema_for!(Operations)).unwrap();
+        let definitions = schema
+            .pointer("/$defs")
+            .and_then(serde_json::Value::as_object)
+            .unwrap();
+        let create = definitions
+            .values()
+            .filter_map(|definition| definition.pointer("/oneOf")?.as_array())
+            .flatten()
+            .find(|variant| {
+                variant.pointer("/properties/op/const")
+                    == Some(&serde_json::json!("create_element"))
+            })
+            .unwrap();
+        let required = create.pointer("/required").unwrap().as_array().unwrap();
+        assert!(
+            !required.contains(&serde_json::json!("statement")),
+            "{create}"
+        );
+        let statement = create.pointer("/properties/statement").unwrap().to_string();
+        assert!(statement.contains("StatementKind"), "{statement}");
+    }
+
+    #[rstest]
+    #[case::on_create_a_kind_that_is_not_built(
+        r#"[{"op": "create_element", "key": "k", "type_ref": "t", "name": "N", "statement": "historic"}]"#
+    )]
+    #[case::on_create_capitalized(
+        r#"[{"op": "create_element", "key": "k", "type_ref": "t", "name": "N", "statement": "Current"}]"#
+    )]
+    #[case::on_create_empty(
+        r#"[{"op": "create_element", "key": "k", "type_ref": "t", "name": "N", "statement": ""}]"#
+    )]
+    #[case::on_create_a_number(
+        r#"[{"op": "create_element", "key": "k", "type_ref": "t", "name": "N", "statement": 1}]"#
+    )]
+    #[case::on_create_a_boolean(
+        r#"[{"op": "create_element", "key": "k", "type_ref": "t", "name": "N", "statement": true}]"#
+    )]
+    #[case::on_create_a_list(
+        r#"[{"op": "create_element", "key": "k", "type_ref": "t", "name": "N", "statement": ["current"]}]"#
+    )]
+    #[case::on_create_the_object_form(
+        r#"[{"op": "create_element", "key": "k", "type_ref": "t", "name": "N", "statement": {"idea": null}}]"#
+    )]
+    #[case::on_create_twice(
+        r#"[{"op": "create_element", "key": "k", "type_ref": "t", "name": "N", "statement": "idea", "statement": "idea"}]"#
+    )]
+    #[case::on_update_a_kind_that_is_not_built(
+        r#"[{"op": "update_element", "element": {"new": "a"}, "statement": "historic"}]"#
+    )]
+    #[case::on_update_a_number(
+        r#"[{"op": "update_element", "element": {"new": "a"}, "statement": 1}]"#
+    )]
+    #[case::on_update_the_object_form(
+        r#"[{"op": "update_element", "element": {"new": "a"}, "statement": {"idea": null}}]"#
+    )]
+    #[case::on_update_twice(
+        r#"[{"op": "update_element", "element": {"new": "a"}, "statement": "idea", "statement": null}]"#
+    )]
+    fn rejects_any_other_statement_of_an_element(#[case] json: &str) {
+        assert!(read(json).is_err(), "{json}");
     }
 
     #[cfg(feature = "json-schema")]

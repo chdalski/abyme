@@ -736,6 +736,7 @@ fn refuses_a_stamp_that_would_make_the_frontmatter_too_large() {
         Element::new(
             element_id("x"),
             abyme_model::ElementFields {
+                statement: None,
                 type_ref: abyme_model::TypeRef::try_from("t".to_owned()).unwrap(),
                 name: "X".to_owned(),
                 summary: Some("a".repeat(length)),
@@ -763,5 +764,19 @@ fn refuses_a_stamp_that_would_make_the_frontmatter_too_large() {
             }) if *element == element_id("x")
         ),
         "{refused:?}"
+    );
+}
+
+#[test]
+fn a_stamp_keeps_the_statement() {
+    let text = "---\nid: x\ntype: t\nname: X\nstatement: question\n---\n";
+    let element = Element::from_markdown(&element_id("x"), text).unwrap();
+    let snapshot = snapshot(element);
+
+    let (stamped, _) = stamped(&snapshot, &element_id("x"), &head(&[]), Verifier::Ai).unwrap();
+
+    assert_eq!(
+        stamped.statement(),
+        Some(abyme_model::StatementKind::Question)
     );
 }

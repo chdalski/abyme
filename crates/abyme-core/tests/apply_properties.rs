@@ -75,6 +75,7 @@ fn element(id: ElementId, mut relations: Relations) -> Option<Element> {
     Element::new(
         id,
         ElementFields {
+            statement: None,
             type_ref,
             name: "name".to_owned(),
             summary: None,
@@ -185,8 +186,9 @@ fn operation() -> impl Strategy<Value = Operation> {
             proptest::option::of(any::<String>()),
             any::<String>(),
             proptest::option::of(anchor()),
+            proptest::option::of(prop::sample::select(StatementKind::ALL.as_slice())),
         )
-            .prop_map(|(key, type_ref, name, summary, body, anchor)| {
+            .prop_map(|(key, type_ref, name, summary, body, anchor, statement)| {
                 Operation::CreateElement {
                     key,
                     type_ref,
@@ -194,6 +196,7 @@ fn operation() -> impl Strategy<Value = Operation> {
                     summary,
                     body,
                     anchor,
+                    statement,
                 }
             }),
         (
@@ -251,17 +254,23 @@ fn operation() -> impl Strategy<Value = Operation> {
             proptest::option::of(proptest::option::of(any::<String>())),
             proptest::option::of(any::<String>()),
             proptest::option::of(proptest::option::of(anchor())),
+            proptest::option::of(proptest::option::of(prop::sample::select(
+                StatementKind::ALL.as_slice(),
+            ))),
         )
-            .prop_map(|(element, name, type_ref, summary, body, anchor)| {
-                Operation::UpdateElement {
-                    element,
-                    name,
-                    type_ref,
-                    summary,
-                    body,
-                    anchor,
+            .prop_map(
+                |(element, name, type_ref, summary, body, anchor, statement)| {
+                    Operation::UpdateElement {
+                        element,
+                        name,
+                        type_ref,
+                        summary,
+                        body,
+                        anchor,
+                        statement,
+                    }
                 }
-            }),
+            ),
         element_ref().prop_map(|element| Operation::DeleteElement { element }),
     ]
 }
@@ -445,6 +454,7 @@ fn well_formed_request() -> impl Strategy<Value = Vec<Operation>> {
             for (index, (name, summary, body)) in elements.into_iter().enumerate() {
                 let key = LocalKey::try_from(format!("e{index}")).ok()?;
                 operations.push(Operation::CreateElement {
+                    statement: None,
                     key: key.clone(),
                     type_ref: "c4/container".to_owned(),
                     name,

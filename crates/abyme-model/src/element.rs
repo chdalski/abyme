@@ -1,6 +1,6 @@
 //! The element file: Markdown with a YAML frontmatter that holds the
-//! element's ID, type, name, summary, anchor, verification stamp, and
-//! outgoing relations.
+//! element's ID, type, name, summary, anchor, statement kind, verification
+//! stamp, and outgoing relations.
 //!
 //! The frontmatter is read with `rlsp-yaml-parser` and written by an emitter
 //! of our own that double-quotes every value. `type`, `name`, `summary`, the
@@ -16,7 +16,9 @@ use std::collections::BTreeMap;
 use crate::anchor::{Anchor, AnchorRule};
 use crate::id::ElementId;
 use crate::relation::RelationKind;
+use crate::untrusted::shown;
 use crate::verification::{Verification, stamp};
+use crate::zone::StatementKind;
 
 mod frontmatter;
 mod yaml;
@@ -24,6 +26,9 @@ mod yaml;
 /// The largest frontmatter, in bytes between the two `---` lines as the
 /// emitter writes it.
 pub const MAX_FRONTMATTER_BYTES: usize = 64 * 1024;
+
+/// How many characters of an unknown statement kind an error shows.
+const STATEMENT_DETAIL_LIMIT: usize = 200;
 
 /// An element's outgoing relations, with the label of each, if it has one.
 ///
@@ -55,6 +60,8 @@ pub struct ElementFields {
     pub body: String,
     /// The path in the project the element stands for, if any.
     pub anchor: Option<Anchor>,
+    /// The element's own statement kind, if it has one.
+    pub statement: Option<StatementKind>,
     /// The verification stamp, if the element was verified.
     pub verified: Option<Verification>,
     /// The outgoing relations.
@@ -244,6 +251,15 @@ pub enum ElementProblem {
         /// The commit, escaped and shortened.
         commit: String,
     },
+    /// The file names an unknown statement kind.
+    #[error(
+        "{kind} is not a statement kind; use `current`, `decision`, `idea`, `knowledge`, \
+         `question`, or `target`"
+    )]
+    UnknownStatementKind {
+        /// The kind, escaped and shortened.
+        kind: String,
+    },
     /// The stamp names an unknown verifier.
     #[error("{verifier} is not a verifier; use `ai` or `person`")]
     UnknownVerifier {
@@ -309,6 +325,17 @@ impl Element {
             .map(Anchor::try_from)
             .transpose()
             .map_err(fail)?;
+        let statement = fields
+            .statement
+            .map(|name| {
+                StatementKind::from_name(&name).ok_or_else(|| {
+                    ElementProblem::UnknownStatementKind {
+                        kind: shown(&name, STATEMENT_DETAIL_LIMIT),
+                    }
+                })
+            })
+            .transpose()
+            .map_err(fail)?;
         let verified = stamp(fields.verified, fields.verified_by).map_err(fail)?;
         Self::new(
             id,
@@ -318,6 +345,7 @@ impl Element {
                 summary: fields.summary,
                 body: body.to_owned(),
                 anchor,
+                statement,
                 verified,
                 relations: fields.relations,
             },
@@ -365,6 +393,12 @@ impl Element {
     #[must_use]
     pub const fn anchor(&self) -> Option<&Anchor> {
         self.fields.anchor.as_ref()
+    }
+
+    /// The element's own statement kind, if it has one.
+    #[must_use]
+    pub const fn statement(&self) -> Option<StatementKind> {
+        self.fields.statement
     }
 
     /// The element's verification stamp, if it was verified.

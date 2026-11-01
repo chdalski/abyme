@@ -104,3 +104,20 @@ fn names_the_kinds_but_never_repeats_an_unknown_name() {
         "{error:?}"
     );
 }
+
+#[test]
+fn a_statement_kind_is_found_by_exactly_its_name() {
+    for kind in StatementKind::ALL {
+        assert_eq!(StatementKind::from_name(kind.as_str()), Some(kind));
+    }
+}
+
+#[rstest::rstest]
+#[case::not_built_yet("historic")]
+#[case::capitalized("Current")]
+#[case::empty("")]
+#[case::with_a_space("current ")]
+fn the_file_and_a_request_refuse_the_same_names(#[case] name: &str) {
+    assert_eq!(StatementKind::from_name(name), None);
+    assert!(serde_json::from_value::<StatementKind>(serde_json::json!(name)).is_err());
+}

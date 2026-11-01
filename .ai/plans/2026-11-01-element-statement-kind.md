@@ -29,7 +29,7 @@ that reads statement kinds follow it.
 - [x] `Element` holds its fields
 - [x] The order of an element's errors is pinned
 - [x] Element parameters as one value
-- [ ] An element file and a request can hold a statement kind
+- [x] An element file and a request can hold a statement kind
 - [ ] The element's own kind takes precedence
 
 ## Tasks
@@ -91,23 +91,23 @@ An element gets an optional statement kind of its own, stored in its file and se
 
 Review path: Security-Hybrid
 
-- [ ] An element file holds an optional `statement` with one of the kinds `current`,
+- [x] An element file holds an optional `statement` with one of the kinds `current`,
       `target`, `decision`, `idea`, `knowledge`, and `question`, after `anchor` and before
       `verified`, written only when set, so a file without one reads and writes byte for
       byte as before. Any other value, an empty one, and `null` are rejected with an error
       that shows the value escaped and shortened, and another unknown key stays rejected.
-- [ ] `create_element` takes an optional `statement`. `update_element` takes one that sets
+- [x] `create_element` takes an optional `statement`. `update_element` takes one that sets
       the kind, and `null` removes it; on `create_element`, `null` means no kind, as for its
       other optional fields. An update of `statement` removes the element's verification
       stamp as every `update_element` does, and `verify` keeps the kind.
-- [ ] The JSON schema of `apply` describes both, as the core reads them.
-- [ ] Unit and property tests cover the file and both operations; an integration test
+- [x] The JSON schema of `apply` describes both, as the core reads them.
+- [x] Unit and property tests cover the file and both operations; an integration test
       through the MCP tool `apply` creates an element with a kind, changes and removes it,
       and reads the file back.
-- [ ] A reader of Storage in Git, the operations in Data Model, the `apply` description, and
+- [x] A reader of Storage in Git, the operations in Data Model, the `apply` description, and
       the MCP README can tell how to give an element a kind of its own, and that the zone
       stays the normal source and an own kind the exception.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`, and
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`, and
       `cargo fmt --all --check` pass.
 
 ### Task 5: The element's own kind takes precedence

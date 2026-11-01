@@ -21,6 +21,7 @@ fn element(id: &str) -> Element {
     Element::new(
         element_id(id),
         ElementFields {
+            statement: None,
             type_ref: TypeRef::try_from("t".to_owned()).unwrap(),
             name: id.to_owned(),
             summary: None,

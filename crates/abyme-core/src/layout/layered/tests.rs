@@ -18,6 +18,7 @@ fn element(name: &str, summary: Option<&str>, relations: &[(RelationKind, &str)]
     Element::new(
         id(name),
         ElementFields {
+            statement: None,
             type_ref: TypeRef::try_from("c4/container".to_owned()).unwrap(),
             name: name.to_owned(),
             summary: summary.map(str::to_owned),

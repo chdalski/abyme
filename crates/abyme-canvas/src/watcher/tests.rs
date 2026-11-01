@@ -42,6 +42,7 @@ fn create_board(title: &str) -> Operation {
 
 fn create_element(name: &str) -> Operation {
     Operation::CreateElement {
+        statement: None,
         key: LocalKey::try_from("element".to_owned()).unwrap(),
         type_ref: "c4/container".to_owned(),
         name: name.to_owned(),

@@ -18,6 +18,7 @@ fn main_element(name: &str, summary: Option<&str>) -> Result<Element, ElementErr
     Element::new(
         element_id("main"),
         ElementFields {
+            statement: None,
             type_ref: type_ref("t"),
             name: name.to_owned(),
             summary: summary.map(str::to_owned),
@@ -34,6 +35,7 @@ fn payment_service() -> Element {
     Element::new(
         element_id("payment-service"),
         ElementFields {
+            statement: None,
             type_ref: type_ref("c4/container"),
             name: "Payment Service".to_owned(),
             summary: Some("Payment processing through Stripe".to_owned()),
@@ -217,7 +219,19 @@ fn rejects_frontmatter_without_the_required_fields(
 }
 
 #[rstest]
-#[case::unknown_key("statement: \"a\"\n", ElementProblem::UnknownKey { key: "\"statement\"".to_owned() })]
+#[case::unknown_key("statements: \"a\"\n", ElementProblem::UnknownKey { key: "\"statements\"".to_owned() })]
+#[case::statement_as_a_list("statement: [current]\n", ElementProblem::NonScalarValue { key: "\"statement\"".to_owned() })]
+#[case::statement_as_a_mapping("statement: {idea: x}\n", ElementProblem::NonScalarValue { key: "\"statement\"".to_owned() })]
+#[case::statement_twice(
+    "statement: \"idea\"\nstatement: \"idea\"\n",
+    ElementProblem::DuplicateKey { key: "\"statement\"".to_owned() }
+)]
+#[case::statement_twice_quoted(
+    "statement: \"idea\"\n\"statement\": \"idea\"\n",
+    ElementProblem::DuplicateKey { key: "\"statement\"".to_owned() }
+)]
+#[case::tag_on_statement("statement: !!str current\n", ElementProblem::Tag)]
+#[case::anchor_on_statement("statement: &a current\n", ElementProblem::Anchor)]
 #[case::duplicate_key_quoted_and_plain(
     "\"id\": \"other\"\n",
     ElementProblem::DuplicateKey { key: "\"id\"".to_owned() }
@@ -810,4 +824,137 @@ fn names_a_yaml_anchor_unlike_the_anchor_field() {
         ElementProblem::Anchor.to_string(),
         "the frontmatter uses a YAML anchor"
     );
+}
+
+/// `main` with a summary, an anchor, a stamp, and the given kind.
+fn main_with_statement(statement: Option<StatementKind>) -> Element {
+    let fields = ElementFields {
+        statement,
+        type_ref: type_ref("t"),
+        name: "Main".to_owned(),
+        summary: Some("Sum".to_owned()),
+        body: String::new(),
+        relations: Relations::new(),
+        anchor: Some(Anchor::try_from("docs/api.md".to_owned()).unwrap()),
+        verified: Some(Verification {
+            commit: CommitId::try_from(COMMIT.to_owned()).unwrap(),
+            by: Verifier::Ai,
+        }),
+    };
+    Element::new(element_id("main"), fields).unwrap()
+}
+
+#[test]
+fn writes_a_statement_after_the_anchor_and_before_the_stamp() {
+    let element = main_with_statement(Some(StatementKind::Question));
+
+    let expected = format!(
+        "id: \"main\"\n\
+         type: \"t\"\n\
+         name: \"Main\"\n\
+         summary: \"Sum\"\n\
+         anchor: \"docs/api.md\"\n\
+         statement: \"question\"\n\
+         verified: \"{COMMIT}\"\n\
+         verified_by: \"ai\"\n"
+    );
+    assert_eq!(frontmatter_of(&element.to_markdown()), expected);
+    assert_eq!(read_main(&element.to_markdown()).unwrap(), element);
+}
+
+#[test]
+fn writes_no_statement_key_without_a_kind() {
+    let element = main_with_statement(None);
+
+    assert!(!element.to_markdown().contains("statement"));
+    assert_eq!(read_main(&element.to_markdown()).unwrap().statement(), None);
+}
+
+#[test]
+fn reads_every_statement_kind_and_keeps_it_through_its_fields() {
+    for kind in StatementKind::ALL {
+        let text = main_file(&format!("statement: {}\n", kind.as_str()));
+
+        let element = read_main(&text).unwrap();
+
+        assert_eq!(element.statement(), Some(kind));
+        assert_eq!(element.into_fields().statement, Some(kind));
+    }
+}
+
+#[rstest]
+#[case::empty("statement:\n")]
+#[case::empty_quoted("statement: \"\"\n")]
+#[case::tilde("statement: ~\n")]
+#[case::null_word("statement: null\n")]
+#[case::capitalized("statement: Current\n")]
+#[case::upper_case("statement: CURRENT\n")]
+#[case::not_built_yet("statement: historic\n")]
+#[case::trailing_space("statement: \"current \"\n")]
+#[case::leading_space("statement: \" current\"\n")]
+#[case::trailing_line_feed("statement: \"current\\n\"\n")]
+#[case::block_scalar("statement: |\n  current\n")]
+#[case::homoglyph("statement: \"\u{441}urrent\"\n")]
+fn rejects_any_other_statement_kind(#[case] extra_lines: &str) {
+    assert!(matches!(
+        problem_of(&main_file(extra_lines)),
+        ElementProblem::UnknownStatementKind { .. }
+    ));
+}
+
+#[test]
+fn shows_an_unknown_statement_kind_escaped_and_shortened() {
+    let escaping = problem_of(&main_file("statement: \"a\\e[31m\\nb\"\n")).to_string();
+    let long = problem_of(&main_file(&format!(
+        "statement: \"{}\"\n",
+        "x".repeat(10_000)
+    )))
+    .to_string();
+
+    assert!(!escaping.chars().any(char::is_control), "{escaping:?}");
+    assert!(escaping.contains("\\u{1b}"), "{escaping:?}");
+    assert!(long.contains('…'), "{long}");
+    assert!(long.len() < 500, "{} bytes", long.len());
+}
+
+#[test]
+fn the_message_of_an_unknown_statement_kind_names_every_kind() {
+    let message = ElementProblem::UnknownStatementKind {
+        kind: "x".to_owned(),
+    }
+    .to_string();
+
+    for kind in StatementKind::ALL {
+        assert!(message.contains(kind.as_str()), "{message}");
+    }
+}
+
+#[test]
+fn a_statement_counts_toward_the_frontmatter_limit() {
+    let with = |statement, length: usize| {
+        Element::new(
+            element_id("main"),
+            ElementFields {
+                statement,
+                type_ref: type_ref("t"),
+                name: "Main".to_owned(),
+                summary: Some("a".repeat(length)),
+                body: String::new(),
+                relations: Relations::new(),
+                anchor: None,
+                verified: None,
+            },
+        )
+    };
+    let largest = (MAX_FRONTMATTER_BYTES - 200..=MAX_FRONTMATTER_BYTES)
+        .rev()
+        .find(|length| with(None, *length).is_ok())
+        .unwrap();
+
+    assert!(matches!(
+        with(Some(StatementKind::Idea), largest)
+            .unwrap_err()
+            .problem(),
+        ElementProblem::FrontmatterTooLarge { .. }
+    ));
 }

@@ -27,6 +27,7 @@ fn element(id: &str, type_ref: &str, name: &str, summary: Option<&str>) -> Eleme
     Element::new(
         id.parse().unwrap(),
         ElementFields {
+            statement: None,
             type_ref: TypeRef::try_from(type_ref.to_owned()).unwrap(),
             name: name.to_owned(),
             summary: summary.map(str::to_owned),
@@ -342,6 +343,7 @@ fn arbitrary_element(index: usize) -> impl Strategy<Value = Option<Element>> {
             Element::new(
                 id,
                 ElementFields {
+                    statement: None,
                     type_ref,
                     name,
                     summary,

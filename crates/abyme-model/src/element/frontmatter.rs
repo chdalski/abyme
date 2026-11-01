@@ -56,6 +56,11 @@ pub fn emit(element: &Element) -> String {
         .as_ref()
         .map(|anchor| format!("anchor: {}\n", quoted(anchor.as_str())))
         .unwrap_or_default();
+    let statement = element
+        .fields
+        .statement
+        .map(|kind| format!("statement: {}\n", quoted(kind.as_str())))
+        .unwrap_or_default();
     let verified = element
         .fields
         .verified
@@ -91,7 +96,7 @@ pub fn emit(element: &Element) -> String {
         format!("relations:\n{relations}")
     };
     format!(
-        "id: {}\ntype: {}\nname: {}\n{summary}{anchor}{verified}{relations}",
+        "id: {}\ntype: {}\nname: {}\n{summary}{anchor}{statement}{verified}{relations}",
         quoted(element.id.as_str()),
         quoted(element.fields.type_ref.as_str()),
         quoted(&element.fields.name),

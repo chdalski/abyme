@@ -115,6 +115,12 @@ impl StatementKind {
             Self::Target => "target",
         }
     }
+
+    /// The kind called exactly `name`, if there is one.
+    #[must_use]
+    pub fn from_name(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|kind| kind.as_str() == name)
+    }
 }
 
 impl<'de> Deserialize<'de> for Mode {

@@ -28,6 +28,7 @@ fn element(id: &str) -> Element {
     Element::new(
         element_id(id),
         ElementFields {
+            statement: None,
             type_ref: TypeRef::try_from("t".to_owned()).unwrap(),
             name: id.to_owned(),
             summary: None,
@@ -961,6 +962,7 @@ fn snapshot_with_full_loose() -> Snapshot {
     let loose = Element::new(
         element_id("loose"),
         ElementFields {
+            statement: None,
             type_ref: TypeRef::try_from("c4/container".to_owned()).unwrap(),
             name: "Loose".to_owned(),
             summary: Some("first".to_owned()),
@@ -2321,6 +2323,7 @@ fn a_move_or_an_update_leaves_a_placement_its_size(#[case] operation: &str) {
     let tall = Element::new(
         element_id("tall"),
         ElementFields {
+            statement: None,
             type_ref: TypeRef::try_from("c4/container".to_owned()).unwrap(),
             name: "Tall".to_owned(),
             summary: None,
@@ -2615,6 +2618,7 @@ fn the_layouts_of_a_request_share_their_work() {
             Element::new(
                 id.clone(),
                 ElementFields {
+                    statement: None,
                     type_ref: TypeRef::try_from("t".to_owned()).unwrap(),
                     name: "n".to_owned(),
                     summary: Some(text.clone()),
@@ -2683,5 +2687,127 @@ fn the_anchor_of_those_requests_is_invalid_on_its_own(#[case] json: &str) {
     assert!(matches!(
         problem(&snapshot(), json),
         OperationProblem::InvalidElement(_)
+    ));
+}
+
+#[test]
+fn creates_an_element_with_a_statement_or_without_one_on_null() {
+    let json = r#"[
+        {"op": "create_element", "key": "a", "type_ref": "t", "name": "A", "statement": "question"},
+        {"op": "create_element", "key": "b", "type_ref": "t", "name": "B", "statement": null},
+        {"op": "create_element", "key": "c", "type_ref": "t", "name": "C"}
+    ]"#;
+
+    let applied = apply(&snapshot(), &operations(json)).unwrap();
+
+    let kinds: Vec<Option<StatementKind>> = applied
+        .writes
+        .iter()
+        .filter_map(|write| match write {
+            Write::Element(element) => Some(element.statement()),
+            Write::Board(_) | Write::RemoveElement(_) => None,
+        })
+        .collect();
+    assert_eq!(kinds, [Some(StatementKind::Question), None, None]);
+}
+
+/// What an update with `fields` writes for `loose`, after an earlier update
+/// gave it a kind.
+fn updated_kind(fields: &str) -> Element {
+    let json = format!(
+        r#"[
+        {{"op": "update_element", "element": {{"existing": "loose"}}, "statement": "idea"}},
+        {{"op": "update_element", "element": {{"existing": "loose"}}{fields}}}
+    ]"#
+    );
+    let applied = apply(&snapshot(), &operations(&json)).unwrap();
+    applied
+        .writes
+        .iter()
+        .find_map(|write| match write {
+            Write::Element(element) if element.id() == &element_id("loose") => {
+                Some(element.clone())
+            }
+            Write::Element(_) | Write::Board(_) | Write::RemoveElement(_) => None,
+        })
+        .unwrap()
+}
+
+#[rstest]
+#[case::a_new_kind(r#", "statement": "target""#, Some(StatementKind::Target))]
+#[case::null_removes_it(r#", "statement": null"#, None)]
+#[case::another_field_keeps_it(r#", "summary": "S""#, Some(StatementKind::Idea))]
+fn an_update_sets_removes_or_keeps_the_statement(
+    #[case] fields: &str,
+    #[case] expected: Option<StatementKind>,
+) {
+    assert_eq!(updated_kind(fields).statement(), expected);
+}
+
+#[test]
+fn a_relation_keeps_the_statement() {
+    let json = r#"[
+        {"op": "update_element", "element": {"existing": "loose"}, "statement": "idea"},
+        {"op": "create_relation", "from": {"existing": "loose"}, "kind": "uses", "to": {"existing": "orders-db"}},
+        {"op": "delete_relation", "from": {"existing": "loose"}, "kind": "uses", "to": {"existing": "orders-db"}}
+    ]"#;
+
+    let applied = apply(&snapshot(), &operations(json)).unwrap();
+
+    let kept = applied.writes.iter().any(|write| {
+        matches!(write, Write::Element(element)
+            if element.id() == &element_id("loose")
+                && element.statement() == Some(StatementKind::Idea))
+    });
+    assert!(kept, "{:?}", applied.writes);
+}
+
+#[rstest]
+#[case::a_kind(r#""statement": "idea""#)]
+#[case::null_on_an_element_without_one(r#""statement": null"#)]
+fn an_update_of_only_the_statement_is_an_update_and_removes_the_stamp(#[case] field: &str) {
+    let before = stamped_snapshot();
+    let stamped = before
+        .elements
+        .values()
+        .find(|element| element.verified().is_some())
+        .unwrap()
+        .id()
+        .clone();
+    let json =
+        format!(r#"[{{"op": "update_element", "element": {{"existing": "{stamped}"}}, {field}}}]"#);
+
+    let applied = apply(&before, &operations(&json)).unwrap();
+
+    let written = applied.writes.iter().find_map(|write| match write {
+        Write::Element(element) if element.id() == &stamped => Some(element),
+        Write::Element(_) | Write::Board(_) | Write::RemoveElement(_) => None,
+    });
+    assert_eq!(written.unwrap().verified(), None);
+}
+
+#[test]
+fn a_statement_past_the_frontmatter_limit_writes_nothing_of_the_request() {
+    let largest = (abyme_model::MAX_FRONTMATTER_BYTES - 200..=abyme_model::MAX_FRONTMATTER_BYTES)
+        .rev()
+        .find(|length| {
+            let json = format!(
+                r#"[{{"op": "update_element", "element": {{"existing": "loose"}}, "summary": "{}"}}]"#,
+                "a".repeat(*length)
+            );
+            apply(&snapshot(), &operations(&json)).is_ok()
+        })
+        .unwrap();
+    let json = format!(
+        r#"[
+        {{"op": "update_element", "element": {{"existing": "loose"}}, "summary": "{}"}},
+        {{"op": "update_element", "element": {{"existing": "loose"}}, "statement": "idea"}}
+    ]"#,
+        "a".repeat(largest)
+    );
+
+    assert!(matches!(
+        problem(&snapshot(), &json),
+        OperationProblem::InvalidElement(ElementProblem::FrontmatterTooLarge { .. })
     ));
 }
