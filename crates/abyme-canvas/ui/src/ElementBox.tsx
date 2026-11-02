@@ -8,7 +8,7 @@ import { createContext, useContext } from "react";
 
 import { type FlagMarks, NO_MARKS } from "./flags";
 import type { ElementData, ElementNode } from "./nodes";
-import { noteText } from "./notes";
+import { NoteContent } from "./NoteContent";
 
 /** Opens a board: how a box reaches the app's choice of the open board. */
 export const OpenBoard = createContext<(board: string) => void>(() => {});
@@ -151,9 +151,7 @@ export function ElementContent({
       );
     case "note":
       return (
-        <div className="element element-note">
-          {noteText(shown.name, shown.body)}
-        </div>
+        <NoteContent element={element} name={shown.name} body={shown.body} />
       );
     case "missing":
       return (

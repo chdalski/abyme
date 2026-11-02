@@ -5,7 +5,8 @@ use super::*;
 use std::collections::BTreeMap;
 use std::fs;
 
-use abyme_core::{LocalKey, MAX_OPERATIONS, Operation, ProjectError, UnknownBoard};
+use abyme_core::{LocalKey, MAX_FILE_BYTES, MAX_OPERATIONS, Operation, ProjectError, UnknownBoard};
+use abyme_model::{Element, ElementId, MAX_FRONTMATTER_BYTES, Relations, StatementKind};
 use abyme_test_support::{commit_all, git};
 use serde_json::{Value, json};
 use tauri::ipc::{CallbackFn, InvokeBody};
@@ -1156,6 +1157,270 @@ fn a_move_of_a_note_the_mirrored_board_does_not_place_writes_nothing() {
             .contains("element elsewhere does not lie on board context")
     );
     assert_eq!(project_files(root.path()), before);
+}
+
+/// An update of the text of `element`.
+fn an_update_of(element: &str, name: &str, body: &str) -> Value {
+    json!({"op": "update_element", "element": {"existing": element}, "name": name, "body": body})
+}
+
+/// What the file of `one` holds now.
+fn element_one(root: &Path) -> Element {
+    let id: ElementId = "one".parse().unwrap();
+    Project::discover(root)
+        .unwrap()
+        .snapshot()
+        .unwrap()
+        .elements
+        .remove(&id)
+        .unwrap()
+}
+
+const NOT_A_NOTE: &str = "operation 1: the canvas may only change the text of a note";
+const MAY_NOT_SEND_AN_UPDATE: &str = "the canvas may not send update_element";
+
+#[test]
+fn an_update_changes_a_note_s_name_and_body_and_drops_only_its_stamp() {
+    let root = tempfile::tempdir().unwrap();
+    let stamp = "a".repeat(40);
+    project_with_one_element(
+        root.path(),
+        "note",
+        &format!(
+            "summary: S\nanchor: src\nstatement: question\nverified: \"{stamp}\"\n\
+             verified_by: ai\nrelations:\n  - {{kind: uses, to: other}}\n"
+        ),
+        "old\n",
+    );
+    let board = PathBuf::from("abyme/boards/context.board.json");
+    let board_before = project_files(root.path()).remove(&board).unwrap();
+    let before = element_one(root.path());
+    assert!(before.verified().is_some());
+    assert_ne!(before.relations(), &Relations::new());
+    let (_app, window) = canvas(root.path());
+
+    apply_from(
+        &window,
+        &json!([an_update_of("one", "New", "Line\nLine\n")]),
+    )
+    .unwrap();
+
+    let one = element_one(root.path());
+    assert_eq!(one.name(), "New");
+    assert_eq!(one.body(), "Line\nLine\n");
+    assert_eq!(one.summary(), Some("S"));
+    assert_eq!(
+        one.anchor().map(|anchor| anchor.as_str().to_owned()),
+        Some("src".to_owned())
+    );
+    assert!(one.is_note());
+    assert_eq!(one.statement(), Some(StatementKind::Question));
+    assert_eq!(one.relations(), before.relations());
+    assert_eq!(one.verified(), None);
+    assert_eq!(
+        project_files(root.path()).remove(&board).unwrap(),
+        board_before
+    );
+}
+
+#[test]
+fn an_update_of_a_note_on_a_mirrored_board_writes_only_its_file() {
+    let root = tempfile::tempdir().unwrap();
+    mirrored_board_with_a_note(root.path());
+    let element = PathBuf::from("abyme/elements/ask.md");
+    let mut others = project_files(root.path());
+    others.remove(&element).unwrap();
+    let (_app, window) = canvas(root.path());
+
+    apply_from(&window, &json!([an_update_of("ask", "Asked", "")])).unwrap();
+
+    let mut files = project_files(root.path());
+    let written = String::from_utf8(files.remove(&element).unwrap()).unwrap();
+    assert!(written.contains("Asked"), "{written}");
+    assert_eq!(files, others);
+}
+
+#[test]
+fn an_update_with_anything_but_a_note_s_name_and_body_writes_nothing() {
+    let root = tempfile::tempdir().unwrap();
+    project_with_one_element(root.path(), "note", "summary: S\n", "SECRET-OLD\n");
+    let before = project_files(root.path());
+    let (_app, window) = canvas(root.path());
+    let one = json!({"existing": "one"});
+    let with = |field: &str, value: Value| {
+        json!({"op": "update_element", "element": one, "name": "SECRET-NAME",
+               "body": "SECRET-BODY", field: value})
+    };
+
+    for refused in [
+        with("type_ref", json!("t")),
+        with("summary", json!("SECRET-SUMMARY")),
+        with("summary", Value::Null),
+        with("anchor", json!("src")),
+        with("anchor", Value::Null),
+        with("statement", json!("idea")),
+        with("statement", Value::Null),
+        json!({"op": "update_element", "element": one, "name": "SECRET-NAME"}),
+        json!({"op": "update_element", "element": one, "body": "SECRET-BODY"}),
+        json!({"op": "update_element", "element": {"new": "k"}, "name": "N", "body": ""}),
+        an_update_of("one", "", "SECRET-BODY"),
+        an_update_of("one", " \t ", "SECRET-BODY"),
+        an_update_of("one", "SECRET\nNAME", ""),
+        an_update_of("one", "SECRET\rNAME", ""),
+        an_update_of("one", "SECRET\u{85}NAME", ""),
+        an_update_of("one", "SECRET\u{2028}NAME", ""),
+        an_update_of("one", "SECRET\u{2029}NAME", ""),
+        an_update_of("one", "N", "SECRET\u{0}BODY"),
+        an_update_of("one", "N", "SECRET\u{1b}[31mBODY"),
+    ] {
+        let error = apply_from(&window, &json!([refused]))
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains(MAY_NOT_SEND_AN_UPDATE), "{refused}: {error}");
+        assert!(!error.contains("SECRET"), "{refused}: {error}");
+        assert_eq!(project_files(root.path()), before, "{refused}");
+    }
+}
+
+#[test]
+fn an_update_the_format_does_not_read_writes_nothing() {
+    let root = tempfile::tempdir().unwrap();
+    project_with_one_element(root.path(), "note", "", "");
+    let before = project_files(root.path());
+    let (_app, window) = canvas(root.path());
+    let one = json!({"existing": "one"});
+
+    for refused in [
+        json!({"op": "update_element", "element": one, "name": Value::Null, "body": ""}),
+        json!({"op": "update_element", "element": one, "name": "N", "body": Value::Null}),
+        json!({"op": "update_element", "element": one, "name": "N", "body": "",
+               "type_ref": Value::Null}),
+        json!({"op": "update_element", "element": one, "name": "N", "body": "",
+               "verified": "x"}),
+    ] {
+        assert!(apply_from(&window, &json!([refused])).is_err(), "{refused}");
+        assert_eq!(project_files(root.path()), before, "{refused}");
+    }
+}
+
+#[test]
+fn an_update_of_what_is_no_note_writes_nothing_and_names_only_its_position() {
+    for type_ref in ["t", "Note", "notes", "c4/note", "\"note \""] {
+        let root = tempfile::tempdir().unwrap();
+        project_with_one_element(root.path(), type_ref, "", "");
+        let before = project_files(root.path());
+        let (_app, window) = canvas(root.path());
+
+        let refused = apply_from(&window, &json!([an_update_of("one", "SECRET", "")]));
+
+        assert_eq!(refused, Err(json!(NOT_A_NOTE)), "{type_ref}");
+        assert_eq!(project_files(root.path()), before, "{type_ref}");
+    }
+}
+
+#[test]
+fn an_update_of_a_note_from_a_stale_view_is_refused_by_what_the_file_says_now() {
+    let root = tempfile::tempdir().unwrap();
+    project_with_one_element(root.path(), "note", "", "");
+    let (_app, window) = canvas(root.path());
+    open_board_from(&window, json!({"board": "context"})).unwrap();
+    let file = root.path().join("abyme/elements/one.md");
+
+    fs::write(&file, "---\nid: one\ntype: t\nname: N\n---\n").unwrap();
+    let before = project_files(root.path());
+    let retyped = apply_from(&window, &json!([an_update_of("one", "New", "")]));
+    assert_eq!(retyped, Err(json!(NOT_A_NOTE)));
+    assert_eq!(project_files(root.path()), before);
+
+    fs::remove_file(&file).unwrap();
+    let before = project_files(root.path());
+    let gone = apply_from(&window, &json!([an_update_of("one", "New", "")]));
+    assert_eq!(gone, Err(json!(NOT_A_NOTE)));
+    assert_eq!(project_files(root.path()), before);
+}
+
+#[test]
+fn an_update_keeps_tabs_and_line_breaks_in_a_body() {
+    let root = tempfile::tempdir().unwrap();
+    project_with_one_element(root.path(), "note", "", "");
+    let (_app, window) = canvas(root.path());
+    let body = "a\tb\r\nc\u{85}d\n";
+
+    apply_from(&window, &json!([an_update_of("one", "N", body)])).unwrap();
+
+    assert_eq!(element_one(root.path()).body(), body);
+}
+
+#[test]
+fn text_in_an_update_cannot_change_the_file_s_other_fields() {
+    let root = tempfile::tempdir().unwrap();
+    project_with_one_element(root.path(), "note", "statement: idea\n", "");
+    let (_app, window) = canvas(root.path());
+    let name = "a \"b\" \\ c: d # e --- f";
+    let body = "---\nid: other\ntype: x\nanchor: src\n---\ntext\n";
+
+    apply_from(&window, &json!([an_update_of("one", name, body)])).unwrap();
+
+    let one = element_one(root.path());
+    assert_eq!(one.name(), name);
+    assert_eq!(one.body(), body);
+    assert_eq!(one.id().as_str(), "one");
+    assert!(one.is_note());
+    assert_eq!(one.anchor(), None);
+    assert_eq!(one.statement(), Some(StatementKind::Idea));
+    assert_eq!(one.relations(), &Relations::new());
+}
+
+#[test]
+fn the_core_refuses_an_update_it_cannot_write_and_shows_none_of_its_text() {
+    let root = tempfile::tempdir().unwrap();
+    project_with_one_element(root.path(), "note", "", "");
+    let before = project_files(root.path());
+    let (_app, window) = canvas(root.path());
+    let long_body = "SECRET ".repeat(MAX_FILE_BYTES / 7 + 1);
+    let long_name = "SECRET ".repeat(MAX_FRONTMATTER_BYTES / 7 + 1);
+
+    for refused in [
+        an_update_of("one", "SECRET\u{0}", ""),
+        an_update_of("one", "N", &long_body),
+        an_update_of("one", &long_name, ""),
+    ] {
+        let error = apply_from(&window, &json!([refused]))
+            .unwrap_err()
+            .to_string();
+
+        assert!(
+            !error.contains("SECRET"),
+            "{}",
+            &error[..error.len().min(200)]
+        );
+        assert_eq!(project_files(root.path()), before);
+    }
+}
+
+#[test]
+fn a_request_with_a_good_update_and_a_refused_one_writes_nothing() {
+    let root = tempfile::tempdir().unwrap();
+    mirrored_board_with_a_note(root.path());
+    let before = project_files(root.path());
+    let (_app, window) = canvas(root.path());
+    let good = an_update_of("ask", "Asked", "");
+    let moved = a_move_of("ask", "context", 400, 200);
+    let refused = an_update_of("ask", "", "");
+    let of_a_box = an_update_of("payment-service", "SECRET", "");
+
+    for request in [
+        json!([good, refused]),
+        json!([refused, good]),
+        json!([moved, refused]),
+        json!([good, of_a_box]),
+        json!([of_a_box, good]),
+        json!([moved, of_a_box]),
+    ] {
+        assert!(apply_from(&window, &request).is_err(), "{request}");
+        assert_eq!(project_files(root.path()), before, "{request}");
+    }
 }
 
 #[test]

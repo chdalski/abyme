@@ -4,13 +4,11 @@ import { listen } from "@tauri-apps/api/event";
 import type { BoardEntry, BoardView, ElementFlag } from "./bindings";
 
 /**
- * An operation the canvas may send: the operations `src/admission.rs`
- * admits, typed by hand. Today that is moving and pinning an element that
- * exists on a board that exists, to integer coordinates, or releasing its pin
- * with `pinned: false`, which Rust admits only at its position in the board
- * file.
+ * Moving and pinning an element that exists on a board that exists, to integer
+ * coordinates, or releasing its pin with `pinned: false`, which Rust admits only
+ * at its position in the board file.
  */
-export type AdmittedOperation = {
+export type AdmittedMove = {
   op: "move_element";
   element: { existing: string };
   board: { existing: string };
@@ -18,6 +16,23 @@ export type AdmittedOperation = {
   y: number;
   pinned: boolean;
 };
+
+/**
+ * Changing the text of an element that exists, which Rust admits only when its
+ * file says it is a note.
+ */
+export type NoteUpdate = {
+  op: "update_element";
+  element: { existing: string };
+  name: string;
+  body: string;
+};
+
+/**
+ * An operation the canvas may send: the operations `src/admission.rs` admits,
+ * typed by hand.
+ */
+export type AdmittedOperation = AdmittedMove | NoteUpdate;
 
 /**
  * What the UI asks of the canvas's Rust side. The UI reaches it only through

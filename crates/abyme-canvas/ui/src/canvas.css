@@ -167,6 +167,25 @@ button.element-pin {
   white-space: pre-wrap;
 }
 
+.element-note-field {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font: inherit;
+  resize: none;
+}
+
+/* On a note's top edge and growing upward, since its text can run past its lower
+   edge. A note has no pin marker there. */
+.element-note ~ .element-inner-boards {
+  right: auto;
+  bottom: calc(100% - 5px);
+  left: 4px;
+}
+
 .element-handle {
   visibility: hidden;
 }

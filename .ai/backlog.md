@@ -41,3 +41,8 @@ target goes here only after the user has lowered the target.
 - "a note that its file is missing" in the doc of `ElementContent` reads ambiguously next to sticky notes, and the line is long: `crates/abyme-canvas/ui/src/ElementBox.tsx` (Reviewer, sticky notes Task 2).
 - Two comparisons with `NOTE_TYPE` could become one `TypeRef::is_note()` that `Element::is_note` delegates to: `crates/abyme-core/src/apply.rs`, `crates/abyme-model/src/element.rs` (Reviewer, sticky notes Task 2).
 - The test name `the_projection_carries_exactly_the_named_fields_and_no_body` holds only for elements that are not notes: `crates/abyme-canvas/src/projection/tests.rs` (Reviewer, sticky notes Task 2).
+- A NUL or another control character in a note's body stays possible over MCP and by hand, which hides the file from `git diff`; the canvas refuses it: `crates/abyme-core/src/apply.rs` (security engineer, sticky notes Task 5).
+- When the AI deletes a note while its text is being typed, the typed text goes without a message: `crates/abyme-canvas/ui/src/NoteContent.tsx` (Reviewer, sticky notes Task 5).
+- `rowsFor` counts only line breaks, so a long wrapped line shows three rows with a scroll bar: `crates/abyme-canvas/ui/src/NoteContent.tsx` (Reviewer, sticky notes Task 5).
+- While another process holds the project's lock, a note's write and the way to another board wait without a limit: `crates/abyme-core/src/project/store.rs`, `crates/abyme-canvas/ui/src/App.tsx` (security engineer, sticky notes Task 5).
+- When a text field ends without a write after a failed write, `heldBack` stays set, and the next click to another board does nothing and says nothing: `crates/abyme-canvas/ui/src/App.tsx` (Reviewer, sticky notes Task 5).

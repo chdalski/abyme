@@ -1,13 +1,13 @@
 import type { XYPosition } from "@xyflow/react";
 
-import type { AdmittedOperation } from "./client";
+import type { AdmittedMove } from "./client";
 
 /** The operation that moves and pins `element` on `board` at `position`, rounded to the integers the board file holds: a person placed it there. */
 export function toMove(
   board: string,
   element: string,
   position: XYPosition,
-): AdmittedOperation {
+): AdmittedMove {
   return placeAt(board, element, position, true);
 }
 
@@ -16,7 +16,7 @@ export function toRelease(
   board: string,
   element: string,
   position: XYPosition,
-): AdmittedOperation {
+): AdmittedMove {
   return placeAt(board, element, position, false);
 }
 
@@ -25,7 +25,7 @@ function placeAt(
   element: string,
   position: XYPosition,
   pinned: boolean,
-): AdmittedOperation {
+): AdmittedMove {
   return {
     op: "move_element",
     element: { existing: element },

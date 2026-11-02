@@ -12,6 +12,8 @@ import { useBoardNodes } from "./boardNodes";
 import { toEdges } from "./edges";
 import { ElementBox, OpenBoard, ReleasePin } from "./ElementBox";
 import type { ElementNode, Move } from "./nodes";
+import { WriteNote } from "./NoteContent";
+import type { NoteParts } from "./notes";
 
 /** The one node type the canvas knows. */
 const NODE_TYPES = { element: ElementBox };
@@ -26,12 +28,14 @@ export function BoardCanvas({
   view,
   move,
   release,
+  writeNote,
   onMoveFailed,
   onOpen,
 }: {
   view: BoardView;
   move: (moves: Move[]) => Promise<void>;
   release: (element: string, position: XYPosition) => void;
+  writeNote: (element: string, parts: NoteParts) => Promise<boolean>;
   onMoveFailed: (message: string) => void;
   onOpen: (board: string) => void;
 }) {
@@ -40,7 +44,8 @@ export function BoardCanvas({
   const openFirstInnerBoard = useCallback<NodeMouseHandler<ElementNode>>(
     (_event, node) => {
       const [first] = node.data.innerBoards;
-      if (first !== undefined) {
+      // On a note, a double-click opens its text.
+      if (first !== undefined && node.data.shown.kind !== "note") {
         onOpen(first.id);
       }
     },
@@ -50,16 +55,18 @@ export function BoardCanvas({
   return (
     <OpenBoard.Provider value={onOpen}>
       <ReleasePin.Provider value={view.mode === "mirrored" ? null : release}>
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          nodeTypes={NODE_TYPES}
-          onNodesChange={onNodesChange}
-          onNodeDoubleClick={openFirstInnerBoard}
-          nodesConnectable={false}
-          deleteKeyCode={null}
-          fitView
-        />
+        <WriteNote.Provider value={writeNote}>
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            nodeTypes={NODE_TYPES}
+            onNodesChange={onNodesChange}
+            onNodeDoubleClick={openFirstInnerBoard}
+            nodesConnectable={false}
+            deleteKeyCode={null}
+            fitView
+          />
+        </WriteNote.Provider>
       </ReleasePin.Provider>
     </OpenBoard.Provider>
   );

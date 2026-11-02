@@ -504,10 +504,12 @@ fn disallowed_character(field: &'static str, text: &str) -> Option<ElementProble
         })
 }
 
-/// Whether YAML counts `character` as printable, so the parser reads it
-/// back: everything except the C0 controls other than tab, line feed, and
+/// Whether YAML counts `character` as printable, so the parser reads it back.
+///
+/// That is everything except the C0 controls other than tab, line feed, and
 /// carriage return, DEL, the C1 controls other than U+0085, U+FFFE, and
 /// U+FFFF.
+#[must_use]
 pub const fn is_allowed(character: char) -> bool {
     !matches!(
         character,

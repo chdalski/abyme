@@ -8,15 +8,16 @@
 //! for each variant and each mode: on a mirrored board a person moves only a
 //! note, whose file says what it is, and a release of a pin keeps the position
 //! in the board file, so that a release from a stale view does not move a box
-//! back. These are rules of this one client, not a boundary: the files stay
-//! open to the AI and to edits by hand, and the position authorizes nothing,
-//! since a page that may call `apply` can also read it. A move the canvas sends
-//! pins the element, since a person placed it there.
+//! back. An update changes only a note, decided the same way. These are rules
+//! of this one client, not a boundary: the files stay open to the AI and to
+//! edits by hand, and the position authorizes nothing, since a page that may
+//! call `apply` can also read it. A move the canvas sends pins the element,
+//! since a person placed it there.
 
 use std::fmt;
 
 use abyme_core::{MAX_OPERATIONS, Operation, Ref, Snapshot};
-use abyme_model::{Board, BoardId, Element, ElementId, Mode};
+use abyme_model::{Board, BoardId, Element, ElementId, Mode, is_allowed};
 
 #[cfg(test)]
 mod tests;
@@ -46,6 +47,12 @@ pub enum Refused {
         /// The board.
         board: BoardId,
     },
+    /// One operation changes the text of an element whose file does not say
+    /// it is a note.
+    NotANote {
+        /// The operation's position in the request, counted from 1.
+        position: usize,
+    },
     /// One operation releases a pin anywhere but at the element's position
     /// in the board file.
     ReleaseElsewhere {
@@ -72,6 +79,10 @@ impl fmt::Display for Refused {
                 "operation {position}: board {board} is mirrored, so the canvas may only move a \
                  note there and keep it pinned"
             ),
+            Self::NotANote { position } => write!(
+                formatter,
+                "operation {position}: the canvas may only change the text of a note"
+            ),
             Self::ReleaseElsewhere { position, board } => write!(
                 formatter,
                 "operation {position}: the canvas releases a pin on board {board} only at the \
@@ -83,12 +94,13 @@ impl fmt::Display for Refused {
 
 /// Checks that the canvas may send every operation of a request. Admitted
 /// today: moving and pinning an element that exists on a board that exists,
-/// and releasing its pin, which says `pinned: false`.
+/// releasing its pin, which says `pinned: false`, and changing the name and body
+/// of an element that exists.
 ///
 /// Whatever page a debug build loads from the dev server's address can send
-/// every operation admitted here, so admitting another one needs a security
-/// review of that origin too; one that carries text would let such a page
-/// write that text into the repository.
+/// every operation admitted here, so it can write a note's text into the
+/// repository, where the AI reads it. Admitting another operation needs a
+/// security review of that origin too.
 ///
 /// # Errors
 ///
@@ -113,8 +125,9 @@ pub fn admit(operations: &[Operation]) -> Result<(), Refused> {
 /// as they stand before the request: on a mirrored board none does anything but
 /// move a note and keep it pinned, and none releases a pin anywhere but at the
 /// element's position in the file of the board it names. So no request leaves a
-/// box at a new position without a pin. A board `snapshot` does not have passes,
-/// and the core rejects it.
+/// box at a new position without a pin. An update changes only an element whose
+/// file says it is a note. A board `snapshot` does not have passes, and the core
+/// rejects it.
 ///
 /// # Errors
 ///
@@ -160,31 +173,49 @@ fn refused_by_board_file(
             }
             Ref::New(_) => None,
         },
+        Operation::UpdateElement { element, .. } => {
+            (!is_a_note(snapshot, element)).then_some(Refused::NotANote { position })
+        }
         Operation::CreateElement { .. }
         | Operation::CreateBoard { .. }
         | Operation::UpdateBoard { .. }
         | Operation::PlaceElement { .. }
         | Operation::LayoutBoard { .. }
-        | Operation::UpdateElement { .. }
         | Operation::DeleteElement { .. }
         | Operation::CreateRelation { .. }
         | Operation::DeleteRelation { .. } => None,
     }
 }
 
-/// Whether a move with `pinned` keeps `element` pinned and its file in
-/// `snapshot` says it is a note. A missing file says nothing of the kind.
+/// Whether a move with `pinned` keeps `element` pinned and it is a note.
 fn keeps_a_note_pinned(
     snapshot: &Snapshot,
     element: &Ref<ElementId>,
     pinned: Option<bool>,
 ) -> bool {
+    pinned == Some(true) && is_a_note(snapshot, element)
+}
+
+/// Whether the file of `element` in `snapshot` says it is a note. A missing
+/// file says nothing of the kind.
+fn is_a_note(snapshot: &Snapshot, element: &Ref<ElementId>) -> bool {
     match element {
-        Ref::Existing(element) => {
-            pinned == Some(true) && snapshot.elements.get(element).is_some_and(Element::is_note)
-        }
+        Ref::Existing(element) => snapshot.elements.get(element).is_some_and(Element::is_note),
         Ref::New(_) => false,
     }
+}
+
+/// Whether `name` can be the name of a note: its first line, so not blank and
+/// without a line break.
+fn is_note_name(name: &str) -> bool {
+    !name.trim().is_empty() && !name.contains(['\n', '\r', '\u{85}', '\u{2028}', '\u{2029}'])
+}
+
+/// Whether `body` holds only characters an element's name may hold. A control
+/// character would hide the file from `git diff`, the review of what the AI
+/// reads.
+fn is_note_body(body: &str) -> bool {
+    body.chars().all(is_allowed)
 }
 
 /// Whether the file of `board` places `element` at `x` and `y`.
@@ -203,7 +234,7 @@ fn lies_at(board: &Board, element: &Ref<ElementId>, x: i32, y: i32) -> bool {
     clippy::unneeded_field_pattern,
     reason = "naming every field of a move breaks the build when it gains one, until that field is admitted or refused here"
 )]
-const fn refused_kind(operation: &Operation) -> Option<&'static str> {
+fn refused_kind(operation: &Operation) -> Option<&'static str> {
     match operation {
         Operation::CreateElement { .. } => Some("create_element"),
         Operation::CreateBoard { .. } => Some("create_board"),
@@ -223,7 +254,24 @@ const fn refused_kind(operation: &Operation) -> Option<&'static str> {
             }
         },
         Operation::LayoutBoard { .. } => Some("layout_board"),
-        Operation::UpdateElement { .. } => Some("update_element"),
+        // `None` here means a field the request leaves alone; `Some(None)` would
+        // remove it.
+        Operation::UpdateElement {
+            element,
+            name,
+            type_ref,
+            summary,
+            body,
+            anchor,
+            statement,
+        } => match (element, name, body, type_ref, summary, anchor, statement) {
+            (Ref::Existing(_), Some(name), Some(body), None, None, None, None)
+                if is_note_name(name) && is_note_body(body) =>
+            {
+                None
+            }
+            _ => Some("update_element"),
+        },
         Operation::DeleteElement { .. } => Some("delete_element"),
         Operation::CreateRelation { .. } => Some("create_relation"),
         Operation::DeleteRelation { .. } => Some("delete_relation"),

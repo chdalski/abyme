@@ -9,6 +9,8 @@ import { ReleasePin } from "./ElementBox";
 import { FakeClient } from "./fakeClient";
 import { boardView, placedBox } from "./testBoards";
 import type { ElementNode } from "./nodes";
+import { WriteNote } from "./NoteContent";
+import type { NoteParts } from "./notes";
 
 // jsdom cannot drive React Flow's pointer drag, so React Flow is replaced by
 // a stand-in that keeps the props the pane gives it; a test then reports
@@ -17,6 +19,8 @@ import type { ElementNode } from "./nodes";
 const flow = vi.hoisted(() => ({
   props: null as ReactFlowProps<ElementNode> | null,
   release: null as ((element: string, position: XYPosition) => void) | null,
+  writeNote: null as
+    ((element: string, parts: NoteParts) => Promise<boolean>) | null,
   Probe: (() => null) as FunctionComponent,
 }));
 vi.mock("@xyflow/react", async (original) => ({
@@ -29,6 +33,7 @@ vi.mock("@xyflow/react", async (original) => ({
 
 flow.Probe = function ReleaseProbe() {
   flow.release = useContext(ReleasePin);
+  flow.writeNote = useContext(WriteNote);
   return null;
 };
 
@@ -126,12 +131,11 @@ describe("BoardPane", () => {
 
     expect(client.applied).toHaveLength(1);
     expect(
-      client.applied[0]?.map((move) => [
-        move.element.existing,
-        move.x,
-        move.y,
-        move.pinned,
-      ]),
+      client.applied[0]?.map((move) =>
+        move.op === "move_element"
+          ? [move.element.existing, move.x, move.y, move.pinned]
+          : null,
+      ),
     ).toEqual([
       ["payments", 40, 80, true],
       ["orders", 340, 80, true],
@@ -206,10 +210,11 @@ describe("BoardPane", () => {
       finishMove();
       await Promise.resolve();
     });
-    expect(apply.mock.calls.map(([[first]]) => first?.pinned)).toEqual([
-      true,
-      false,
-    ]);
+    expect(
+      apply.mock.calls.map(([[first]]) =>
+        first?.op === "move_element" ? first.pinned : null,
+      ),
+    ).toEqual([true, false]);
   });
 
   it("shows why a release failed, as text, and moves no box", async () => {
@@ -235,10 +240,11 @@ describe("BoardPane", () => {
     await dragTogether({ payments: { x: 40, y: 80 } });
     await releasePayments({ x: 0, y: 0 });
 
-    expect(client.applied.map(([first]) => first?.pinned)).toEqual([
-      true,
-      false,
-    ]);
+    expect(
+      client.applied.map(([first]) =>
+        first?.op === "move_element" ? first.pinned : null,
+      ),
+    ).toEqual([true, false]);
     expect((await screen.findByRole("alert")).textContent).toBe(message);
   });
 
@@ -286,6 +292,61 @@ describe("BoardPane", () => {
 
       expect((await screen.findByRole("alert")).textContent).toBe(message);
       expect(positionsOnCanvas()).toEqual({ payments: { x: 0, y: 0 } });
+    });
+  });
+
+  describe("writing a note", () => {
+    const writer = () => {
+      const write = flow.writeNote;
+      if (write === null) {
+        throw new Error("the pane gave boxes no way to write a note");
+      }
+      return write;
+    };
+
+    it("sends one update in order behind a move", async () => {
+      const client = paneWith(null);
+      let finishMove = () => {};
+      const apply = vi
+        .spyOn(client, "apply")
+        .mockImplementationOnce(
+          () =>
+            new Promise<void>((resolve) => {
+              finishMove = resolve;
+            }),
+        )
+        .mockResolvedValue();
+      await openPane(client);
+
+      await dragTogether({ payments: { x: 40, y: 80 } });
+      const written = writer()("payments", { name: "Ask", body: "Why" });
+      await act(() => Promise.resolve());
+      expect(apply).toHaveBeenCalledTimes(1);
+
+      finishMove();
+      await expect(written).resolves.toBe(true);
+      expect(apply).toHaveBeenLastCalledWith([
+        {
+          op: "update_element",
+          element: { existing: "payments" },
+          name: "Ask",
+          body: "Why",
+        },
+      ]);
+    });
+
+    it("says it failed and shows why, as text", async () => {
+      const message = "<img src=x onerror=alert(1)>";
+      const { container } = await openPane(paneWith(message));
+
+      let written: boolean | null = null;
+      await act(async () => {
+        written = await writer()("payments", { name: "Ask", body: "" });
+      });
+
+      expect(written).toBe(false);
+      expect(screen.getByRole("alert").textContent).toBe(message);
+      expect(container.querySelector("img")).toBeNull();
     });
   });
 

@@ -30,7 +30,7 @@ is the next plan.
 - [x] A note shows as a note
 - [x] A note moves on every board
 - [x] A failed reload keeps the board
-- [ ] Editing a note's text
+- [x] Editing a note's text
 - [ ] Creating a note
 - [ ] Deleting a note
 
@@ -120,31 +120,32 @@ body. Updating an element drops its verification stamp, so an unchanged text mus
 
 Review path: Security-Hybrid
 
-- [ ] The admission takes `update_element` only with an existing element whose file says it is a
-      note, with a `name` that is not blank and holds no line break, a `body`, and no other field.
+- [x] The admission takes `update_element` only with an existing element whose file says it is a
+      note, with a `name` that is not blank and holds no line break, a `body` of only the characters
+      a name may hold, and no other field.
       Any other update, of any element, is refused by position, naming no other text; a request
       with such an operation writes nothing.
-- [ ] A double-click on a note opens only its text field, holding the name and, when the body is not
+- [x] A double-click on a note opens only its text field, holding the name and, when the body is not
       empty, a line break and the body; also on a note that owns a board, whose `▸` button stays and
       opens that board. `Esc` and a click next to it end the input and write the text, in order with
       the canvas's moves.
-- [ ] Text becomes a name and a body by one rule: blank lines at its start and whitespace at its end
+- [x] Text becomes a name and a body by one rule: blank lines at its start and whitespace at its end
       are dropped, the first line left, without whitespace at its ends, is the name, and the rest is
       the body. Text with nothing left is blank.
-- [ ] Text whose name and body equal those of the text the field opened with writes nothing and keeps
+- [x] Text whose name and body equal those of the text the field opened with writes nothing and keeps
       a verification stamp, also with a line break added at its end. Blank text writes nothing, and the
       note returns to its old text.
-- [ ] While the text field is open, a reload does not change what is typed. When a write fails, the
+- [x] While the text field is open, a reload does not change what is typed. When a write fails, the
       field stays open with the text, and the message shows as text. Switching to another window does
       not end the input.
-- [ ] Keys pressed in the text field move no box.
-- [ ] Rust tests cover each state through `apply` over IPC with the bytes of the element file, and
+- [x] Keys pressed in the text field move no box.
+- [x] Rust tests cover each state through `apply` over IPC with the bytes of the element file, and
       Vitest covers the input, the double-click on a note that owns a board, the split and join of the
       text as a round trip, a reload during typing, and a failed write. `admitted.typecheck.ts` covers
       the wider type.
-- [ ] A reader of Canvas can tell how a note's text is edited, and `Canvas.md`'s Commands section and
+- [x] A reader of Canvas can tell how a note's text is edited, and `Canvas.md`'s Commands section and
       the comments in `admission.rs` and `client.ts` state the new rule.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
       `cargo fmt --all --check`, `pnpm --dir crates/abyme-canvas/ui check`, and
       `pnpm --dir crates/abyme-canvas/ui test` pass.
 
@@ -212,6 +213,8 @@ Review path: Security-Hybrid
 
 - Task 5: on a long note that owns a board, the `▸` button at the rect's lower edge lies over part of
   the text; check it while working on the note's text field.
+- Task 6: the rule for `create_element`'s `body` is the same as for an update's: only the characters
+  a name may hold, as the security engineer requires.
 - Task 6: the last sentence of the slug rule in `docs/5 Architecture/Data Model.md`, "A sticky note's
   slug will come from its first words, or be `note` if it has no text.", doubles the fallback and is in
   the future tense; state what is built.
@@ -237,6 +240,10 @@ Review path: Security-Hybrid
 - **A note is written when the input ends:** the ID comes once from the name, so an earlier write would
   fix it from the first keystroke. A crash during typing loses the text, and an AI edit made during
   typing is overwritten.
+- **Leaving a board waits for a note's write:** a click on the way to another board ends the input,
+  so a failed write would take the text with the board. It goes only after the write worked; after a
+  failure, the one click that can belong to that press stays and the next goes. A gate demand of the
+  reviewer on keeping the text after a failed write.
 - **A failed reload keeps the board:** text being typed survives a broken file. The board can be stale
   for that time, and writes fail with the core's message.
 - **`apply` stays the one writing command, with the shapes in `admission.rs`:** typed commands were
@@ -253,6 +260,10 @@ Review path: Security-Hybrid
 - **Deleting has no question and no `×` button:** Git holds the history. A missing element's placements
   cannot be cleared from the canvas.
 - **Only `Delete` and `Backspace` delete, and only notes:** a box stays undeletable, as today.
+- **A body from the canvas holds only the characters a name may hold:** with NUL in it, Git treats
+  the element file as binary, and `git diff`, the review of what the AI reads, shows nothing. A gate
+  demand of the security engineer on editing a note's text. The core stays as it is, so MCP and hand
+  edits can still write such a body.
 - **All tasks are Security-Hybrid:** the canvas first writes text the AI reads and decides what it may
   change or delete, and the new behavior has no tests yet, which the risk rule would escalate.
 

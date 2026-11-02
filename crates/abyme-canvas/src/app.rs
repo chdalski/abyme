@@ -1,7 +1,8 @@
 //! The canvas's side of the IPC boundary: its commands, its one event, its
 //! window, and the watcher that raises the event. The one command that
 //! writes, `apply`, passes a request on only when `admission` admits it, on a
-//! mirrored board it only moves a note, and no release leaves its position.
+//! mirrored board it only moves a note, no release leaves its position, and it
+//! changes the text only of a note.
 //!
 //! No command takes a path: every command works on the project that the
 //! directory the canvas started in lies in, found anew by the core on each
@@ -109,13 +110,14 @@ async fn open_board(start: State<'_, Start>, board: BoardId) -> Result<BoardView
     on_core(move || project(&snapshot(&start)?, &board).map_err(|error| error.to_string())).await
 }
 
-/// Applies `operations` to the project, all or none, once the canvas may
-/// send every one of them, on a mirrored board none does anything but move a
-/// note, and none releases a pin anywhere but at the position in the board
-/// file. The first check comes before any access to the project. The second
-/// runs under the project's lock, on the reading of the files the write starts
-/// from, so no writer that takes the lock can change them in between. The
-/// position catches a stale view and authorizes nothing.
+/// Applies `operations` to the project, all or none, once the canvas may send
+/// every one of them, on a mirrored board none does anything but move a note,
+/// none releases a pin anywhere but at the position in the board file, and none
+/// changes the text of anything but a note. The first check comes before any
+/// access to the project. The second runs under the project's lock, on the
+/// reading of the files the write starts from, so no writer that takes the lock
+/// can change them in between. The position catches a stale view and authorizes
+/// nothing.
 #[tauri::command]
 async fn apply(start: State<'_, Start>, operations: Operations) -> Result<(), String> {
     let operations = operations.into_vec();

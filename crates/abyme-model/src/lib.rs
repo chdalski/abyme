@@ -23,7 +23,7 @@ pub use anchor::{Anchor, AnchorRule, MAX_ANCHOR_BYTES, MAX_SEGMENT_BYTES};
 pub use board::{BOARD_FORMAT, Board, BoardError, Placement, Rect};
 pub use element::{
     Element, ElementError, ElementFields, ElementProblem, MAX_FRONTMATTER_BYTES, NOTE_TYPE,
-    Relations, TypeRef,
+    Relations, TypeRef, is_allowed,
 };
 pub use id::{BoardId, BoardKind, ElementId, ElementKind, Id, IdError, IdKind, IdRule, MAX_ID_LEN};
 pub use object_only::ObjectOnly;

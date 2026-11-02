@@ -244,6 +244,114 @@ describe("review flags", () => {
   });
 });
 
+describe("leaving a board while a note's text is being written", () => {
+  /** A client whose board `context` holds the note `ask`, opened for typing. */
+  async function typing(client: FakeClient) {
+    client.views.context = boardView({
+      id: "context",
+      title: "Context",
+      placements: [
+        placedBox("ask", {
+          shown: { kind: "note", name: "Ask", body: "" },
+        }),
+      ],
+    });
+    await openContext(client);
+    fireEvent.doubleClick(screen.getByText("Ask"));
+    const field = screen.getByRole("textbox", { name: "Text of the note" });
+    fireEvent.change(field, { target: { value: "Asked" } });
+    return field;
+  }
+  const leave = () =>
+    fireEvent.click(screen.getByRole("button", { name: "Containers" }));
+  const settle = () =>
+    act(() => new Promise<void>((done) => queueMicrotask(done)));
+
+  it("goes to the other board once the write worked", async () => {
+    const client = clientWithBoards();
+    let finish = () => {};
+    vi.spyOn(client, "apply").mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const field = await typing(client);
+
+    fireEvent.blur(field);
+    leave();
+    await settle();
+    expect(screen.getByRole("heading", { name: "Context" })).toBeDefined();
+
+    finish();
+    expect(
+      await screen.findByRole("heading", { name: "Containers" }),
+    ).toBeDefined();
+  });
+
+  it("stays with the text and the message when a write on its way fails", async () => {
+    const client = clientWithBoards();
+    let fail: (message: string) => void = () => {};
+    vi.spyOn(client, "apply").mockImplementationOnce(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          fail = reject;
+        }),
+    );
+    const field = await typing(client);
+
+    fireEvent.blur(field);
+    leave();
+    await settle();
+    fail("the file is broken");
+
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "the file is broken",
+    );
+    expect(
+      screen.getByRole<HTMLTextAreaElement>("textbox", {
+        name: "Text of the note",
+      }).value,
+    ).toBe("Asked");
+    expect(screen.getByRole("heading", { name: "Context" })).toBeDefined();
+
+    leave();
+    expect(
+      await screen.findByRole("heading", { name: "Containers" }),
+    ).toBeDefined();
+  });
+
+  it("stays too when the write failed before the click arrived", async () => {
+    const client = clientWithBoards();
+    client.applyFailure = "the file is broken";
+    const field = await typing(client);
+
+    fireEvent.blur(field);
+    await screen.findByRole("alert");
+    leave();
+    await settle();
+
+    expect(screen.getByRole("heading", { name: "Context" })).toBeDefined();
+    expect(screen.getByRole("textbox")).toBeDefined();
+
+    leave();
+    expect(
+      await screen.findByRole("heading", { name: "Containers" }),
+    ).toBeDefined();
+  });
+
+  it("goes at once without a write", async () => {
+    const client = clientWithBoards();
+    await openContext(client);
+
+    leave();
+
+    expect(
+      await screen.findByRole("heading", { name: "Containers" }),
+    ).toBeDefined();
+  });
+});
+
 describe("a failed reload of the open board", () => {
   it("keeps the box and its selection through the failure and the recovery", async () => {
     const client = clientWithBoards();

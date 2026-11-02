@@ -12,6 +12,40 @@ export function onlyAdmittedOperations(client: AbymeClient): void {
   void client.apply([
     { op: "move_element", element, board, x: 1, y: 2, pinned: false },
   ]);
+  void client.apply([{ op: "update_element", element, name: "N", body: "" }]);
+  void client.apply([
+    // @ts-expect-error The canvas changes a note's name and body together.
+    { op: "update_element", element, name: "N" },
+  ]);
+  void client.apply([
+    // @ts-expect-error The canvas changes a note's name and body together.
+    { op: "update_element", element, body: "" },
+  ]);
+  void client.apply([
+    // @ts-expect-error The canvas changes no element's type.
+    { op: "update_element", element, name: "N", body: "", type_ref: "t" },
+  ]);
+  void client.apply([
+    // @ts-expect-error The canvas changes no element's summary.
+    { op: "update_element", element, name: "N", body: "", summary: null },
+  ]);
+  void client.apply([
+    // @ts-expect-error The canvas changes no element's anchor.
+    { op: "update_element", element, name: "N", body: "", anchor: "src" },
+  ]);
+  void client.apply([
+    // @ts-expect-error The canvas changes no element's statement kind.
+    { op: "update_element", element, name: "N", body: "", statement: "idea" },
+  ]);
+  void client.apply([
+    {
+      op: "update_element",
+      // @ts-expect-error The canvas changes only an element that exists.
+      element: { new: "e" },
+      name: "N",
+      body: "",
+    },
+  ]);
   void client.apply([
     // @ts-expect-error The canvas says whether a move pins or releases.
     { op: "move_element", element, board, x: 1, y: 2 },

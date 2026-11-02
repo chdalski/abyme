@@ -8,6 +8,7 @@ import { type BoardState, inOrder, loadBoard } from "./boards";
 import type { AbymeClient, AdmittedOperation } from "./client";
 import { useLive } from "./live";
 import { toMove, toRelease } from "./moves";
+import { type NoteParts, toNoteUpdate } from "./notes";
 import type { Move } from "./nodes";
 
 /**
@@ -22,10 +23,12 @@ export function BoardPane({
   client,
   board,
   onOpen,
+  onNoteWrite = () => {},
 }: {
   client: AbymeClient;
   board: string;
   onOpen: (board: string) => void;
+  onNoteWrite?: (write: Promise<boolean>) => void;
 }) {
   const load = useCallback(() => loadBoard(client, board), [client, board]);
   const state = useLive<BoardState>(client, load, { kind: "loading" });
@@ -33,8 +36,8 @@ export function BoardPane({
   if (state.kind === "loaded" && state.view !== lastView) {
     setLastView(state.view);
   }
-  const [moveFailure, setMoveFailure] = useState<string | null>(null);
-  // Moves and releases reach the core in the order the user made them, so
+  const [writeFailure, setWriteFailure] = useState<string | null>(null);
+  // Writes reach the core in the order the user made them, so
   // that the board file ends at the last one, however fast the arrow keys
   // repeat, and a release right after a drag finds the box where the drag
   // left it.
@@ -48,18 +51,36 @@ export function BoardPane({
       await send(
         moves.map(({ element, position }) => toMove(board, element, position)),
       );
-      setMoveFailure(null);
+      setWriteFailure(null);
     },
     [send, board],
   );
   const release = useCallback(
     (element: string, position: XYPosition) => {
       send([toRelease(board, element, position)]).then(
-        () => setMoveFailure(null),
-        (error: unknown) => setMoveFailure(String(error)),
+        () => setWriteFailure(null),
+        (error: unknown) => setWriteFailure(String(error)),
       );
     },
     [send, board],
+  );
+
+  const writeNote = useCallback(
+    (element: string, parts: NoteParts) => {
+      const write = send([toNoteUpdate(element, parts)]).then(
+        () => {
+          setWriteFailure(null);
+          return true;
+        },
+        (error: unknown) => {
+          setWriteFailure(String(error));
+          return false;
+        },
+      );
+      onNoteWrite(write);
+      return write;
+    },
+    [send, onNoteWrite],
   );
 
   const view = state.kind === "loaded" ? state.view : lastView;
@@ -91,9 +112,9 @@ export function BoardPane({
           This board may be out of date: {state.message}
         </p>
       )}
-      {moveFailure !== null && (
+      {writeFailure !== null && (
         <p role="alert" className="board-alert">
-          {moveFailure}
+          {writeFailure}
         </p>
       )}
       <div className="flow">
@@ -101,7 +122,8 @@ export function BoardPane({
           view={view}
           move={move}
           release={release}
-          onMoveFailed={setMoveFailure}
+          writeNote={writeNote}
+          onMoveFailed={setWriteFailure}
           onOpen={onOpen}
         />
       </div>

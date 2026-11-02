@@ -147,9 +147,12 @@ describe("main", () => {
 
     await waitFor(() => expect(client.applied).toHaveLength(1));
     const move = client.applied[0]?.[0];
-    expect(move?.element.existing).toBe("web-shop");
-    expect(move?.x).toBeGreaterThan(0);
-    expect(move?.y).toBe(0);
+    if (move?.op !== "move_element") {
+      throw new Error("no move");
+    }
+    expect(move.element.existing).toBe("web-shop");
+    expect(move.x).toBeGreaterThan(0);
+    expect(move.y).toBe(0);
 
     // The write reloads the board, as a new answer like every IPC reply; the
     // box stays selected, so the next press moves it again.
