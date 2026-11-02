@@ -393,8 +393,13 @@ both paths.
    that name cannot be spawned. Confirm the exit with
    `ListAgents`, which no longer lists an exited teammate,
    rather than waiting for the `shutdown_response`: it can
-   reach you late. Fresh teammates keep one
-   task's context out of the next.
+   reach you late, and neither it nor the exit reliably
+   wakes you. So while a teammate is still listed, never
+   end your turn on it: start a background `sleep 20`
+   (`run_in_background`) and check again when it ends. After
+   five checks, tell the user. A prior lead ended its turn
+   waiting for an exit and stood still until the user asked.
+   Fresh teammates keep one task's context out of the next.
 10. **Start the next task of the plan at once** — the
     user approved the plan, and the review before its last
     commit (step 7) is the checkpoint; asking in between
@@ -442,10 +447,13 @@ forwarding, and mark any forwarded intermediate state as such.
 
 `ListAgents` shows whether a teammate is `running` or
 `idle` when you need its state between notifications. Do
-not start `sleep` timers to wait for a teammate: a timer
-only delays noticing a stall that the idle notification
+not start `sleep` timers to wait for a teammate's result: a
+timer only delays noticing a stall that the idle notification
 already shows — prior sessions lost over ten minutes per
-stall that way.
+stall that way. The one exception is a teammate's exit after
+a shutdown request, which step 9 of Implementing a Task
+checks with a timer, since no notification reliably reports
+it.
 
 ### Teammate Unresponsive
 
