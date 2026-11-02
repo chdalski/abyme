@@ -5,18 +5,18 @@
 //! every variant of the core's operations and references by name, so a new
 //! one breaks the build until it is admitted or refused here.
 //! [`check_board_files`] then decides from the project's files, also by name
-//! for each variant and each mode: a person does not move what lies on a
-//! mirrored board, and a release of a pin keeps the position in the board
-//! file, so that a release from a stale view does not move a box back. These
-//! are rules of this one client, not a boundary: the files stay open to the AI
-//! and to edits by hand, and the position authorizes nothing, since a page
-//! that may call `apply` can also read it. A move the canvas sends pins the
-//! element, since a person placed it there.
+//! for each variant and each mode: on a mirrored board a person moves only a
+//! note, whose file says what it is, and a release of a pin keeps the position
+//! in the board file, so that a release from a stale view does not move a box
+//! back. These are rules of this one client, not a boundary: the files stay
+//! open to the AI and to edits by hand, and the position authorizes nothing,
+//! since a page that may call `apply` can also read it. A move the canvas sends
+//! pins the element, since a person placed it there.
 
 use std::fmt;
 
 use abyme_core::{MAX_OPERATIONS, Operation, Ref, Snapshot};
-use abyme_model::{Board, BoardId, ElementId, Mode};
+use abyme_model::{Board, BoardId, Element, ElementId, Mode};
 
 #[cfg(test)]
 mod tests;
@@ -38,7 +38,8 @@ pub enum Refused {
         /// The kind of operation, named by this module.
         kind: &'static str,
     },
-    /// One operation moves an element on a mirrored board.
+    /// One operation does anything on a mirrored board but move a note and
+    /// keep it pinned.
     Mirrored {
         /// The operation's position in the request, counted from 1.
         position: usize,
@@ -68,8 +69,8 @@ impl fmt::Display for Refused {
             ),
             Self::Mirrored { position, board } => write!(
                 formatter,
-                "operation {position}: board {board} is mirrored, so the canvas may not move its \
-                 elements"
+                "operation {position}: board {board} is mirrored, so the canvas may only move a \
+                 note there and keep it pinned"
             ),
             Self::ReleaseElsewhere { position, board } => write!(
                 formatter,
@@ -109,11 +110,11 @@ pub fn admit(operations: &[Operation]) -> Result<(), Refused> {
 }
 
 /// Checks every operation of a request against the board files of `snapshot`,
-/// as they stand before the request: none moves an element on a mirrored
-/// board, and none releases a pin anywhere but at the element's position in
-/// the file of the board it names. So no request leaves a box at a new position
-/// without a pin. A board `snapshot` does not have passes, and the core rejects
-/// it.
+/// as they stand before the request: on a mirrored board none does anything but
+/// move a note and keep it pinned, and none releases a pin anywhere but at the
+/// element's position in the file of the board it names. So no request leaves a
+/// box at a new position without a pin. A board `snapshot` does not have passes,
+/// and the core rejects it.
 ///
 /// # Errors
 ///
@@ -144,10 +145,11 @@ fn refused_by_board_file(
             Ref::Existing(id) => {
                 let found = snapshot.boards.get(id)?;
                 match found.zone.map(|zone| zone.mode) {
-                    Some(Mode::Mirrored) => Some(Refused::Mirrored {
-                        position,
-                        board: id.clone(),
-                    }),
+                    Some(Mode::Mirrored) => (!keeps_a_note_pinned(snapshot, element, *pinned))
+                        .then(|| Refused::Mirrored {
+                            position,
+                            board: id.clone(),
+                        }),
                     Some(Mode::Free) | None => (*pinned == Some(false)
                         && !lies_at(found, element, *x, *y))
                     .then(|| Refused::ReleaseElsewhere {
@@ -167,6 +169,21 @@ fn refused_by_board_file(
         | Operation::DeleteElement { .. }
         | Operation::CreateRelation { .. }
         | Operation::DeleteRelation { .. } => None,
+    }
+}
+
+/// Whether a move with `pinned` keeps `element` pinned and its file in
+/// `snapshot` says it is a note. A missing file says nothing of the kind.
+fn keeps_a_note_pinned(
+    snapshot: &Snapshot,
+    element: &Ref<ElementId>,
+    pinned: Option<bool>,
+) -> bool {
+    match element {
+        Ref::Existing(element) => {
+            pinned == Some(true) && snapshot.elements.get(element).is_some_and(Element::is_note)
+        }
+        Ref::New(_) => false,
     }
 }
 

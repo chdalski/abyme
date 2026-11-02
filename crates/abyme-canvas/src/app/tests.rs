@@ -717,7 +717,7 @@ fn a_move_on_a_mirrored_board_is_refused_and_writes_nothing() {
     assert_eq!(
         applied,
         Err(json!(
-            "operation 1: board context is mirrored, so the canvas may not move its elements"
+            "operation 1: board context is mirrored, so the canvas may only move a note there and keep it pinned"
         ))
     );
     assert_eq!(project_files(root.path()), before);
@@ -745,7 +745,7 @@ fn a_request_that_also_moves_on_a_mirrored_board_writes_nothing() {
     assert_eq!(
         applied,
         Err(json!(
-            "operation 2: board context is mirrored, so the canvas may not move its elements"
+            "operation 2: board context is mirrored, so the canvas may only move a note there and keep it pinned"
         ))
     );
     assert_eq!(project_files(root.path()), before);
@@ -882,7 +882,7 @@ fn a_release_with_the_position_of_another_board_writes_nothing() {
 }
 
 #[test]
-fn a_release_on_a_mirrored_board_is_refused_like_every_move_there() {
+fn a_release_on_a_mirrored_board_is_refused() {
     let root = tempfile::tempdir().unwrap();
     let (_app, window) = project_with_a_pin(root.path());
     make_context_a_zone(root.path(), MIRRORED);
@@ -893,7 +893,9 @@ fn a_release_on_a_mirrored_board_is_refused_like_every_move_there() {
         .to_string();
 
     assert!(
-        error.contains("board context is mirrored, so the canvas may not move its elements"),
+        error.contains(
+            "board context is mirrored, so the canvas may only move a note there and keep it pinned"
+        ),
         "{error}"
     );
     assert_eq!(project_files(root.path()), before);
@@ -961,6 +963,197 @@ fn a_request_with_one_good_release_and_one_elsewhere_writes_neither() {
     assert!(
         error.contains(&format!("operation 2: {RELEASED_ELSEWHERE}")),
         "{error}"
+    );
+    assert_eq!(project_files(root.path()), before);
+}
+
+/// A move of `element` on `board` that says `pinned: true`.
+fn a_move_of(element: &str, board: &str, x: i64, y: i64) -> Value {
+    json!({
+        "op": "move_element",
+        "element": {"existing": element},
+        "board": {"existing": board},
+        "x": x,
+        "y": y,
+        "pinned": true
+    })
+}
+
+/// `project_with_a_board` with the note `ask` on the board `context` too, which
+/// is a mirrored zone. `ask` lies at 0, 0 on it.
+fn mirrored_board_with_a_note(root: &Path) {
+    project_with_a_board(root);
+    let operations = json!([
+        {"op": "create_element", "key": "n", "type_ref": "note", "name": "Ask",
+         "body": "Why?\n", "statement": "idea"},
+        {"op": "place_element", "element": {"new": "n"}, "board": {"existing": "context"}},
+        {"op": "move_element", "element": {"new": "n"}, "board": {"existing": "context"},
+         "x": 0, "y": 0}
+    ]);
+    let operations: Vec<Operation> = serde_json::from_value(operations).unwrap();
+    Project::discover(root).unwrap().apply(&operations).unwrap();
+    make_context_a_zone(root, MIRRORED);
+}
+
+/// The lines of `new` that are not in `old`, which has as many lines.
+fn new_lines<'a>(old: &str, new: &'a str) -> Vec<&'a str> {
+    assert_eq!(old.lines().count(), new.lines().count());
+    new.lines().filter(|line| !old.contains(line)).collect()
+}
+
+#[test]
+fn a_note_on_a_mirrored_board_moves_and_only_its_line_changes() {
+    let root = tempfile::tempdir().unwrap();
+    mirrored_board_with_a_note(root.path());
+    fs::write(
+        root.path().join("abyme/boards/free-board.board.json"),
+        r#"{"format": 1, "id": "free-board", "title": "Free", "placements": [
+            {"element": "ask", "x": 5, "y": 6, "width": 180, "height": 90}]}"#,
+    )
+    .unwrap();
+    let context = PathBuf::from("abyme/boards/context.board.json");
+    let mut others = project_files(root.path());
+    let before = others.remove(&context).unwrap();
+    let (_app, window) = canvas(root.path());
+
+    apply_from(&window, &json!([a_move_of("ask", "context", 400, 200)])).unwrap();
+
+    let mut files = project_files(root.path());
+    let after = files.remove(&context).unwrap();
+    assert_eq!(files, others);
+    let before = String::from_utf8(before).unwrap();
+    let after = String::from_utf8(after).unwrap();
+    assert_eq!(
+        new_lines(&before, &after),
+        [
+            r#"    {"element": "ask", "x": 400, "y": 200, "width": 180, "height": 90, "pinned": true},"#
+        ]
+    );
+    assert!(after.contains(MIRRORED), "{after}");
+}
+
+#[test]
+fn on_a_mirrored_board_nothing_but_moving_a_note_is_written() {
+    let root = tempfile::tempdir().unwrap();
+    mirrored_board_with_a_note(root.path());
+    let before = project_files(root.path());
+    let (_app, window) = canvas(root.path());
+
+    for refused in [
+        a_move_of("payment-service", "context", 1, 2),
+        a_move_of("orders", "context", 1, 2),
+        a_release_of("ask", "context", 0, 0),
+        a_release_of("ask", "context", 1, 2),
+    ] {
+        let error = apply_from(&window, &json!([refused]))
+            .unwrap_err()
+            .to_string();
+
+        assert!(
+            error.contains(
+                "operation 1: board context is mirrored, so the canvas may only move a note there \
+                 and keep it pinned"
+            ),
+            "{refused}: {error}"
+        );
+        for word in ["Ask", "Why", "payment", "orders"] {
+            assert!(!error.contains(word), "{refused}: {error}");
+        }
+        assert_eq!(project_files(root.path()), before, "{refused}");
+    }
+}
+
+#[test]
+fn a_request_with_a_note_and_anything_else_on_a_mirrored_board_writes_nothing() {
+    let root = tempfile::tempdir().unwrap();
+    mirrored_board_with_a_note(root.path());
+    add_a_free_board(root.path());
+    let before = project_files(root.path());
+    let (_app, window) = canvas(root.path());
+    let note = a_move_of("ask", "context", 400, 200);
+    let plain_box = a_move_of("payment-service", "context", 1, 2);
+    let on_the_free_board = a_move_of("payment-service", "free-board", 1, 2);
+
+    for (request, position) in [
+        (json!([note, plain_box]), 2),
+        (json!([plain_box, note]), 1),
+        (json!([note, on_the_free_board, plain_box]), 3),
+    ] {
+        let error = apply_from(&window, &request).unwrap_err().to_string();
+
+        assert!(
+            error.contains(&format!("operation {position}: board context is mirrored")),
+            "{request}: {error}"
+        );
+        assert_eq!(project_files(root.path()), before, "{request}");
+    }
+}
+
+#[test]
+fn a_move_of_a_note_from_a_stale_view_is_refused_by_what_the_file_says_now() {
+    let root = tempfile::tempdir().unwrap();
+    mirrored_board_with_a_note(root.path());
+    let (_app, window) = canvas(root.path());
+    open_board_from(&window, json!({"board": "context"})).unwrap();
+    let file = root.path().join("abyme/elements/ask.md");
+
+    fs::write(&file, "---\nid: ask\ntype: t\nname: Ask\n---\n").unwrap();
+    let before = project_files(root.path());
+    let retyped = apply_from(&window, &json!([a_move_of("ask", "context", 400, 200)]));
+    assert_eq!(project_files(root.path()), before);
+    assert!(retyped.unwrap_err().to_string().contains("is mirrored"));
+
+    fs::remove_file(&file).unwrap();
+    let before = project_files(root.path());
+    let gone = apply_from(&window, &json!([a_move_of("ask", "context", 400, 200)]));
+    assert_eq!(project_files(root.path()), before);
+    assert!(gone.unwrap_err().to_string().contains("is mirrored"));
+}
+
+#[test]
+fn on_a_mirrored_board_only_the_exact_type_note_moves() {
+    for (type_ref, moves) in [
+        ("note", true),
+        ("Note", false),
+        ("notes", false),
+        ("c4/note", false),
+    ] {
+        let root = tempfile::tempdir().unwrap();
+        project_with_one_element(root.path(), type_ref, "", "");
+        let board = root.path().join("abyme/boards/context.board.json");
+        let text = fs::read_to_string(&board).unwrap();
+        let zoned = text.replace(
+            "\"placements\"",
+            &format!("\"zone\": {MIRRORED}, \"placements\""),
+        );
+        fs::write(&board, zoned).unwrap();
+        let (_app, window) = canvas(root.path());
+
+        let moved = apply_from(&window, &json!([a_move_of("one", "context", 1, 2)]));
+
+        assert_eq!(moved.is_ok(), moves, "{type_ref}: {moved:?}");
+    }
+}
+
+#[test]
+fn a_move_of_a_note_the_mirrored_board_does_not_place_writes_nothing() {
+    let root = tempfile::tempdir().unwrap();
+    mirrored_board_with_a_note(root.path());
+    fs::write(
+        root.path().join("abyme/elements/elsewhere.md"),
+        "---\nid: elsewhere\ntype: note\nname: N\n---\n",
+    )
+    .unwrap();
+    let before = project_files(root.path());
+    let (_app, window) = canvas(root.path());
+
+    let applied = apply_from(&window, &json!([a_move_of("elsewhere", "context", 1, 2)]));
+
+    assert!(
+        applied
+            .unwrap_err()
+            .to_string()
+            .contains("element elsewhere does not lie on board context")
     );
     assert_eq!(project_files(root.path()), before);
 }

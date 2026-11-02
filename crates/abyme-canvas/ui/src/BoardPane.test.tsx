@@ -242,6 +242,53 @@ describe("BoardPane", () => {
     expect((await screen.findByRole("alert")).textContent).toBe(message);
   });
 
+  describe("a note on a mirrored board", () => {
+    const withANote = (applyFailure: string | null) => {
+      const client = paneWith(applyFailure);
+      client.views = {
+        context: boardView({
+          mode: "mirrored",
+          placements: [
+            placedBox("payments", {
+              shown: { kind: "note", name: "Ask", body: "" },
+            }),
+          ],
+        }),
+      };
+      return client;
+    };
+
+    it("moves and stays pinned", async () => {
+      const client = withANote(null);
+      await openPane(client);
+
+      await dragTogether({ payments: { x: 40, y: 80 } });
+
+      expect(client.applied).toEqual([
+        [
+          {
+            op: "move_element",
+            element: { existing: "payments" },
+            board: { existing: "context" },
+            x: 40,
+            y: 80,
+            pinned: true,
+          },
+        ],
+      ]);
+    });
+
+    it("returns to its place with the message when the move is refused", async () => {
+      const message = "operation 1: board context is mirrored";
+      await openPane(withANote(message));
+
+      await dragTogether({ payments: { x: 40, y: 80 } });
+
+      expect((await screen.findByRole("alert")).textContent).toBe(message);
+      expect(positionsOnCanvas()).toEqual({ payments: { x: 0, y: 0 } });
+    });
+  });
+
   it("gives React Flow no key that deletes a box", async () => {
     await openPane(paneWith(null));
 

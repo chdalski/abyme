@@ -24,8 +24,8 @@ pub struct BoardView {
     pub id: BoardId,
     /// The title shown for the board.
     pub title: String,
-    /// The board's mode, if it is a zone. The UI does not offer a drag on a
-    /// mirrored board.
+    /// The board's mode, if it is a zone. On a mirrored board, the UI offers a
+    /// drag only on a note.
     pub mode: Option<Mode>,
     /// One entry per element on the board, in element-ID order.
     pub placements: Vec<Placement>,

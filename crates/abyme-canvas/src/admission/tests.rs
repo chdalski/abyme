@@ -5,7 +5,9 @@ use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 
 use abyme_core::LocalKey;
-use abyme_model::{Placement, Rect, StatementKind, Zone};
+use abyme_model::{
+    Element, ElementFields, Placement, Rect, Relations, StatementKind, TypeRef, Zone,
+};
 use serde_json::{Value, json};
 
 fn operation(value: Value) -> Operation {
@@ -250,7 +252,7 @@ fn snapshot() -> Snapshot {
 }
 
 #[test]
-fn refuses_a_move_on_a_mirrored_board_and_names_where() {
+fn refuses_a_move_without_a_note_s_file_on_a_mirrored_board_and_names_where() {
     let requests: [(&[&str], usize); 3] = [
         (&["mirrored"], 1),
         (&["free", "plain", "mirrored"], 3),
@@ -291,7 +293,7 @@ fn names_only_the_position_and_the_board_of_a_refused_move() {
 
     assert_eq!(
         refused.to_string(),
-        "operation 2: board mirrored is mirrored, so the canvas may not move its elements"
+        "operation 2: board mirrored is mirrored, so the canvas may only move a note there and keep it pinned"
     );
 }
 
@@ -363,7 +365,7 @@ fn refuses_a_release_of_an_element_its_board_does_not_place() {
 }
 
 #[test]
-fn refuses_a_release_on_a_mirrored_board_as_a_move_there() {
+fn refuses_a_release_without_a_note_s_file_on_a_mirrored_board() {
     assert_eq!(
         check_board_files(&snapshot(), &[a_release_on("mirrored")]),
         Err(Refused::Mirrored {
@@ -392,5 +394,76 @@ fn names_only_the_position_and_the_board_of_a_refused_release() {
         refused.to_string(),
         "operation 2: the canvas releases a pin on board plain only at the position in the board \
          file"
+    );
+}
+
+/// `snapshot` with the note `payments`, which no board places.
+fn snapshot_with_a_note() -> Snapshot {
+    let id: ElementId = "payments".parse().unwrap();
+    let note = Element::new(
+        id.clone(),
+        ElementFields {
+            statement: None,
+            type_ref: TypeRef::try_from("note".to_owned()).unwrap(),
+            name: "Ask".to_owned(),
+            summary: None,
+            body: String::new(),
+            relations: Relations::new(),
+            anchor: None,
+            verified: None,
+        },
+    )
+    .unwrap();
+    let mut snapshot = snapshot();
+    snapshot.elements.insert(id, note);
+    snapshot
+}
+
+#[test]
+fn lets_only_a_move_that_keeps_a_note_pinned_pass_on_a_mirrored_board() {
+    let with_pinned = |pinned: Value| {
+        operation(json!({
+            "op": "move_element",
+            "element": {"existing": "payments"},
+            "board": {"existing": "mirrored"},
+            "x": 10,
+            "y": 20,
+            "pinned": pinned
+        }))
+    };
+    let refused = Err(Refused::Mirrored {
+        position: 1,
+        board: "mirrored".parse().unwrap(),
+    });
+    let without_pinned = operation(json!({
+        "op": "move_element",
+        "element": {"existing": "payments"},
+        "board": {"existing": "mirrored"},
+        "x": 10,
+        "y": 20
+    }));
+    let new_element = operation(json!({
+        "op": "move_element",
+        "element": {"new": "payments"},
+        "board": {"existing": "mirrored"},
+        "x": 10,
+        "y": 20,
+        "pinned": true
+    }));
+
+    assert_eq!(
+        check_board_files(&snapshot_with_a_note(), &[with_pinned(json!(true))]),
+        Ok(())
+    );
+    for not_keeping_a_pin in [with_pinned(json!(false)), without_pinned, new_element] {
+        assert_eq!(
+            check_board_files(&snapshot_with_a_note(), &[not_keeping_a_pin]),
+            refused
+        );
+    }
+    assert_eq!(
+        check_board_files(&snapshot(), &[with_pinned(json!(true))]),
+        refused,
+        "no file says it is a note"
     );
 }

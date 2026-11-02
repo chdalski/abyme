@@ -27,7 +27,7 @@ A mode answers two questions: Who may change things on the board? And is it reco
 | **mirrored** | only reconciliation, i.e. the AI | only from outside in | crate overview that must always be right |
 | **locked** | nobody | none | approved target picture, state of release 1.0 |
 
-Abyme knows the modes free and mirrored so far. In the [[Canvas]], a person cannot move elements on a mirrored board: the canvas offers no drag there and refuses such a move. The AI and edits by hand still change the board.
+Abyme knows the modes free and mirrored so far. In the [[Canvas]], a person moves only [[Presentation#Sticky Notes|sticky notes]] on a mirrored board: the canvas offers no drag on anything else there and refuses such a move. The AI and edits by hand still change the board.
 
 [[Presentation#Sticky Notes|Sticky notes]] are allowed as comments in every mode. They do not change the content of a zone. How reconciliation works is described in [[Reconciliation]].
 

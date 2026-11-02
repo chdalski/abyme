@@ -20,7 +20,7 @@ const NODE_TYPES = { element: ElementBox };
  * A board's boxes and the arrows between them on the canvas. Moving boxes
  * moves their elements; the canvas cannot delete a box, since no delete
  * reaches the board file. Arrows follow from the view and hold no state. A
- * mirrored board offers no release of a pin, as it offers no move.
+ * mirrored board offers no release of a pin, and a move only of a note.
  */
 export function BoardCanvas({
   view,

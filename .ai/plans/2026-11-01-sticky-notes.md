@@ -28,7 +28,7 @@ is the next plan.
 
 - [x] Check and write under one lock
 - [x] A note shows as a note
-- [ ] A note moves on every board
+- [x] A note moves on every board
 - [ ] A failed reload keeps the board
 - [ ] Editing a note's text
 - [ ] Creating a note
@@ -85,16 +85,16 @@ there.
 
 Review path: Security-Hybrid
 
-- [ ] On a mirrored board, the canvas lets a person drag a note, and the admission writes a
+- [x] On a mirrored board, the canvas lets a person drag a note, and the admission writes a
       `move_element` with `pinned: true` of an element whose file says it is a note. An element of
       another type, an element whose file is missing, and a release of a pin stay refused there, by
       position and board.
-- [ ] Rust tests cover each of these states through `apply` over IPC with the bytes of the board file;
+- [x] Rust tests cover each of these states through `apply` over IPC with the bytes of the board file;
       Vitest covers which boxes can be dragged on a mirrored board.
-- [ ] A reader of Canvas and of Boards and Zones can tell what a person may move on a mirrored board.
+- [x] A reader of Canvas and of Boards and Zones can tell what a person may move on a mirrored board.
       The canvas row of the root `CLAUDE.md` no longer says `apply` admits only `move_element` or
       refuses it on a mirrored board; it says that `admission.rs` decides.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
       `cargo fmt --all --check`, `pnpm --dir crates/abyme-canvas/ui check`, and
       `pnpm --dir crates/abyme-canvas/ui test` pass.
 

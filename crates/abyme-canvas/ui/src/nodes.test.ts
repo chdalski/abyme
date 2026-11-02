@@ -50,13 +50,37 @@ describe("toNodes", () => {
     ).toBe(true);
   });
 
-  it("makes every box draggable except on a mirrored board", () => {
+  it("makes a box that is no note draggable except on a mirrored board", () => {
     const draggable = (mode: BoardView["mode"]) =>
       toNodes({ ...VIEW, mode }).map((node) => node.draggable);
 
     expect(draggable("mirrored")).toEqual([false, false]);
     expect(draggable("free")).toEqual([true, true]);
     expect(draggable(null)).toEqual([true, true]);
+  });
+
+  it("makes only a note draggable on a mirrored board", () => {
+    const draggable = (mode: BoardView["mode"]) =>
+      toNodes(
+        boardView({
+          mode,
+          placements: [
+            placedBox("plain"),
+            placedBox("ask", {
+              shown: { kind: "note", name: "Ask", body: "" },
+            }),
+          ],
+        }),
+      ).map((node) => [node.id, node.draggable]);
+
+    expect(draggable("mirrored")).toEqual([
+      ["plain", false],
+      ["ask", true],
+    ]);
+    expect(draggable("free")).toEqual([
+      ["plain", true],
+      ["ask", true],
+    ]);
   });
 
   it("hands the projection's content to the box", () => {

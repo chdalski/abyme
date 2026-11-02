@@ -29,11 +29,12 @@ export type Move = { element: string; position: XYPosition };
 /**
  * The boxes of `view`, one per placement, at the rect from the board file.
  * Every box has the one node type `element`; nothing from the repository
- * chooses a node type, and the node's ID is the validated element ID. A box
- * on a mirrored board cannot be dragged: React Flow goes by this value on the
- * node, also for the arrow keys. Arrows leave at the bottom and arrive at the
- * top; the handles come with the node, since a fresh node after a reload has
- * no measurements and its arrows would vanish until it is measured again.
+ * chooses a node type, and the node's ID is the validated element ID. On a
+ * mirrored board only a note can be dragged: React Flow goes by this value on
+ * the node, also for the arrow keys. It offers what Rust's admission decides.
+ * Arrows leave at the bottom and arrive at the top; the handles come with the
+ * node, since a fresh node after a reload has no measurements and its arrows
+ * would vanish until it is measured again.
  */
 export function toNodes(view: BoardView): ElementNode[] {
   return view.placements.map((placement) => {
@@ -51,7 +52,7 @@ export function toNodes(view: BoardView): ElementNode[] {
         innerBoards: placement.inner_boards,
         pinned: placement.pinned,
       },
-      draggable: view.mode !== "mirrored",
+      draggable: view.mode !== "mirrored" || placement.shown.kind === "note",
       connectable: false,
       handles: [
         {

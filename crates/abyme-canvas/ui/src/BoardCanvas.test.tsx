@@ -386,6 +386,46 @@ describe("the marker of a pin", () => {
 });
 
 describe("a note on the canvas", () => {
+  const onAMirroredBoard = (askIsANote: boolean) =>
+    boardView({
+      mode: "mirrored",
+      placements: [
+        placedBox("plain"),
+        placedBox("ask", {
+          x: 200,
+          pinned: true,
+          ...(askIsANote
+            ? { shown: { kind: "note" as const, name: "Ask", body: "" } }
+            : {}),
+        }),
+      ],
+    });
+
+  it("alone can be dragged on a mirrored board, and offers no release there", () => {
+    const { container } = render(
+      canvasOf(onAMirroredBoard(true), () => Promise.resolve()),
+    );
+
+    expect(
+      [...container.querySelectorAll(DRAGGABLE_BOX)].map((box) =>
+        box.getAttribute("data-id"),
+      ),
+    ).toEqual(["ask"]);
+    expect(screen.queryByRole("button", { name: "Release pin" })).toBeNull();
+  });
+
+  it("loses the drag on a mirrored board when a reload says it is no note", () => {
+    const move = () => Promise.resolve();
+    const { container, rerender } = render(
+      canvasOf(onAMirroredBoard(true), move),
+    );
+
+    rerender(canvasOf(onAMirroredBoard(false), move));
+
+    expect(container.querySelectorAll(DRAGGABLE_BOX)).toHaveLength(0);
+    expect(screen.queryByRole("button", { name: "Release pin" })).toBeNull();
+  });
+
   it("shows its text in place of a box's lines, and no pin marker", () => {
     const { container } = render(
       canvasOf(

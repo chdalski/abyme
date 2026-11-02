@@ -21,8 +21,8 @@ id: string,
  */
 title: string, 
 /**
- * The board's mode, if it is a zone. The UI does not offer a drag on a
- * mirrored board.
+ * The board's mode, if it is a zone. On a mirrored board, the UI offers a
+ * drag only on a note.
  */
 mode: Mode | null, 
 /**
