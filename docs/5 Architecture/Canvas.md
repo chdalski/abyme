@@ -52,9 +52,9 @@ The webview reaches the Rust side through four IPC commands and the event `proje
 
 ## Live Updates
 
-The canvas keeps no copy of the project. Its commands `list_boards` and `open_board` read the project through the core on every call, in the project that the directory the canvas started in lies in.
+The canvas keeps no copy of the project beyond the view it shows. Its commands `list_boards` and `open_board` read the project through the core on every call, in the project that the directory the canvas started in lies in.
 
-The Rust side watches the project's files itself: `abyme/`, `abyme/elements/`, and `abyme/boards/`, each on its own and only while it is a real directory. When a burst of changes has been quiet for a moment, it emits the event `project-changed`, which carries nothing, and the UI asks again for the list, for the open board, and for the review flags. Reading a file raises no event, so the reads that answer an event cannot raise the next one. A write of the AI over MCP, of an editor, or of `git checkout` shows up the same way.
+The Rust side watches the project's files itself: `abyme/`, `abyme/elements/`, and `abyme/boards/`, each on its own and only while it is a real directory. When a burst of changes has been quiet for a moment, it emits the event `project-changed`, which carries nothing, and the UI asks again for the list, for the open board, and for the review flags. When the open board cannot be read again, for example because a merge broke a file, it stays as last loaded with the core's message above it, and a line says it may be out of date; a write then fails with the core's message. A board that never loaded shows the message alone. Reading a file raises no event, so the reads that answer an event cannot raise the next one. A write of the AI over MCP, of an editor, or of `git checkout` shows up the same way.
 
 ## Security
 

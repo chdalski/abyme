@@ -29,7 +29,7 @@ is the next plan.
 - [x] Check and write under one lock
 - [x] A note shows as a note
 - [x] A note moves on every board
-- [ ] A failed reload keeps the board
+- [x] A failed reload keeps the board
 - [ ] Editing a note's text
 - [ ] Creating a note
 - [ ] Deleting a note
@@ -105,13 +105,13 @@ text being typed. This changes what every board shows.
 
 Review path: Security-Hybrid
 
-- [ ] When a reload of an open board fails, the board stays as last loaded with the message above it
+- [x] When a reload of an open board fails, the board stays as last loaded with the message above it
       as text, and a later reload that succeeds removes the message. A first load that fails still
       shows the message alone.
-- [ ] Vitest covers both, and a move or a release during a failed reload shows its own failure as
+- [x] Vitest covers both, and a move or a release during a failed reload shows its own failure as
       text.
-- [ ] A reader of Canvas can tell what the board shows when the project cannot be read.
-- [ ] `pnpm --dir crates/abyme-canvas/ui check` and `pnpm --dir crates/abyme-canvas/ui test` pass.
+- [x] A reader of Canvas can tell what the board shows when the project cannot be read.
+- [x] `pnpm --dir crates/abyme-canvas/ui check` and `pnpm --dir crates/abyme-canvas/ui test` pass.
 
 ### Task 5: Editing a note's text
 

@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import type { ReactFlowProps, XYPosition } from "@xyflow/react";
 import { type FunctionComponent, useContext } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -286,6 +286,128 @@ describe("BoardPane", () => {
 
       expect((await screen.findByRole("alert")).textContent).toBe(message);
       expect(positionsOnCanvas()).toEqual({ payments: { x: 0, y: 0 } });
+    });
+  });
+
+  describe("a failed reload", () => {
+    const OUT_OF_DATE = "This board may be out of date: ";
+    const alerts = () =>
+      screen.queryAllByRole("alert").map((alert) => alert.textContent);
+
+    async function failReload(client: FakeClient, message: string) {
+      client.views.context = message;
+      client.change();
+      await screen.findByText(`${OUT_OF_DATE}${message}`);
+    }
+
+    async function openListening(client: FakeClient) {
+      const rendered = await openPane(client);
+      await waitFor(() => expect(client.listening).toBe(1));
+      return rendered;
+    }
+
+    it("keeps the board and shows the message above it as text, writing nothing", async () => {
+      const message = "<img src=x onerror=alert(1)>";
+      const client = paneWith(null);
+      const { container } = await openListening(client);
+
+      await failReload(client, message);
+
+      expect(alerts()).toEqual([`${OUT_OF_DATE}${message}`]);
+      expect(container.querySelector("img")).toBeNull();
+      expect(screen.getByRole("heading", { name: "Context" })).toBeDefined();
+      expect(positionsOnCanvas()).toEqual({
+        orders: { x: 300, y: 0 },
+        payments: { x: 0, y: 0 },
+      });
+      expect(client.applied).toEqual([]);
+    });
+
+    it("removes its message with the next good reload, writing nothing", async () => {
+      const client = paneWith(null);
+      await openListening(client);
+      await failReload(client, "the file is broken");
+
+      client.views.context = VIEW;
+      client.change();
+
+      await waitFor(() => expect(alerts()).toEqual([]));
+      expect(client.applied).toEqual([]);
+    });
+
+    it("shows a failed move beside it, sends only that move, and puts the box back", async () => {
+      const client = paneWith(null);
+      await openListening(client);
+      await failReload(client, "the file is broken");
+
+      client.applyFailure = "the core cannot read the file";
+      await dragTogether({ payments: { x: 40, y: 80 } });
+
+      await waitFor(() =>
+        expect(alerts()).toEqual([
+          `${OUT_OF_DATE}the file is broken`,
+          "the core cannot read the file",
+        ]),
+      );
+      expect(client.applied).toEqual([
+        [
+          {
+            op: "move_element",
+            element: { existing: "payments" },
+            board: { existing: "context" },
+            x: 40,
+            y: 80,
+            pinned: true,
+          },
+        ],
+      ]);
+      expect(positionsOnCanvas().payments).toEqual({ x: 0, y: 0 });
+    });
+
+    it("shows a failed release beside it", async () => {
+      const client = paneWith(null);
+      await openListening(client);
+      await failReload(client, "the file is broken");
+
+      client.applyFailure = "the core cannot read the file";
+      await releasePayments({ x: 0, y: 0 });
+
+      await waitFor(() =>
+        expect(alerts()).toEqual([
+          `${OUT_OF_DATE}the file is broken`,
+          "the core cannot read the file",
+        ]),
+      );
+    });
+
+    it("removes only its own message with a good reload, not a move's", async () => {
+      const client = paneWith(null);
+      await openListening(client);
+      await failReload(client, "the file is broken");
+      client.applyFailure = "the core cannot read the file";
+      await dragTogether({ payments: { x: 40, y: 80 } });
+      await screen.findByText("the core cannot read the file");
+
+      client.views.context = VIEW;
+      client.change();
+
+      await waitFor(() =>
+        expect(alerts()).toEqual(["the core cannot read the file"]),
+      );
+    });
+
+    it("shows the message alone when the first load fails", async () => {
+      const client = paneWith(null);
+      client.views.context = "the file is broken";
+      const { container } = render(
+        <BoardPane client={client} board="context" onOpen={() => {}} />,
+      );
+
+      expect((await screen.findByRole("alert")).textContent).toBe(
+        "the file is broken",
+      );
+      expect(container.querySelector(".flow")).toBeNull();
+      expect(screen.queryByRole("heading")).toBeNull();
     });
   });
 

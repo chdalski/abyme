@@ -128,7 +128,8 @@ button.element-pin {
 
 /* A message from the core can be any length, and must leave the canvas its
    room. */
-.flags-status {
+.flags-status,
+.board-alert {
   flex: none;
   max-height: 4.5rem;
   margin: 0.25rem 0;

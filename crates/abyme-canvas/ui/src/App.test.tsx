@@ -244,6 +244,51 @@ describe("review flags", () => {
   });
 });
 
+describe("a failed reload of the open board", () => {
+  it("keeps the box and its selection through the failure and the recovery", async () => {
+    const client = clientWithBoards();
+    const { container } = await openContext(client);
+    const box = container.querySelector(
+      '.react-flow__node[data-id="payments"]',
+    );
+    if (!(box instanceof HTMLElement)) {
+      throw new Error("no box for payments");
+    }
+    const good = client.views.context;
+    fireEvent.keyDown(box, { key: "Enter" });
+    await waitFor(() => expect(box.classList.contains("selected")).toBe(true));
+
+    client.views.context = "the file is broken";
+    client.change();
+    await screen.findByText(/the file is broken/);
+    expect(box.isConnected).toBe(true);
+    expect(box.classList.contains("selected")).toBe(true);
+
+    client.views.context = good ?? "no view";
+    client.change();
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+    expect(box.isConnected).toBe(true);
+    expect(box.classList.contains("selected")).toBe(true);
+    expect(client.applied).toEqual([]);
+  });
+
+  it("does not carry the kept board over to another one", async () => {
+    const client = clientWithBoards();
+    await openContext(client);
+    client.views.context = "the file is broken";
+    client.change();
+    await screen.findByText(/the file is broken/);
+
+    client.views.containers = "no board has the ID containers";
+    fireEvent.click(screen.getByRole("button", { name: "Containers" }));
+
+    await screen.findByText("no board has the ID containers");
+    expect(screen.queryByText("Payments")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Context" })).toBeNull();
+    expect(screen.queryByText(/out of date/)).toBeNull();
+  });
+});
+
 describe("review flags stay current", () => {
   beforeEach(() => {
     vi.useFakeTimers({
