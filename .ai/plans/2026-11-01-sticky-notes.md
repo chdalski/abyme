@@ -27,7 +27,7 @@ is the next plan.
 ## Steps
 
 - [x] Check and write under one lock
-- [ ] A note shows as a note
+- [x] A note shows as a note
 - [ ] A note moves on every board
 - [ ] A failed reload keeps the board
 - [ ] Editing a note's text
@@ -61,20 +61,20 @@ whole text. It is not a box with a type line.
 
 Review path: Security-Hybrid
 
-- [ ] `open_board` returns an element of type `note` with its name and body; for every other type
+- [x] `open_board` returns an element of type `note` with its name and body; for every other type
       it still returns no body, as a test shows.
-- [ ] A note on the canvas shows its whole text as text in one fixed color, in the same node type as
+- [x] A note on the canvas shows its whole text as text in one fixed color, in the same node type as
       a box, with its review mark and without a pin marker. Its box on the screen grows with the
       text, and its rect in the board file does not change.
-- [ ] A name without ASCII letters or digits on an element of type `note` gives the ID `note`, then
+- [x] A name without ASCII letters or digits on an element of type `note` gives the ID `note`, then
       `note-2`, for the AI as for the canvas; other types keep `element`.
-- [ ] Rust tests go through IPC and through `apply`; Vitest covers the note, markup in its text, and
+- [x] Rust tests go through IPC and through `apply`; Vitest covers the note, markup in its text, and
       a note whose file has only a name.
-- [ ] A reader of Canvas and Presentation can tell how a note is recognized and shown, and that its
+- [x] A reader of Canvas and Presentation can tell how a note is recognized and shown, and that its
       color is fixed; Data Model's rule on slugs states the fallback. The Glossary's entry on a sticky
       note says it is an element of type `note`. Neither Canvas nor a comment in the canvas crate says
       the projection never carries a body: they say it carries only a note's.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
       `cargo fmt --all --check`, `pnpm --dir crates/abyme-canvas/ui check`, and
       `pnpm --dir crates/abyme-canvas/ui test` pass.
 
@@ -207,6 +207,14 @@ Review path: Security-Hybrid
 - [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
       `cargo fmt --all --check`, `pnpm --dir crates/abyme-canvas/ui check`, and
       `pnpm --dir crates/abyme-canvas/ui test` pass.
+
+## Task Notes
+
+- Task 5: on a long note that owns a board, the `▸` button at the rect's lower edge lies over part of
+  the text; check it while working on the note's text field.
+- Task 6: the last sentence of the slug rule in `docs/5 Architecture/Data Model.md`, "A sticky note's
+  slug will come from its first words, or be `note` if it has no text.", doubles the fallback and is in
+  the future tense; state what is built.
 
 ## Decisions
 

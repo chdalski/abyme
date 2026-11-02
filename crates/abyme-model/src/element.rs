@@ -27,6 +27,9 @@ mod yaml;
 /// emitter writes it.
 pub const MAX_FRONTMATTER_BYTES: usize = 64 * 1024;
 
+/// The type of a sticky note: an element of exactly this type is one.
+pub const NOTE_TYPE: &str = "note";
+
 /// How many characters of an unknown statement kind an error shows.
 const STATEMENT_DETAIL_LIMIT: usize = 200;
 
@@ -369,6 +372,12 @@ impl Element {
     #[must_use]
     pub const fn type_ref(&self) -> &TypeRef {
         &self.fields.type_ref
+    }
+
+    /// Whether the element is a sticky note.
+    #[must_use]
+    pub fn is_note(&self) -> bool {
+        self.fields.type_ref.as_str() == NOTE_TYPE
     }
 
     /// The element's name.

@@ -8,6 +8,7 @@ import { createContext, useContext } from "react";
 
 import { type FlagMarks, NO_MARKS } from "./flags";
 import type { ElementData, ElementNode } from "./nodes";
+import { noteText } from "./notes";
 
 /** Opens a board: how a box reaches the app's choice of the open board. */
 export const OpenBoard = createContext<(board: string) => void>(() => {});
@@ -111,7 +112,7 @@ export function ElementBox({
         className="element-handle"
       />
       <ElementContent element={data.element} shown={data.shown} />
-      {data.pinned && (
+      {data.pinned && data.shown.kind !== "note" && (
         <PinMarker
           element={data.element}
           position={{ x: positionAbsoluteX, y: positionAbsoluteY }}
@@ -130,8 +131,8 @@ export function ElementBox({
 }
 
 /**
- * What a box shows: the element's type, name, and summary, or a note that
- * its file is missing. Text from the repository is rendered as text only.
+ * What a box shows: the element's type, name, and summary, a sticky note's
+ * whole text, or a note that its file is missing. Text from the repository is rendered as text only.
  */
 export function ElementContent({
   element,
@@ -146,6 +147,12 @@ export function ElementContent({
           {shown.summary !== null && (
             <p className="element-summary">{shown.summary}</p>
           )}
+        </div>
+      );
+    case "note":
+      return (
+        <div className="element element-note">
+          {noteText(shown.name, shown.body)}
         </div>
       );
     case "missing":

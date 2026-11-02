@@ -385,6 +385,32 @@ describe("the marker of a pin", () => {
   });
 });
 
+describe("a note on the canvas", () => {
+  it("shows its text in place of a box's lines, and no pin marker", () => {
+    const { container } = render(
+      canvasOf(
+        boardView({
+          placements: [
+            placedBox("ask", {
+              pinned: true,
+              shown: { kind: "note", name: "Ask why", body: "It retries." },
+            }),
+          ],
+        }),
+        () => Promise.resolve(),
+      ),
+    );
+
+    const note = box(container, "ask");
+    expect(note.querySelector(".element-note")?.textContent).toBe(
+      "Ask why\nIt retries.",
+    );
+    expect(note.querySelector(".element-type")).toBeNull();
+    expect(note.querySelector(".element-pin")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Release pin" })).toBeNull();
+  });
+});
+
 describe("inner boards on a box", () => {
   it("offers a button per inner board that opens it, and writes nothing", () => {
     const move = vi.fn(() => Promise.resolve());

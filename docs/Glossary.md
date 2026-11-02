@@ -31,7 +31,7 @@ The docs, the UI, and the code use these terms alike. The type names are in [[Da
 | [[Relations\|Relation kind]] | concerns / depends_on / describes / see_also / uses; later corresponds_to / replaces; contains is not stored, the inner board shows it |
 | [[First Slice#MVP\|Docs map]] | the Markdown documents of a repo as document representations, with relations to the code they describe |
 | [[Presentation]] | how an element appears on the board: box, card, note, document, image, chart, table |
-| [[Presentation#Sticky Notes\|Sticky note]] | native element with the presentation note, free or attached |
+| [[Presentation#Sticky Notes\|Sticky note]] | native element of the type `note`, free or attached |
 | [[Presentation#Sticky Notes\|Attach]] | hang an element on another one so it moves along; layout, not content |
 | [[Data Model\|Placement]] | where and how an element lies on a board: rectangle, presentation, home or reference |
 | [[Placement and Layout#Layered Layout\|Auto-layout]] | the operation `layout_board`: arranges a board as a layered diagram from its elements and relations, and leaves pinned boxes where they are |

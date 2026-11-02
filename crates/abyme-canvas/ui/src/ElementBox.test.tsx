@@ -36,6 +36,46 @@ describe("ElementContent", () => {
     expect(screen.getByText("Missing element orders")).toBeDefined();
   });
 
+  it("shows a note's whole text, without its name standing apart", () => {
+    const { container } = render(
+      <ElementContent
+        element="ask"
+        shown={{ kind: "note", name: "Ask why", body: "It retries.\nTwice." }}
+      />,
+    );
+
+    expect(container.querySelector(".element-note")?.textContent).toBe(
+      "Ask why\nIt retries.\nTwice.",
+    );
+  });
+
+  it("shows a note with an empty body", () => {
+    const { container } = render(
+      <ElementContent
+        element="ask"
+        shown={{ kind: "note", name: "Ask why", body: "" }}
+      />,
+    );
+
+    expect(container.querySelector(".element-note")?.textContent).toBe(
+      "Ask why",
+    );
+  });
+
+  it.each(MARKUP)("shows %s in a note's name and body as text", (text) => {
+    const { container } = render(
+      <ElementContent
+        element="ask"
+        shown={{ kind: "note", name: text, body: text }}
+      />,
+    );
+
+    expect(container.querySelector(".element-note")?.textContent).toBe(
+      `${text}\n${text}`,
+    );
+    expect(container.querySelector("img, script, a[href]")).toBeNull();
+  });
+
   it.each(MARKUP)("shows %s in every field as text", (text) => {
     const { container } = render(
       <ElementContent

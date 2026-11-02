@@ -1,9 +1,9 @@
 //! What the UI shows of a board, computed from the core's snapshot by pure
 //! functions.
 //!
-//! The projection names its fields one by one and never carries an
-//! element's body: the UI shows a box per placement, and the body is not
-//! part of it.
+//! The projection names its fields one by one and carries no element's body
+//! but a note's: the UI shows a box per placement, and only a note shows its
+//! whole text.
 
 use std::iter::successors;
 
@@ -89,6 +89,13 @@ pub enum Shown {
         /// The one-line summary, if the element has one.
         summary: Option<String>,
     },
+    /// A sticky note's whole text.
+    Note {
+        /// The first line of its text.
+        name: String,
+        /// The rest of its text.
+        body: String,
+    },
     /// The board places an element whose file is missing.
     Missing,
 }
@@ -148,6 +155,22 @@ fn relation(shown: ShownRelation<'_>) -> Relation {
     }
 }
 
+/// What a box shows of `element`.
+fn shown(element: &Element) -> Shown {
+    if element.is_note() {
+        Shown::Note {
+            name: element.name().to_owned(),
+            body: element.body().to_owned(),
+        }
+    } else {
+        Shown::Element {
+            type_ref: element.type_ref().as_str().to_owned(),
+            name: element.name().to_owned(),
+            summary: element.summary().map(str::to_owned),
+        }
+    }
+}
+
 fn placement(
     snapshot: &Snapshot,
     tree: &BoardTree,
@@ -162,11 +185,7 @@ fn placement(
         y: rect.y,
         width: rect.width.get(),
         height: rect.height.get(),
-        shown: element.map_or(Shown::Missing, |element| Shown::Element {
-            type_ref: element.type_ref().as_str().to_owned(),
-            name: element.name().to_owned(),
-            summary: element.summary().map(str::to_owned),
-        }),
+        shown: element.map_or(Shown::Missing, shown),
         inner_boards: tree
             .owned_by(id)
             .filter_map(|board| entry(snapshot, board))

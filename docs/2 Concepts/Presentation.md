@@ -28,7 +28,7 @@ Relations appear as arrows. Type packs define default presentations per type, e.
 
 ## Sticky Notes
 
-A sticky note is a native element with the presentation “note”. Its color comes from the [[Boards and Zones#Statement Kind|statement kind]], such as yellow for an idea and orange for a question, and can be changed freely.
+A sticky note is a native element of the type `note`, by which the canvas and the AI recognize it, so it looks the same on every board. The canvas shows its whole text in one fixed color.
 
 **Attaching:** Dragging a note onto a box attaches it there. Two things happen:
 
@@ -37,7 +37,7 @@ A sticky note is a native element with the presentation “note”. Its color co
 
 ```mermaid
 flowchart LR
-    note["<b>Sticky note</b><br>“Retries on timeouts?”<br>presentation: note<br>statement kind: question"]
+    note["<b>Sticky note</b><br>“Retries on timeouts?”<br>type: note<br>statement kind: question"]
     box["<b>Payment Service</b><br>presentation: box"]
 
     note -->|"concerns: content"| box

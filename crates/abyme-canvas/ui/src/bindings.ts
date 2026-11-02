@@ -121,4 +121,12 @@ name: string,
 /**
  * The one-line summary, if the element has one.
  */
-summary: string | null, } | { "kind": "missing" };
+summary: string | null, } | { "kind": "note", 
+/**
+ * The first line of its text.
+ */
+name: string, 
+/**
+ * The rest of its text.
+ */
+body: string, } | { "kind": "missing" };

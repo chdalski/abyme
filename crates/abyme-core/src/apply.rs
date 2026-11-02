@@ -9,8 +9,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use abyme_model::{
-    Anchor, Board, BoardId, Element, ElementFields, ElementId, ElementProblem, Placement,
-    RelationKind, Relations, StatementKind, TypeRef, Zone,
+    Anchor, Board, BoardId, Element, ElementFields, ElementId, ElementProblem, NOTE_TYPE,
+    Placement, RelationKind, Relations, StatementKind, TypeRef, Zone,
 };
 
 use crate::board_tree::BoardTree;
@@ -439,8 +439,13 @@ impl<'snapshot> Draft<'snapshot> {
             .map(|anchor| Anchor::try_from(anchor.to_owned()))
             .transpose()
             .map_err(OperationProblem::InvalidElement)?;
+        let fallback = if type_ref.as_str() == NOTE_TYPE {
+            NOTE_TYPE
+        } else {
+            "element"
+        };
         let id =
-            free_slug(name, "element", &self.taken_elements).ok_or(OperationProblem::NoFreeId)?;
+            free_slug(name, fallback, &self.taken_elements).ok_or(OperationProblem::NoFreeId)?;
         let element = Element::new(
             id.clone(),
             ElementFields {

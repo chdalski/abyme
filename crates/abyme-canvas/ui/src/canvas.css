@@ -156,6 +156,16 @@ button.element-pin {
   overflow-wrap: anywhere;
 }
 
+/* Grows with its text past the node, whose rect stays as in the board file.
+   It stays out of the positioned marks' way, so they lie above its text. */
+.element-note {
+  height: auto;
+  min-height: 100%;
+  overflow: visible;
+  background: #fff4b8;
+  white-space: pre-wrap;
+}
+
 .element-handle {
   visibility: hidden;
 }

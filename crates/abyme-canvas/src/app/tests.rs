@@ -409,6 +409,86 @@ fn write_element(
     .unwrap();
 }
 
+/// A project whose board `context` places the element `one`, whose file has
+/// the given type, further lines of frontmatter, and body.
+fn project_with_one_element(root: &Path, type_ref: &str, frontmatter: &str, body: &str) {
+    Project::init(root).unwrap();
+    fs::create_dir_all(root.join("abyme/elements")).unwrap();
+    fs::write(
+        root.join("abyme/elements/one.md"),
+        format!("---\nid: one\ntype: {type_ref}\nname: N\n{frontmatter}---\n{body}"),
+    )
+    .unwrap();
+    fs::create_dir_all(root.join("abyme/boards")).unwrap();
+    fs::write(
+        root.join("abyme/boards/context.board.json"),
+        r#"{"format": 1, "id": "context", "title": "Context", "placements": [
+            {"element": "one", "x": 0, "y": 0, "width": 180, "height": 90}]}"#,
+    )
+    .unwrap();
+}
+
+/// What `open_board` says the box of `one` shows.
+fn shown_of_one(root: &Path) -> Value {
+    let (_app, window) = canvas(root);
+    let view = open_board_from(&window, json!({"board": "context"})).unwrap();
+    view["placements"][0]["shown"].clone()
+}
+
+#[test]
+fn a_note_shows_its_name_and_body_and_nothing_else_of_its_file() {
+    let root = tempfile::tempdir().unwrap();
+    let stamp = "a".repeat(40);
+    project_with_one_element(
+        root.path(),
+        "note",
+        &format!(
+            "summary: SECRET-SUMMARY\nanchor: src/SECRET-ANCHOR\nstatement: idea\n\
+             verified: \"{stamp}\"\nverified_by: ai\n"
+        ),
+        "The text.\n",
+    );
+
+    assert_eq!(
+        shown_of_one(root.path()),
+        json!({"kind": "note", "name": "N", "body": "The text.\n"})
+    );
+}
+
+#[test]
+fn a_note_with_only_a_name_shows_an_empty_body() {
+    let root = tempfile::tempdir().unwrap();
+    project_with_one_element(root.path(), "note", "", "");
+
+    assert_eq!(
+        shown_of_one(root.path()),
+        json!({"kind": "note", "name": "N", "body": ""})
+    );
+}
+
+#[test]
+fn a_note_s_body_comes_back_unchanged_with_any_character() {
+    let root = tempfile::tempdir().unwrap();
+    let body = "</script><b>x</b>\u{0}\u{2028}end\n";
+    project_with_one_element(root.path(), "note", "", body);
+
+    assert_eq!(shown_of_one(root.path())["body"], json!(body));
+}
+
+#[test]
+fn a_type_that_only_resembles_note_shows_no_body() {
+    for type_ref in ["Note", "NOTE", "notes", "c4/note", "\"note \""] {
+        let root = tempfile::tempdir().unwrap();
+        project_with_one_element(root.path(), type_ref, "", "SECRET-BODY\n");
+
+        let shown = shown_of_one(root.path());
+
+        assert_eq!(shown["kind"], json!("element"), "{type_ref}");
+        assert!(!shown.to_string().contains("SECRET-BODY"), "{type_ref}");
+        assert_eq!(shown.get("body"), None, "{type_ref}");
+    }
+}
+
 #[test]
 fn review_flags_name_each_flagged_element_with_its_highest_level_and_nothing_else() {
     let directory = tempfile::tempdir().unwrap();

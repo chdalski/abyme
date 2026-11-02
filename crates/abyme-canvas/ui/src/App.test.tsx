@@ -96,6 +96,25 @@ describe("review flags", () => {
     expect(screen.queryByRole("status")).toBeNull();
   });
 
+  it("marks a note like a box", async () => {
+    const client = clientWithBoards();
+    client.views.context = boardView({
+      id: "context",
+      title: "Context",
+      placements: [
+        placedBox("ask", {
+          shown: { kind: "note", name: "Ask why", body: "" },
+        }),
+      ],
+    });
+    client.flags = [{ element: "ask", priority: "hint" }];
+
+    const { container } = await openContext(client);
+
+    await waitFor(() => expect(marks(container)).toEqual({ ask: "⚠ hint" }));
+    expect(screen.getByText("Ask why")).toBeDefined();
+  });
+
   it("keeps the box's text and offers no button on a mark", async () => {
     const client = clientWithBoards();
     client.flags = [{ element: "payments", priority: "task" }];
