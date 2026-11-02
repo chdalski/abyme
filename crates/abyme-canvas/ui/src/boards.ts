@@ -62,9 +62,9 @@ export function coalesced(task: () => Promise<void>): () => Promise<void> {
  * Wraps `task` so that its runs never overlap and start in the order of the
  * calls: each call waits until every earlier one has ended, failed or not.
  */
-export function inOrder<T>(
-  task: (input: T) => Promise<void>,
-): (input: T) => Promise<void> {
+export function inOrder<T, R>(
+  task: (input: T) => Promise<R>,
+): (input: T) => Promise<R> {
   let last: Promise<unknown> = Promise.resolve();
   return (input) => {
     const run = last.then(() => task(input));

@@ -1,5 +1,5 @@
 import type { BoardEntry, BoardView, ElementFlag } from "./bindings";
-import type { AbymeClient, AdmittedOperation } from "./client";
+import type { AbymeClient, AdmittedRequest } from "./client";
 
 /**
  * A client for tests: it lists `boards` and opens the boards in `views`,
@@ -14,7 +14,9 @@ export class FakeClient implements AbymeClient {
   static readonly FLAGS = "review_flags";
   boards: BoardEntry[] | string;
   views: Record<string, BoardView | string> = {};
-  applied: AdmittedOperation[][] = [];
+  applied: AdmittedRequest[] = [];
+  /** What a request that creates a note answers. */
+  created = "new-note";
   applyFailure: string | null = null;
   flags: ElementFlag[] | string = [];
   flagCalls = 0;
@@ -41,10 +43,12 @@ export class FakeClient implements AbymeClient {
     return answer(this.views[board] ?? `no board has the ID ${board}`);
   }
 
-  apply(operations: AdmittedOperation[]): Promise<void> {
+  apply(operations: AdmittedRequest): Promise<string[]> {
     this.applied.push(operations);
     return this.applyFailure === null
-      ? Promise.resolve()
+      ? Promise.resolve(
+          operations[0]?.op === "create_element" ? [this.created] : [],
+        )
       : Promise.reject(this.applyFailure);
   }
 

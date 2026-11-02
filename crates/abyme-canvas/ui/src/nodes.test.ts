@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import type { BoardView } from "./bindings";
-import { finishedMoves, keepUiState, returnHome, toNodes } from "./nodes";
+import {
+  type ElementNode,
+  draftNote,
+  finishedMoves,
+  keepUiState,
+  returnHome,
+  toNodes,
+} from "./nodes";
 import { boardView, placedBox } from "./testBoards";
 
 const VIEW: BoardView = boardView({
@@ -91,6 +98,7 @@ describe("toNodes", () => {
         home: { x: -20, y: 300 },
         innerBoards: [],
         pinned: false,
+        draft: null,
       },
       {
         element: "payments",
@@ -103,6 +111,7 @@ describe("toNodes", () => {
         home: { x: 40, y: 80 },
         innerBoards: [],
         pinned: false,
+        draft: null,
       },
     ]);
   });
@@ -170,6 +179,44 @@ describe("keepUiState", () => {
         expect(kept?.data.pinned).toBe(pinned);
       }
     }
+  });
+});
+
+describe("keepUiState and a new note", () => {
+  const written = (draft: ElementNode, createdAs: string): ElementNode => ({
+    ...draft,
+    data: { ...draft.data, draft: { createdAs } },
+  });
+
+  it("keeps a new note through a view that does not list it", () => {
+    const draft = draftNote("+note-1", { x: 1, y: 2 });
+
+    expect(keepUiState(toNodes(VIEW), [draft]).map((node) => node.id)).toEqual([
+      "orders",
+      "payments",
+      "+note-1",
+    ]);
+  });
+
+  it("keeps a written note until a view lists its ID, and then drops it", () => {
+    const draft = written(draftNote("+note-1", { x: 1, y: 2 }), "new-one");
+    const without = keepUiState(toNodes(VIEW), [draft]);
+    expect(without.map((node) => node.id)).toContain("+note-1");
+
+    const listing = boardView({ placements: [placedBox("new-one")] });
+    expect(
+      keepUiState(toNodes(listing), [draft]).map((node) => node.id),
+    ).toEqual(["new-one"]);
+  });
+
+  it("gives a new note no way to be selected or dragged", () => {
+    const draft = draftNote("+note-1", { x: 1, y: 2 });
+
+    expect([draft.selectable, draft.draggable, draft.deletable]).toEqual([
+      false,
+      false,
+      false,
+    ]);
   });
 });
 

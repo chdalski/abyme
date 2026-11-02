@@ -10,7 +10,8 @@ import type { BoardEntry, BoardView, Shown } from "./bindings";
 /**
  * What a box shows: its element's ID and what the projection says of it,
  * its position in the board file, where it returns when a move fails, the
- * boards its element owns, and whether the board file pins it.
+ * boards its element owns, whether the board file pins it, and, for a new note no
+ * file holds yet, the ID the write gave it.
  */
 export type ElementData = {
   element: string;
@@ -18,6 +19,7 @@ export type ElementData = {
   home: XYPosition;
   innerBoards: BoardEntry[];
   pinned: boolean;
+  draft: { createdAs: string | null } | null;
 };
 
 /** A box on the canvas. */
@@ -51,6 +53,7 @@ export function toNodes(view: BoardView): ElementNode[] {
         home,
         innerBoards: placement.inner_boards,
         pinned: placement.pinned,
+        draft: null,
       },
       draggable: view.mode !== "mirrored" || placement.shown.kind === "note",
       connectable: false,
@@ -102,7 +105,8 @@ export function keepUiState(
   current: ElementNode[],
 ): ElementNode[] {
   const held = new Map(current.map((node) => [node.id, node]));
-  return fresh.map((node) => {
+  const listed = new Set(fresh.map((node) => node.id));
+  const kept = fresh.map((node) => {
     const was = held.get(node.id);
     if (was === undefined) {
       return node;
@@ -112,6 +116,45 @@ export function keepUiState(
       ? { ...node, ...selected, position: was.position, dragging: true }
       : { ...node, ...selected };
   });
+  // A new note stays until a view lists it, also when that view was asked for
+  // before the note was written.
+  const drafts = current.filter(
+    ({ data: { draft } }) =>
+      draft !== null &&
+      (draft.createdAs === null || !listed.has(draft.createdAs)),
+  );
+  return [...kept, ...drafts];
+}
+
+/**
+ * A new note at `position` that no file holds yet, under an ID no element can
+ * have. It cannot be selected or dragged, so no move or update ever names it, but
+ * it takes the mouse, which React Flow would turn off for such a node, or its
+ * text field could not be clicked. It has the size the core gives a box without a
+ * file: crates/abyme-core/src/layout/box_size.rs. The two change together.
+ */
+export function draftNote(id: string, position: XYPosition): ElementNode {
+  return {
+    id,
+    type: "element",
+    position,
+    width: 180,
+    height: 90,
+    data: {
+      element: id,
+      shown: { kind: "note", name: "", body: "" },
+      home: position,
+      innerBoards: [],
+      pinned: true,
+      draft: { createdAs: null },
+    },
+    style: { pointerEvents: "all" },
+    selectable: false,
+    draggable: false,
+    deletable: false,
+    connectable: false,
+    handles: [],
+  };
 }
 
 /** `nodes`, with the boxes of `elements` back at their positions in the board file. */

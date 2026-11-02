@@ -1,3 +1,4 @@
+import type { XYPosition } from "@xyflow/react";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 
 import { type NoteParts, noteText, splitNoteText } from "./notes";
@@ -9,6 +10,19 @@ import { type NoteParts, noteText, splitNoteText } from "./notes";
 export const WriteNote = createContext<
   ((element: string, parts: NoteParts) => Promise<boolean>) | null
 >(null);
+
+/**
+ * What becomes of a new note: writing it at its position, which says whether that
+ * worked, or dropping it.
+ */
+export const NewNotes = createContext<{
+  create: (
+    draft: string,
+    position: XYPosition,
+    parts: NoteParts,
+  ) => Promise<boolean>;
+  drop: (draft: string) => void;
+} | null>(null);
 
 /** The rows a text field needs for `text`, at least three. */
 function rowsFor(text: string): number {
@@ -103,19 +117,29 @@ function NoteField({
 
 /**
  * A sticky note's whole text, as text only, which a double-click opens for
- * editing. A written text stays until the board's next view brings a new one.
+ * editing. A written text stays until the board's next view brings a new one. A
+ * new note, at `draftAt`, opens by itself, and once written it writes no more:
+ * it only waits for the view that lists it.
  */
 export function NoteContent({
   element,
   name,
   body,
+  draftAt,
 }: {
   element: string;
   name: string;
   body: string;
+  draftAt?: XYPosition | undefined;
 }) {
-  const write = useContext(WriteNote);
-  const [editing, setEditing] = useState(false);
+  const update = useContext(WriteNote);
+  const newNotes = useContext(NewNotes);
+  const write =
+    draftAt === undefined
+      ? update
+      : newNotes &&
+        ((id: string, parts: NoteParts) => newNotes.create(id, draftAt, parts));
+  const [editing, setEditing] = useState(draftAt !== undefined);
   const fromFile = noteText(name, body);
   const [seen, setSeen] = useState(fromFile);
   const [written, setWritten] = useState<string | null>(null);
@@ -135,6 +159,8 @@ export function NoteContent({
           setEditing(false);
           if (ended !== null) {
             setWritten(ended);
+          } else if (draftAt !== undefined) {
+            newNotes?.drop(element);
           }
         }}
       />
@@ -143,7 +169,7 @@ export function NoteContent({
   return (
     <div
       className="element element-note"
-      onDoubleClick={() => setEditing(true)}
+      onDoubleClick={draftAt === undefined ? () => setEditing(true) : undefined}
     >
       {text}
     </div>

@@ -9,7 +9,7 @@ import { ReleasePin } from "./ElementBox";
 import { FakeClient } from "./fakeClient";
 import { boardView, placedBox } from "./testBoards";
 import type { ElementNode } from "./nodes";
-import { WriteNote } from "./NoteContent";
+import { NewNotes, WriteNote } from "./NoteContent";
 import type { NoteParts } from "./notes";
 
 // jsdom cannot drive React Flow's pointer drag, so React Flow is replaced by
@@ -21,6 +21,13 @@ const flow = vi.hoisted(() => ({
   release: null as ((element: string, position: XYPosition) => void) | null,
   writeNote: null as
     ((element: string, parts: NoteParts) => Promise<boolean>) | null,
+  newNotes: null as {
+    create: (
+      draft: string,
+      position: XYPosition,
+      parts: NoteParts,
+    ) => Promise<boolean>;
+  } | null,
   Probe: (() => null) as FunctionComponent,
 }));
 vi.mock("@xyflow/react", async (original) => ({
@@ -34,6 +41,7 @@ vi.mock("@xyflow/react", async (original) => ({
 flow.Probe = function ReleaseProbe() {
   flow.release = useContext(ReleasePin);
   flow.writeNote = useContext(WriteNote);
+  flow.newNotes = useContext(NewNotes);
   return null;
 };
 
@@ -133,12 +141,12 @@ describe("BoardPane", () => {
     expect(
       client.applied[0]?.map((move) =>
         move.op === "move_element"
-          ? [move.element.existing, move.x, move.y, move.pinned]
+          ? [move.element, move.x, move.y, move.pinned]
           : null,
       ),
     ).toEqual([
-      ["payments", 40, 80, true],
-      ["orders", 340, 80, true],
+      [{ existing: "payments" }, 40, 80, true],
+      [{ existing: "orders" }, 340, 80, true],
     ]);
   });
 
@@ -195,11 +203,11 @@ describe("BoardPane", () => {
       .spyOn(client, "apply")
       .mockImplementationOnce(
         () =>
-          new Promise<void>((resolve) => {
-            finishMove = resolve;
+          new Promise<string[]>((resolve) => {
+            finishMove = () => resolve([]);
           }),
       )
-      .mockResolvedValue();
+      .mockResolvedValue([]);
     await openPane(client);
 
     await dragTogether({ payments: { x: 40, y: 80 } });
@@ -311,11 +319,11 @@ describe("BoardPane", () => {
         .spyOn(client, "apply")
         .mockImplementationOnce(
           () =>
-            new Promise<void>((resolve) => {
-              finishMove = resolve;
+            new Promise<string[]>((resolve) => {
+              finishMove = () => resolve([]);
             }),
         )
-        .mockResolvedValue();
+        .mockResolvedValue([]);
       await openPane(client);
 
       await dragTogether({ payments: { x: 40, y: 80 } });
@@ -342,6 +350,84 @@ describe("BoardPane", () => {
       let written: boolean | null = null;
       await act(async () => {
         written = await writer()("payments", { name: "Ask", body: "" });
+      });
+
+      expect(written).toBe(false);
+      expect(screen.getByRole("alert").textContent).toBe(message);
+      expect(container.querySelector("img")).toBeNull();
+    });
+  });
+
+  describe("creating a note", () => {
+    const creator = () => {
+      const create = flow.newNotes?.create;
+      if (create === undefined) {
+        throw new Error("the pane gave boxes no way to create a note");
+      }
+      return create;
+    };
+
+    it("sends the three operations for this board, behind a move", async () => {
+      const client = paneWith(null);
+      let finishMove = () => {};
+      const apply = vi
+        .spyOn(client, "apply")
+        .mockImplementationOnce(
+          () =>
+            new Promise<string[]>((resolve) => {
+              finishMove = () => resolve([]);
+            }),
+        )
+        .mockResolvedValue(["ask"]);
+      await openPane(client);
+
+      await dragTogether({ payments: { x: 40, y: 80 } });
+      const written = creator()(
+        "+note-1",
+        { x: 1.4, y: 2.6 },
+        { name: "Ask", body: "Why" },
+      );
+      await act(() => Promise.resolve());
+      expect(apply).toHaveBeenCalledTimes(1);
+
+      finishMove();
+      await expect(written).resolves.toBe(true);
+      expect(apply).toHaveBeenLastCalledWith([
+        {
+          op: "create_element",
+          key: "note",
+          type_ref: "note",
+          name: "Ask",
+          body: "Why",
+          statement: "idea",
+        },
+        {
+          op: "place_element",
+          element: { new: "note" },
+          board: { existing: "context" },
+        },
+        {
+          op: "move_element",
+          element: { new: "note" },
+          board: { existing: "context" },
+          x: 1,
+          y: 3,
+          pinned: true,
+        },
+      ]);
+    });
+
+    it("says it failed and shows why, as text", async () => {
+      const message = "<img src=x onerror=alert(1)>";
+      const { container } = await openPane(paneWith(message));
+
+      let written: boolean | null = null;
+      await act(async () => {
+        written = await creator()(
+          "+note-1",
+          { x: 1, y: 2 },
+          { name: "Ask", body: "" },
+        );
       });
 
       expect(written).toBe(false);

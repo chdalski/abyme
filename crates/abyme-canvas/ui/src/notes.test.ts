@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { noteText, splitNoteText, toNoteUpdate } from "./notes";
+import { noteText, splitNoteText, toNewNote, toNoteUpdate } from "./notes";
 
 describe("noteText", () => {
   it("is the name alone when the body is empty", () => {
@@ -62,6 +62,36 @@ describe("splitNoteText", () => {
     expect(splitNoteText("Ask why\nIt retries.\n")).toEqual(
       splitNoteText("Ask why\nIt retries."),
     );
+  });
+});
+
+describe("toNewNote", () => {
+  it("creates, places, and pins a note of the kind idea, at integer coordinates", () => {
+    expect(
+      toNewNote("context", { x: 40.4, y: -80.6 }, { name: "Ask", body: "Why" }),
+    ).toEqual([
+      {
+        op: "create_element",
+        key: "note",
+        type_ref: "note",
+        name: "Ask",
+        body: "Why",
+        statement: "idea",
+      },
+      {
+        op: "place_element",
+        element: { new: "note" },
+        board: { existing: "context" },
+      },
+      {
+        op: "move_element",
+        element: { new: "note" },
+        board: { existing: "context" },
+        x: 40,
+        y: -81,
+        pinned: true,
+      },
+    ]);
   });
 });
 

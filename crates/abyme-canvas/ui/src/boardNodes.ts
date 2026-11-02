@@ -1,10 +1,15 @@
-import { type NodeChange, applyNodeChanges } from "@xyflow/react";
-import { useCallback, useState } from "react";
+import {
+  type NodeChange,
+  type XYPosition,
+  applyNodeChanges,
+} from "@xyflow/react";
+import { useCallback, useRef, useState } from "react";
 
 import type { BoardView } from "./bindings";
 import {
   type ElementNode,
   type Move,
+  draftNote,
   finishedMoves,
   keepUiState,
   returnHome,
@@ -16,7 +21,8 @@ import {
  * replaces them, but keeps what the user selected and is dragging. Every finished move goes
  * to `move`, all moves of one change in one call; when that fails, their
  * boxes return to their positions in the board file and `onMoveFailed`
- * receives the message.
+ * receives the message. A new note lives among the boxes, as React Flow measures
+ * only what this state holds, under an ID no element can have.
  */
 export function useBoardNodes(
   view: BoardView,
@@ -46,5 +52,27 @@ export function useBoardNodes(
     [move, onMoveFailed],
   );
 
-  return { nodes, onNodesChange };
+  const nextDraft = useRef(1);
+  const addDraft = useCallback((position: XYPosition) => {
+    const id = `+note-${String(nextDraft.current)}`;
+    nextDraft.current += 1;
+    setNodes((current) => [...current, draftNote(id, position)]);
+  }, []);
+  const dropDraft = useCallback((id: string) => {
+    setNodes((current) => current.filter((node) => node.id !== id));
+  }, []);
+  const draftWritten = useCallback((id: string, createdAs: string) => {
+    setNodes((current) =>
+      // A view can list the note before the write's answer arrives.
+      current.some((node) => node.id === createdAs)
+        ? current.filter((node) => node.id !== id)
+        : current.map((node) =>
+            node.id === id
+              ? { ...node, data: { ...node.data, draft: { createdAs } } }
+              : node,
+          ),
+    );
+  }, []);
+
+  return { nodes, onNodesChange, addDraft, dropDraft, draftWritten };
 }

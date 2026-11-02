@@ -597,7 +597,7 @@ fn apply_writes_a_move_into_the_board_file() {
 
     let applied = apply_from(&window, &json!([a_move(400, -200)]));
 
-    assert_eq!(applied, Ok(Value::Null));
+    assert_eq!(applied, Ok(json!([])));
     let after = placements(&project);
     let (moved, was) = (&after[&payments].rect, &before[&payments].rect);
     assert_eq!((moved.x, moved.y), (400, -200));
@@ -718,7 +718,7 @@ fn a_move_on_a_mirrored_board_is_refused_and_writes_nothing() {
     assert_eq!(
         applied,
         Err(json!(
-            "operation 1: board context is mirrored, so the canvas may only move a note there and keep it pinned"
+            "operation 1: board context is mirrored, so the canvas may only create a note there, or move one and keep it pinned"
         ))
     );
     assert_eq!(project_files(root.path()), before);
@@ -746,7 +746,7 @@ fn a_request_that_also_moves_on_a_mirrored_board_writes_nothing() {
     assert_eq!(
         applied,
         Err(json!(
-            "operation 2: board context is mirrored, so the canvas may only move a note there and keep it pinned"
+            "operation 2: board context is mirrored, so the canvas may only create a note there, or move one and keep it pinned"
         ))
     );
     assert_eq!(project_files(root.path()), before);
@@ -895,7 +895,7 @@ fn a_release_on_a_mirrored_board_is_refused() {
 
     assert!(
         error.contains(
-            "board context is mirrored, so the canvas may only move a note there and keep it pinned"
+            "board context is mirrored, so the canvas may only create a note there, or move one and keep it pinned"
         ),
         "{error}"
     );
@@ -1034,7 +1034,7 @@ fn a_note_on_a_mirrored_board_moves_and_only_its_line_changes() {
 }
 
 #[test]
-fn on_a_mirrored_board_nothing_but_moving_a_note_is_written() {
+fn on_a_mirrored_board_no_move_but_a_note_s_is_written() {
     let root = tempfile::tempdir().unwrap();
     mirrored_board_with_a_note(root.path());
     let before = project_files(root.path());
@@ -1052,8 +1052,7 @@ fn on_a_mirrored_board_nothing_but_moving_a_note_is_written() {
 
         assert!(
             error.contains(
-                "operation 1: board context is mirrored, so the canvas may only move a note there \
-                 and keep it pinned"
+                "operation 1: board context is mirrored, so the canvas may only create a note there, or move one and keep it pinned"
             ),
             "{refused}: {error}"
         );
@@ -1423,6 +1422,353 @@ fn a_request_with_a_good_update_and_a_refused_one_writes_nothing() {
     }
 }
 
+/// The three operations that create a note on `board`, each to change in a test.
+fn a_new_note(board: &str, name: &str, body: &str) -> Vec<Value> {
+    vec![
+        json!({"op": "create_element", "key": "note", "type_ref": "note", "name": name,
+               "body": body, "statement": "idea"}),
+        json!({"op": "place_element", "element": {"new": "note"}, "board": {"existing": board}}),
+        json!({"op": "move_element", "element": {"new": "note"}, "board": {"existing": board},
+               "x": 400, "y": 200, "pinned": true}),
+    ]
+}
+
+/// What the file of the element `id` holds now.
+fn element_of(root: &Path, id: &str) -> Element {
+    let id: ElementId = id.parse().unwrap();
+    Project::discover(root)
+        .unwrap()
+        .snapshot()
+        .unwrap()
+        .elements
+        .remove(&id)
+        .unwrap()
+}
+
+#[test]
+fn a_new_note_writes_its_file_and_a_pinned_placement_and_returns_its_id() {
+    let root = tempfile::tempdir().unwrap();
+    project_with_a_board(root.path());
+    let (_app, window) = canvas(root.path());
+
+    let created = apply_from(
+        &window,
+        &json!(a_new_note("context", "Ask why", "It retries.\n")),
+    );
+
+    assert_eq!(created, Ok(json!(["ask-why"])));
+    let note = element_of(root.path(), "ask-why");
+    assert!(note.is_note());
+    assert_eq!(note.name(), "Ask why");
+    assert_eq!(note.body(), "It retries.\n");
+    assert_eq!(note.statement(), Some(StatementKind::Idea));
+    assert_eq!(note.summary(), None);
+    assert_eq!(note.anchor(), None);
+    assert_eq!(note.verified(), None);
+    let board = context_file(root.path());
+    assert!(
+        board.contains(r#"{"element": "ask-why", "x": 400, "y": 200"#),
+        "{board}"
+    );
+    assert!(
+        board
+            .lines()
+            .any(|line| line.contains("ask-why") && line.contains(r#""pinned": true"#)),
+        "{board}"
+    );
+}
+
+#[test]
+fn a_move_and_an_update_return_no_ids() {
+    let root = tempfile::tempdir().unwrap();
+    project_with_a_board(root.path());
+    let (_app, window) = canvas(root.path());
+    apply_from(&window, &json!(a_new_note("context", "Ask", ""))).unwrap();
+
+    assert_eq!(apply_from(&window, &json!([a_move(1, 2)])), Ok(json!([])));
+    assert_eq!(
+        apply_from(&window, &json!([an_update_of("ask", "Asked", "")])),
+        Ok(json!([]))
+    );
+}
+
+#[test]
+fn a_new_note_on_a_mirrored_board_leaves_its_other_lines_and_zone() {
+    let root = tempfile::tempdir().unwrap();
+    mirrored_board_with_a_note(root.path());
+    let before = context_file(root.path());
+    let (_app, window) = canvas(root.path());
+
+    let created = apply_from(&window, &json!(a_new_note("context", "Second", "")));
+
+    assert_eq!(created, Ok(json!(["second"])));
+    let after = context_file(root.path());
+    assert_eq!(after.lines().count(), before.lines().count() + 1);
+    for line in before.lines() {
+        // The placement that was the last gains a comma.
+        assert!(
+            after.contains(line.trim_end_matches(',')),
+            "{line}: {after}"
+        );
+    }
+    assert!(after.contains(MIRRORED), "{after}");
+}
+
+/// `base` with `field` set to `value`.
+fn with_field(base: &Value, field: &str, value: Value) -> Value {
+    let mut changed = base.clone();
+    changed[field] = value;
+    changed
+}
+
+/// `base` without `field`.
+fn without_field(base: &Value, field: &str) -> Value {
+    let mut changed = base.clone();
+    changed.as_object_mut().unwrap().remove(field);
+    changed
+}
+
+/// Sends each of `shapes` to a project with a mirrored board `context` and a
+/// free board `free-board`, and checks that it is refused, writes nothing, and
+/// shows no text of the request.
+fn assert_each_writes_nothing(shapes: &[Vec<Value>]) {
+    let root = tempfile::tempdir().unwrap();
+    mirrored_board_with_a_note(root.path());
+    add_a_free_board(root.path());
+    let before = project_files(root.path());
+    let (_app, window) = canvas(root.path());
+
+    for shape in shapes {
+        let request = json!(shape);
+        let error = apply_from(&window, &request).unwrap_err().to_string();
+
+        assert!(!error.contains("SECRET"), "{request}: {error}");
+        assert_eq!(project_files(root.path()), before, "{request}");
+    }
+}
+
+/// The three operations that create a note on `context`, with text a test can
+/// look for.
+fn a_new_note_in_parts() -> [Value; 3] {
+    let good = a_new_note("context", "SECRET-NAME", "SECRET-BODY");
+    [good[0].clone(), good[1].clone(), good[2].clone()]
+}
+
+#[test]
+fn a_new_note_with_anything_beside_it_writes_nothing() {
+    let [create, place, pin] = a_new_note_in_parts();
+    let triple = [create.clone(), place.clone(), pin.clone()];
+    let beside = [
+        a_move_of("payment-service", "context", 1, 2),
+        an_update_of("payment-service", "SECRET-NAME", "SECRET-BODY"),
+        a_release_of("ask", "context", 9, 9),
+    ];
+    let mut shapes: Vec<Vec<Value>> = vec![
+        vec![create.clone()],
+        vec![place.clone()],
+        vec![pin.clone()],
+        vec![create.clone(), place.clone()],
+        vec![create.clone(), pin.clone()],
+        vec![place.clone(), create.clone(), pin.clone()],
+        vec![create, pin, place],
+        triple
+            .iter()
+            .cloned()
+            .chain(a_new_note("free-board", "SECRET-NAME", ""))
+            .collect(),
+    ];
+    for other in beside {
+        shapes.push(
+            std::iter::once(other.clone())
+                .chain(triple.iter().cloned())
+                .collect(),
+        );
+        shapes.push(triple.iter().cloned().chain([other]).collect());
+    }
+
+    assert_each_writes_nothing(&shapes);
+}
+
+#[test]
+fn a_new_note_with_another_key_element_or_board_writes_nothing() {
+    let [create, place, pin] = a_new_note_in_parts();
+
+    assert_each_writes_nothing(&[
+        vec![
+            create.clone(),
+            with_field(&place, "element", json!({"new": "other"})),
+            pin.clone(),
+        ],
+        vec![
+            create.clone(),
+            place.clone(),
+            with_field(&pin, "element", json!({"new": "other"})),
+        ],
+        vec![
+            create.clone(),
+            with_field(&place, "element", json!({"existing": "ask"})),
+            pin.clone(),
+        ],
+        vec![
+            create.clone(),
+            place.clone(),
+            with_field(&pin, "element", json!({"existing": "ask"})),
+        ],
+        vec![
+            create.clone(),
+            place.clone(),
+            with_field(&pin, "board", json!({"existing": "free-board"})),
+        ],
+        vec![
+            create,
+            with_field(&place, "board", json!({"new": "b"})),
+            pin,
+        ],
+    ]);
+}
+
+#[test]
+fn a_new_note_with_any_other_field_of_its_element_writes_nothing() {
+    let [create, place, pin] = a_new_note_in_parts();
+    let elements = [
+        with_field(&create, "type_ref", json!("t")),
+        with_field(&create, "type_ref", json!("Note")),
+        with_field(&create, "summary", json!("SECRET-SUMMARY")),
+        with_field(&create, "summary", json!("")),
+        with_field(&create, "anchor", json!("src")),
+        with_field(&create, "anchor", json!("")),
+        without_field(&create, "statement"),
+        with_field(&create, "statement", Value::Null),
+        with_field(&create, "statement", json!("current")),
+        with_field(&create, "name", json!("")),
+        with_field(&create, "name", json!(" \t ")),
+        with_field(&create, "name", json!("SECRET\nNAME")),
+        with_field(&create, "name", json!("SECRET\rNAME")),
+        with_field(&create, "name", json!("SECRET\u{85}NAME")),
+        with_field(&create, "name", json!("SECRET\u{2028}NAME")),
+        with_field(&create, "name", json!("SECRET\u{2029}NAME")),
+        with_field(&create, "body", json!("SECRET\u{0}BODY")),
+        with_field(&create, "body", json!("SECRET\u{1b}BODY")),
+    ];
+    let shapes: Vec<Vec<Value>> = elements
+        .into_iter()
+        .map(|element| vec![element, place.clone(), pin.clone()])
+        .chain([
+            vec![
+                create.clone(),
+                place.clone(),
+                with_field(&pin, "pinned", json!(false)),
+            ],
+            vec![create, place.clone(), without_field(&pin, "pinned")],
+        ])
+        .collect();
+
+    assert_each_writes_nothing(&shapes);
+}
+
+#[test]
+fn a_new_note_with_a_field_the_format_does_not_read_writes_nothing() {
+    let root = tempfile::tempdir().unwrap();
+    project_with_a_board(root.path());
+    let before = project_files(root.path());
+    let (_app, window) = canvas(root.path());
+
+    for position in 0..3 {
+        let mut shape = a_new_note("context", "N", "");
+        shape[position]["verified"] = json!("x");
+
+        assert!(apply_from(&window, &json!(shape)).is_err(), "{position}");
+        assert_eq!(project_files(root.path()), before, "{position}");
+    }
+}
+
+#[test]
+fn a_new_note_beyond_the_core_s_bound_or_on_an_unknown_board_writes_nothing() {
+    let root = tempfile::tempdir().unwrap();
+    project_with_a_board(root.path());
+    let before = project_files(root.path());
+    let (_app, window) = canvas(root.path());
+    let mut far_away = a_new_note("context", "SECRET-NAME", "SECRET-BODY");
+    far_away[2]["x"] = json!(1_000_001);
+
+    for shape in [
+        far_away,
+        a_new_note("nowhere", "SECRET-NAME", "SECRET-BODY"),
+    ] {
+        let error = apply_from(&window, &json!(shape)).unwrap_err().to_string();
+
+        assert!(!error.contains("SECRET"), "{error}");
+        assert_eq!(project_files(root.path()), before);
+    }
+}
+
+#[test]
+fn a_new_note_s_name_cannot_choose_a_place_outside_its_directory() {
+    let root = tempfile::tempdir().unwrap();
+    project_with_a_board(root.path());
+    let outside = root.path().join("x.md");
+    let (_app, window) = canvas(root.path());
+
+    let created = apply_from(&window, &json!(a_new_note("context", "../../x", "")));
+
+    assert_eq!(created, Ok(json!(["x"])));
+    assert!(root.path().join("abyme/elements/x.md").exists());
+    assert!(!outside.exists());
+}
+
+#[test]
+fn a_new_note_with_the_name_of_an_existing_id_gets_another_one_and_leaves_it() {
+    let root = tempfile::tempdir().unwrap();
+    project_with_a_board(root.path());
+    let existing = PathBuf::from("abyme/elements/payment-service.md");
+    let before = project_files(root.path()).remove(&existing).unwrap();
+    let (_app, window) = canvas(root.path());
+
+    let same_as_a_file = apply_from(
+        &window,
+        &json!(a_new_note("context", "Payment Service", "")),
+    );
+    // `orders` lies on the board, but its file is missing.
+    let same_as_a_placement = apply_from(&window, &json!(a_new_note("context", "Orders", "")));
+
+    assert_eq!(same_as_a_file, Ok(json!(["payment-service-2"])));
+    assert_eq!(same_as_a_placement, Ok(json!(["orders-2"])));
+
+    // `ghost` only owns a board; it has neither a file nor a placement.
+    fs::write(
+        root.path().join("abyme/boards/owned.board.json"),
+        r#"{"format": 1, "id": "owned", "title": "Owned", "owner": "ghost", "placements": []}"#,
+    )
+    .unwrap();
+    let same_as_an_owner = apply_from(&window, &json!(a_new_note("context", "Ghost", "")));
+    assert_eq!(same_as_an_owner, Ok(json!(["ghost-2"])));
+    assert_eq!(
+        project_files(root.path()).remove(&existing).unwrap(),
+        before
+    );
+}
+
+#[test]
+fn text_in_a_new_note_cannot_change_its_other_fields() {
+    let root = tempfile::tempdir().unwrap();
+    project_with_a_board(root.path());
+    let (_app, window) = canvas(root.path());
+    let name = "type: board: \"a\" \\ # b";
+    let body = "---\nid: other\ntype: x\nanchor: src\n---\n<script>alert(1)</script>\n";
+
+    let created = apply_from(&window, &json!(a_new_note("context", name, body))).unwrap();
+
+    let id = created[0].as_str().unwrap();
+    let note = element_of(root.path(), id);
+    assert_eq!(note.id().as_str(), id);
+    assert_eq!(note.name(), name);
+    assert_eq!(note.body(), body);
+    assert!(note.is_note());
+    assert_eq!(note.statement(), Some(StatementKind::Idea));
+    assert_eq!(note.anchor(), None);
+    assert_eq!(note.relations(), &Relations::new());
+}
+
 #[test]
 fn a_move_on_a_free_board_writes_and_keeps_the_zone() {
     let root = tempfile::tempdir().unwrap();
@@ -1432,7 +1778,7 @@ fn a_move_on_a_free_board_writes_and_keeps_the_zone() {
 
     let applied = apply_from(&window, &json!([a_move(400, 200)]));
 
-    assert_eq!(applied, Ok(Value::Null));
+    assert_eq!(applied, Ok(json!([])));
     let written = fs::read_to_string(root.path().join("abyme/boards/context.board.json")).unwrap();
     assert!(
         written.contains(&format!("  \"zone\": {FREE},\n")),

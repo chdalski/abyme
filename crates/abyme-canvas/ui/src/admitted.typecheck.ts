@@ -50,8 +50,48 @@ export function onlyAdmittedOperations(client: AbymeClient): void {
     // @ts-expect-error The canvas says whether a move pins or releases.
     { op: "move_element", element, board, x: 1, y: 2 },
   ]);
+  const create = {
+    op: "create_element",
+    key: "n",
+    type_ref: "note",
+    name: "N",
+    body: "",
+    statement: "idea",
+  } as const;
+  const place = {
+    op: "place_element",
+    element: { new: "n" },
+    board,
+  } as const;
+  const pin = {
+    op: "move_element",
+    element: { new: "n" },
+    board,
+    x: 1,
+    y: 2,
+    pinned: true,
+  } as const;
+  void client.apply([create, place, pin]);
   void client.apply([
-    // @ts-expect-error The canvas may not create elements.
+    // @ts-expect-error The canvas creates only notes.
+    { ...create, type_ref: "c4/container" },
+    place,
+    pin,
+  ]);
+  void client.apply([
+    // @ts-expect-error A new note is of the statement kind idea.
+    { ...create, statement: "current" },
+    place,
+    pin,
+  ]);
+  // @ts-expect-error A new note is created, placed, and pinned, in one request.
+  void client.apply([create]);
+  // @ts-expect-error A new note is created, placed, and pinned, in one request.
+  void client.apply([create, place]);
+  // @ts-expect-error A new note comes with nothing else in its request.
+  void client.apply([create, place, pin, pin]);
+  void client.apply([
+    // @ts-expect-error The canvas may not create elements of any other kind.
     { op: "create_element", key: "e", type_ref: "c4/container", name: "E" },
   ]);
   void client.apply([

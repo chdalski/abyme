@@ -1,8 +1,8 @@
 //! The canvas's side of the IPC boundary: its commands, its one event, its
 //! window, and the watcher that raises the event. The one command that
 //! writes, `apply`, passes a request on only when `admission` admits it, on a
-//! mirrored board it only moves a note, no release leaves its position, and it
-//! changes the text only of a note.
+//! mirrored board it only creates a note or moves one, no release leaves its
+//! position, and it changes the text only of a note.
 //!
 //! No command takes a path: every command works on the project that the
 //! directory the canvas started in lies in, found anew by the core on each
@@ -11,8 +11,8 @@
 use std::error::Error;
 use std::path::{Path, PathBuf};
 
-use abyme_core::{Operations, Project, Snapshot};
-use abyme_model::BoardId;
+use abyme_core::{Created, Operations, Project, Snapshot};
+use abyme_model::{BoardId, ElementId};
 use tauri::webview::NewWindowResponse;
 use tauri::{App, Builder, Emitter as _, Manager as _, Runtime, State, WebviewWindowBuilder};
 
@@ -111,15 +111,16 @@ async fn open_board(start: State<'_, Start>, board: BoardId) -> Result<BoardView
 }
 
 /// Applies `operations` to the project, all or none, once the canvas may send
-/// every one of them, on a mirrored board none does anything but move a note,
-/// none releases a pin anywhere but at the position in the board file, and none
-/// changes the text of anything but a note. The first check comes before any
-/// access to the project. The second runs under the project's lock, on the
-/// reading of the files the write starts from, so no writer that takes the lock
-/// can change them in between. The position catches a stale view and authorizes
-/// nothing.
+/// every one of them, on a mirrored board none does anything but create a note
+/// or move one and keep it pinned, none releases a pin anywhere but at the
+/// position in the board file, and none changes the text of anything but a note.
+/// Returns the IDs of the elements it created, and nothing else of what it wrote.
+/// The first check comes before any access to the project. The second runs under
+/// the project's lock, on the reading of the files the write starts from, so no
+/// writer that takes the lock can change them in between. The position catches a
+/// stale view and authorizes nothing.
 #[tauri::command]
-async fn apply(start: State<'_, Start>, operations: Operations) -> Result<(), String> {
+async fn apply(start: State<'_, Start>, operations: Operations) -> Result<Vec<ElementId>, String> {
     let operations = operations.into_vec();
     admit(&operations).map_err(|refused| refused.to_string())?;
     let start = start.0.clone();
@@ -130,7 +131,15 @@ async fn apply(start: State<'_, Start>, operations: Operations) -> Result<(), St
                 check_board_files(snapshot, &operations)
             })
             .map_err(|error| error.to_string())?
-            .map(|_created| ())
+            .map(|created| {
+                created
+                    .into_iter()
+                    .filter_map(|(_key, created)| match created {
+                        Created::Element(id) => Some(id),
+                        Created::Board(_) => None,
+                    })
+                    .collect()
+            })
             .map_err(|refused| refused.to_string())
     })
     .await

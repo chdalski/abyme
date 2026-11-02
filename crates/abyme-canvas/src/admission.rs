@@ -3,7 +3,8 @@
 //!
 //! [`admit`] is pure and runs before any access to the project. It matches
 //! every variant of the core's operations and references by name, so a new
-//! one breaks the build until it is admitted or refused here.
+//! one breaks the build until it is admitted or refused here. A request that
+//! creates an element is admitted only as a whole, by [`creates_a_note`].
 //! [`check_board_files`] then decides from the project's files, also by name
 //! for each variant and each mode: on a mirrored board a person moves only a
 //! note, whose file says what it is, and a release of a pin keeps the position
@@ -17,7 +18,7 @@
 use std::fmt;
 
 use abyme_core::{MAX_OPERATIONS, Operation, Ref, Snapshot};
-use abyme_model::{Board, BoardId, Element, ElementId, Mode, is_allowed};
+use abyme_model::{Board, BoardId, Element, ElementId, Mode, NOTE_TYPE, StatementKind, is_allowed};
 
 #[cfg(test)]
 mod tests;
@@ -40,7 +41,7 @@ pub enum Refused {
         kind: &'static str,
     },
     /// One operation does anything on a mirrored board but move a note and
-    /// keep it pinned.
+    /// keep it pinned, and is no part of a request that creates a note.
     Mirrored {
         /// The operation's position in the request, counted from 1.
         position: usize,
@@ -76,8 +77,8 @@ impl fmt::Display for Refused {
             ),
             Self::Mirrored { position, board } => write!(
                 formatter,
-                "operation {position}: board {board} is mirrored, so the canvas may only move a \
-                 note there and keep it pinned"
+                "operation {position}: board {board} is mirrored, so the canvas may only create \
+                 a note there, or move one and keep it pinned"
             ),
             Self::NotANote { position } => write!(
                 formatter,
@@ -94,13 +95,13 @@ impl fmt::Display for Refused {
 
 /// Checks that the canvas may send every operation of a request. Admitted
 /// today: moving and pinning an element that exists on a board that exists,
-/// releasing its pin, which says `pinned: false`, and changing the name and body
-/// of an element that exists.
+/// releasing its pin, which says `pinned: false`, changing the name and body of
+/// an element that exists, and, as a whole request, creating a note.
 ///
 /// Whatever page a debug build loads from the dev server's address can send
-/// every operation admitted here, so it can write a note's text into the
-/// repository, where the AI reads it. Admitting another operation needs a
-/// security review of that origin too.
+/// every operation admitted here, so it can create notes on any board and write
+/// their text into the repository, where the AI reads it. Admitting another
+/// operation needs a security review of that origin too.
 ///
 /// # Errors
 ///
@@ -111,6 +112,9 @@ pub fn admit(operations: &[Operation]) -> Result<(), Refused> {
         return Err(Refused::TooMany {
             count: operations.len(),
         });
+    }
+    if creates_a_note(operations) {
+        return Ok(());
     }
     operations
         .iter()
@@ -126,13 +130,17 @@ pub fn admit(operations: &[Operation]) -> Result<(), Refused> {
 /// move a note and keep it pinned, and none releases a pin anywhere but at the
 /// element's position in the file of the board it names. So no request leaves a
 /// box at a new position without a pin. An update changes only an element whose
-/// file says it is a note. A board `snapshot` does not have passes, and the core
-/// rejects it.
+/// file says it is a note. A request that creates a note passes on any board,
+/// and it changes nothing that is there. A board `snapshot` does not have passes,
+/// and the core rejects it.
 ///
 /// # Errors
 ///
 /// Returns [`Refused`] for the first such operation.
 pub fn check_board_files(snapshot: &Snapshot, operations: &[Operation]) -> Result<(), Refused> {
+    if creates_a_note(operations) {
+        return Ok(());
+    }
     operations
         .iter()
         .zip(1..)
@@ -184,6 +192,49 @@ fn refused_by_board_file(
         | Operation::DeleteElement { .. }
         | Operation::CreateRelation { .. }
         | Operation::DeleteRelation { .. } => None,
+    }
+}
+
+/// Whether `operations` is exactly a request that creates one note: its own
+/// statement kind `idea`, placed on a board that exists and pinned where a person
+/// put it. Every field is named, so that a new one breaks the build until it is
+/// admitted or refused here.
+#[expect(
+    clippy::unneeded_field_pattern,
+    reason = "naming every field of the move breaks the build when it gains one, until that field is admitted or refused here"
+)]
+fn creates_a_note(operations: &[Operation]) -> bool {
+    match operations {
+        [
+            Operation::CreateElement {
+                key,
+                type_ref,
+                name,
+                summary: None,
+                body,
+                anchor: None,
+                statement: Some(StatementKind::Idea),
+            },
+            Operation::PlaceElement {
+                element: Ref::New(placed),
+                board: Ref::Existing(placed_on),
+            },
+            Operation::MoveElement {
+                element: Ref::New(moved),
+                board: Ref::Existing(moved_on),
+                x: _,
+                y: _,
+                pinned: Some(true),
+            },
+        ] => {
+            type_ref == NOTE_TYPE
+                && placed == key
+                && moved == key
+                && placed_on == moved_on
+                && is_note_name(name)
+                && is_note_body(body)
+        }
+        _ => false,
     }
 }
 

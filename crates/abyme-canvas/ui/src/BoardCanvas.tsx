@@ -2,45 +2,134 @@ import "@xyflow/react/dist/style.css";
 
 import {
   type NodeMouseHandler,
+  Panel,
   ReactFlow,
+  ReactFlowProvider,
   type XYPosition,
+  useReactFlow,
 } from "@xyflow/react";
-import { useCallback, useMemo } from "react";
+import {
+  type MouseEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+} from "react";
 
 import type { BoardView } from "./bindings";
 import { useBoardNodes } from "./boardNodes";
 import { toEdges } from "./edges";
 import { ElementBox, OpenBoard, ReleasePin } from "./ElementBox";
 import type { ElementNode, Move } from "./nodes";
-import { WriteNote } from "./NoteContent";
+import { NewNotes, WriteNote } from "./NoteContent";
 import type { NoteParts } from "./notes";
 
 /** The one node type the canvas knows. */
 const NODE_TYPES = { element: ElementBox };
 
-/**
- * A board's boxes and the arrows between them on the canvas. Moving boxes
- * moves their elements; the canvas cannot delete a box, since no delete
- * reaches the board file. Arrows follow from the view and hold no state. A
- * mirrored board offers no release of a pin, and a move only of a note.
- */
-export function BoardCanvas({
-  view,
-  move,
-  release,
-  writeNote,
-  onMoveFailed,
-  onOpen,
-}: {
+/** Whether a key pressed in `target` belongs to typing. */
+function isTyping(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    (target instanceof HTMLElement && target.isContentEditable)
+  );
+}
+
+type BoardCanvasProps = {
   view: BoardView;
   move: (moves: Move[]) => Promise<void>;
   release: (element: string, position: XYPosition) => void;
   writeNote: (element: string, parts: NoteParts) => Promise<boolean>;
+  createNote: (
+    position: XYPosition,
+    parts: NoteParts,
+  ) => Promise<string | null>;
   onMoveFailed: (message: string) => void;
   onOpen: (board: string) => void;
-}) {
-  const { nodes, onNodesChange } = useBoardNodes(view, move, onMoveFailed);
+};
+
+/**
+ * A board's boxes and the arrows between them on the canvas. Moving boxes
+ * moves their elements; the canvas cannot delete a box, since no delete
+ * reaches the board file. Arrows follow from the view and hold no state. A
+ * mirrored board offers no release of a pin, and a move only of a note. The key
+ * `N`, a double-click on an empty spot, and the toolbar start a new note, on
+ * every board.
+ */
+export function BoardCanvas(props: BoardCanvasProps) {
+  return (
+    <ReactFlowProvider>
+      <Flow {...props} />
+    </ReactFlowProvider>
+  );
+}
+
+function Flow({
+  view,
+  move,
+  release,
+  writeNote,
+  createNote,
+  onMoveFailed,
+  onOpen,
+}: BoardCanvasProps) {
+  const { nodes, onNodesChange, addDraft, dropDraft, draftWritten } =
+    useBoardNodes(view, move, onMoveFailed);
   const edges = useMemo(() => toEdges(view), [view]);
+  const { screenToFlowPosition } = useReactFlow();
+  const surface = useRef<HTMLDivElement>(null);
+  const mouse = useRef<XYPosition | null>(null);
+
+  const addAtTheMiddle = useCallback(() => {
+    const area = surface.current?.getBoundingClientRect();
+    if (area !== undefined) {
+      addDraft(
+        screenToFlowPosition({
+          x: area.left + area.width / 2,
+          y: area.top + area.height / 2,
+        }),
+      );
+    }
+  }, [addDraft, screenToFlowPosition]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.key.toLowerCase() !== "n" ||
+        event.repeat ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey ||
+        event.shiftKey ||
+        isTyping(event.target)
+      ) {
+        return;
+      }
+      // Otherwise the letter lands in the text field that opens.
+      event.preventDefault();
+      if (mouse.current === null) {
+        addAtTheMiddle();
+      } else {
+        addDraft(screenToFlowPosition(mouse.current));
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [addAtTheMiddle, addDraft, screenToFlowPosition]);
+
+  const onDoubleClick = useCallback(
+    (event: MouseEvent<HTMLDivElement>) => {
+      if (
+        event.target instanceof Element &&
+        event.target.classList.contains("react-flow__pane")
+      ) {
+        addDraft(screenToFlowPosition({ x: event.clientX, y: event.clientY }));
+      }
+    },
+    [addDraft, screenToFlowPosition],
+  );
+
   const openFirstInnerBoard = useCallback<NodeMouseHandler<ElementNode>>(
     (_event, node) => {
       const [first] = node.data.innerBoards;
@@ -52,20 +141,55 @@ export function BoardCanvas({
     [onOpen],
   );
 
+  const newNotes = useMemo(
+    () => ({
+      create: async (draft: string, position: XYPosition, parts: NoteParts) => {
+        const created = await createNote(position, parts);
+        if (created !== null) {
+          draftWritten(draft, created);
+        }
+        return created !== null;
+      },
+      drop: dropDraft,
+    }),
+    [createNote, draftWritten, dropDraft],
+  );
+
   return (
     <OpenBoard.Provider value={onOpen}>
       <ReleasePin.Provider value={view.mode === "mirrored" ? null : release}>
         <WriteNote.Provider value={writeNote}>
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            nodeTypes={NODE_TYPES}
-            onNodesChange={onNodesChange}
-            onNodeDoubleClick={openFirstInnerBoard}
-            nodesConnectable={false}
-            deleteKeyCode={null}
-            fitView
-          />
+          <NewNotes.Provider value={newNotes}>
+            <div
+              ref={surface}
+              className="board-surface"
+              onMouseMove={(event) => {
+                mouse.current = { x: event.clientX, y: event.clientY };
+              }}
+              onMouseLeave={() => {
+                mouse.current = null;
+              }}
+              onDoubleClick={onDoubleClick}
+            >
+              <ReactFlow
+                nodes={nodes}
+                edges={edges}
+                nodeTypes={NODE_TYPES}
+                onNodesChange={onNodesChange}
+                onNodeDoubleClick={openFirstInnerBoard}
+                nodesConnectable={false}
+                deleteKeyCode={null}
+                zoomOnDoubleClick={false}
+                fitView
+              >
+                <Panel position="top-left">
+                  <button type="button" onClick={addAtTheMiddle}>
+                    New note
+                  </button>
+                </Panel>
+              </ReactFlow>
+            </div>
+          </NewNotes.Provider>
         </WriteNote.Provider>
       </ReleasePin.Provider>
     </OpenBoard.Provider>

@@ -150,7 +150,7 @@ describe("main", () => {
     if (move?.op !== "move_element") {
       throw new Error("no move");
     }
-    expect(move.element.existing).toBe("web-shop");
+    expect(move.element).toEqual({ existing: "web-shop" });
     expect(move.x).toBeGreaterThan(0);
     expect(move.y).toBe(0);
 
@@ -163,6 +163,8 @@ describe("main", () => {
     });
     fireEvent.keyDown(box, { key: "ArrowRight" });
     await waitFor(() => expect(client.applied).toHaveLength(2));
-    expect(client.applied[1]?.[0]?.element.existing).toBe("web-shop");
+    expect(client.applied[1]?.[0]).toMatchObject({
+      element: { existing: "web-shop" },
+    });
   });
 });

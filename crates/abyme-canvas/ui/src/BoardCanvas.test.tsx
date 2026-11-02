@@ -34,6 +34,10 @@ function canvasOf(
   release: (element: string, position: XYPosition) => void = () => {},
   writeNote: (element: string, parts: NoteParts) => Promise<boolean> = () =>
     Promise.resolve(true),
+  createNote: (
+    position: XYPosition,
+    parts: NoteParts,
+  ) => Promise<string | null> = () => Promise.resolve("new-note"),
 ) {
   return (
     <div style={{ width: 800, height: 600 }}>
@@ -42,6 +46,7 @@ function canvasOf(
         move={move}
         release={release}
         writeNote={writeNote}
+        createNote={createNote}
         onMoveFailed={() => {}}
         onOpen={onOpen}
       />
@@ -128,6 +133,7 @@ describe("BoardCanvas", () => {
           move={() => Promise.resolve()}
           release={() => {}}
           writeNote={() => Promise.resolve(true)}
+          createNote={() => Promise.resolve("new-note")}
           onOpen={() => {}}
           onMoveFailed={() => {}}
         />
@@ -387,6 +393,375 @@ describe("the marker of a pin", () => {
 
     rerender(canvasOf(view(false), () => Promise.resolve()));
     expect(container.querySelector(".element-pin")).toBeNull();
+  });
+});
+
+describe("creating a note", () => {
+  const plainBoard = () =>
+    boardView({ placements: [placedBox("plain", { x: 300, y: 200 })] });
+  const notes = (container: HTMLElement) =>
+    [...container.querySelectorAll(".react-flow__node")]
+      .map((node) => node.getAttribute("data-id"))
+      .filter((id) => id?.startsWith("+") === true);
+  const fieldOf = () => {
+    const field = screen.getByRole("textbox", { name: "Text of the note" });
+    if (!(field instanceof HTMLTextAreaElement)) {
+      throw new Error("no text area");
+    }
+    return field;
+  };
+  const noop = () => {};
+
+  /** A canvas whose `createNote` is `create`. */
+  function canvasWith(
+    create: (position: XYPosition, parts: NoteParts) => Promise<string | null>,
+    view = plainBoard(),
+  ) {
+    return canvasOf(
+      view,
+      () => Promise.resolve(),
+      noop,
+      noop,
+      () => Promise.resolve(true),
+      create,
+    );
+  }
+
+  /** The element that holds the canvas and follows the mouse. */
+  const surfaceOf = (container: HTMLElement) => {
+    const surface = container.querySelector(".board-surface");
+    if (surface === null) {
+      throw new Error("no surface");
+    }
+    return surface;
+  };
+  const paneOf = (container: HTMLElement) => {
+    const pane = container.querySelector(".react-flow__pane");
+    if (pane === null) {
+      throw new Error("no pane");
+    }
+    return pane;
+  };
+
+  it("starts with the key N at the mouse, with the field open and empty", () => {
+    const create = vi.fn(() => Promise.resolve("new-note"));
+    const { container } = render(canvasWith(create));
+    fireEvent.mouseMove(surfaceOf(container), { clientX: 120, clientY: 60 });
+
+    const notPrevented = fireEvent.keyDown(window, { key: "n" });
+
+    expect(notPrevented).toBe(false);
+    expect(notes(container)).toEqual(["+note-1"]);
+    expect(fieldOf().value).toBe("");
+    expect(document.activeElement).toBe(fieldOf());
+    expect(create).not.toHaveBeenCalled();
+
+    fireEvent.change(fieldOf(), { target: { value: "Ask" } });
+    fireEvent.keyDown(fieldOf(), { key: "Escape" });
+    expect(create).toHaveBeenCalledExactlyOnceWith(
+      { x: 120, y: 60 },
+      { name: "Ask", body: "" },
+    );
+  });
+
+  /** Writes the open note, and returns where it was asked to go. */
+  function writtenAt(
+    create: ReturnType<
+      typeof vi.fn<
+        (position: XYPosition, parts: NoteParts) => Promise<string | null>
+      >
+    >,
+  ) {
+    fireEvent.change(fieldOf(), { target: { value: "Ask" } });
+    fireEvent.keyDown(fieldOf(), { key: "Escape" });
+    return create.mock.calls[0]?.[0];
+  }
+
+  /** A canvas whose surface lies at 10, 20 and is 400 by 200, with its middle at 210, 120. */
+  function placedCanvas() {
+    const create = vi.fn<
+      (position: XYPosition, parts: NoteParts) => Promise<string | null>
+    >(() => Promise.resolve("new-note"));
+    const { container } = render(canvasWith(create));
+    vi.spyOn(surfaceOf(container), "getBoundingClientRect").mockReturnValue({
+      left: 10,
+      top: 20,
+      width: 400,
+      height: 200,
+    } as DOMRect);
+    return { container, create };
+  }
+
+  it("starts in the middle of the view with N when the mouse was never there", () => {
+    const { create } = placedCanvas();
+
+    fireEvent.keyDown(window, { key: "n" });
+
+    expect(writtenAt(create)).toEqual({ x: 210, y: 120 });
+  });
+
+  it("takes a capital N, as with Caps Lock, like a small one", () => {
+    const { create } = placedCanvas();
+
+    fireEvent.keyDown(window, { key: "N" });
+
+    expect(writtenAt(create)).toEqual({ x: 210, y: 120 });
+  });
+
+  it("starts in the middle of the view with N after the mouse has left", () => {
+    const { container, create } = placedCanvas();
+    fireEvent.mouseMove(surfaceOf(container), { clientX: 120, clientY: 60 });
+    fireEvent.mouseLeave(surfaceOf(container));
+
+    fireEvent.keyDown(window, { key: "n" });
+
+    expect(writtenAt(create)).toEqual({ x: 210, y: 120 });
+  });
+
+  it("starts in the middle of the view with the toolbar, wherever the mouse is", () => {
+    const { container, create } = placedCanvas();
+    fireEvent.mouseMove(surfaceOf(container), { clientX: 120, clientY: 60 });
+
+    fireEvent.click(screen.getByRole("button", { name: "New note" }));
+
+    expect(writtenAt(create)).toEqual({ x: 210, y: 120 });
+  });
+
+  it("takes the mouse on a new note, so that its text field can be clicked", () => {
+    const { container } = render(canvasWith(() => Promise.resolve("new-note")));
+
+    fireEvent.keyDown(window, { key: "n" });
+
+    expect(box(container, "+note-1").style.pointerEvents).not.toBe("none");
+  });
+
+  it("leaves one note when a view lists it before the write's answer arrives", async () => {
+    let answer: (id: string) => void = () => {};
+    const create = () =>
+      new Promise<string | null>((resolve) => {
+        answer = resolve;
+      });
+    const { container, rerender } = render(canvasWith(create));
+    fireEvent.keyDown(window, { key: "n" });
+    fireEvent.change(fieldOf(), { target: { value: "Ask" } });
+    fireEvent.keyDown(fieldOf(), { key: "Escape" });
+
+    rerender(
+      canvasWith(
+        create,
+        boardView({
+          placements: [
+            placedBox("new-note", {
+              shown: { kind: "note", name: "Ask", body: "" },
+            }),
+          ],
+        }),
+      ),
+    );
+    await act(async () => {
+      answer("new-note");
+      await Promise.resolve();
+    });
+
+    expect(
+      [...container.querySelectorAll(".react-flow__node")].map((node) =>
+        node.getAttribute("data-id"),
+      ),
+    ).toEqual(["new-note"]);
+  });
+
+  it.each([
+    ["a repeat", { key: "n", repeat: true }],
+    ["Ctrl", { key: "n", ctrlKey: true }],
+    ["Meta", { key: "n", metaKey: true }],
+    ["Alt", { key: "n", altKey: true }],
+    ["Shift", { key: "N", shiftKey: true }],
+    ["another key", { key: "m" }],
+  ])("does not start with %s", (_name, key) => {
+    const { container } = render(canvasWith(() => Promise.resolve("new-note")));
+
+    fireEvent.keyDown(window, key);
+
+    expect(notes(container)).toEqual([]);
+  });
+
+  it("does not start with N in a text field", () => {
+    const { container } = render(canvasWith(() => Promise.resolve("new-note")));
+    fireEvent.keyDown(window, { key: "n" });
+
+    fireEvent.keyDown(fieldOf(), { key: "n" });
+
+    expect(notes(container)).toEqual(["+note-1"]);
+  });
+
+  it("stops listening for the key when it is gone", () => {
+    const { container, unmount } = render(
+      canvasWith(() => Promise.resolve("new-note")),
+    );
+    expect(notes(container)).toEqual([]);
+
+    unmount();
+
+    expect(fireEvent.keyDown(window, { key: "n" })).toBe(true);
+  });
+
+  it("starts with a double-click on an empty spot, at that spot", () => {
+    const create = vi.fn(() => Promise.resolve("new-note"));
+    const { container } = render(canvasWith(create));
+
+    fireEvent.doubleClick(paneOf(container), { clientX: 120, clientY: 60 });
+
+    expect(notes(container)).toEqual(["+note-1"]);
+    fireEvent.change(fieldOf(), { target: { value: "Ask" } });
+    fireEvent.keyDown(fieldOf(), { key: "Escape" });
+    expect(create).toHaveBeenCalledExactlyOnceWith(
+      { x: 120, y: 60 },
+      { name: "Ask", body: "" },
+    );
+  });
+
+  it("does not start with a double-click on a box", () => {
+    const onOpen = vi.fn();
+    const { container } = render(
+      canvasOf(
+        boardView({
+          placements: [
+            placedBox("shop", {
+              inner_boards: [{ id: "inner", title: "Inner" }],
+            }),
+          ],
+        }),
+        () => Promise.resolve(),
+        onOpen,
+      ),
+    );
+
+    fireEvent.doubleClick(box(container, "shop"));
+
+    expect(notes(container)).toEqual([]);
+    expect(onOpen).toHaveBeenCalledExactlyOnceWith("inner");
+  });
+
+  it("starts on a mirrored board too", () => {
+    const { container } = render(
+      canvasWith(
+        () => Promise.resolve("new-note"),
+        boardView({ mode: "mirrored", placements: [placedBox("plain")] }),
+      ),
+    );
+
+    fireEvent.keyDown(window, { key: "n" });
+
+    expect(notes(container)).toEqual(["+note-1"]);
+  });
+
+  it("writes nothing for blank text, and the note goes", () => {
+    const create = vi.fn(() => Promise.resolve("new-note"));
+    const { container } = render(canvasWith(create));
+    fireEvent.keyDown(window, { key: "n" });
+
+    fireEvent.change(fieldOf(), { target: { value: " \n " } });
+    fireEvent.keyDown(fieldOf(), { key: "Escape" });
+
+    expect(create).not.toHaveBeenCalled();
+    expect(notes(container)).toEqual([]);
+  });
+
+  it("writes once, shows the text, and opens no field again until a view lists it", async () => {
+    const create = vi.fn(() => Promise.resolve("new-note"));
+    const { container, rerender } = render(canvasWith(create));
+    fireEvent.keyDown(window, { key: "n" });
+    fireEvent.change(fieldOf(), { target: { value: "Ask" } });
+
+    fireEvent.keyDown(fieldOf(), { key: "Escape" });
+    fireEvent.blur(fieldOf());
+    await waitFor(() => expect(screen.queryByRole("textbox")).toBeNull());
+    expect(create).toHaveBeenCalledOnce();
+    const shown = () =>
+      box(container, "+note-1").querySelector(".element-note");
+    expect(shown()?.textContent).toBe("Ask");
+
+    const waiting = shown();
+    if (waiting === null || waiting === undefined) {
+      throw new Error("no note");
+    }
+    fireEvent.doubleClick(waiting);
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(create).toHaveBeenCalledOnce();
+
+    // A reload that came before the write does not list it yet.
+    rerender(canvasWith(create, plainBoard()));
+    expect(notes(container)).toEqual(["+note-1"]);
+
+    rerender(
+      canvasWith(
+        create,
+        boardView({
+          placements: [
+            placedBox("plain", { x: 300, y: 200 }),
+            placedBox("new-note", {
+              shown: { kind: "note", name: "Ask", body: "" },
+            }),
+          ],
+        }),
+      ),
+    );
+    expect(notes(container)).toEqual([]);
+    expect(box(container, "new-note").textContent).toContain("Ask");
+  });
+
+  it("keeps the field and its text when the write fails", async () => {
+    const create = vi.fn<
+      (position: XYPosition, parts: NoteParts) => Promise<string | null>
+    >(() => Promise.resolve(null));
+    const { container } = render(canvasWith(create));
+    fireEvent.keyDown(window, { key: "n" });
+    fireEvent.change(fieldOf(), { target: { value: "Ask" } });
+
+    fireEvent.keyDown(fieldOf(), { key: "Escape" });
+    await waitFor(() => expect(create).toHaveBeenCalledOnce());
+    await act(() => Promise.resolve());
+
+    expect(fieldOf().value).toBe("Ask");
+    expect(notes(container)).toEqual(["+note-1"]);
+  });
+
+  it("shows markup in a written note as text", async () => {
+    const { container } = render(canvasWith(() => Promise.resolve("new-note")));
+    fireEvent.keyDown(window, { key: "n" });
+    fireEvent.change(fieldOf(), {
+      target: { value: "<img src=x onerror=alert(1)>" },
+    });
+
+    fireEvent.keyDown(fieldOf(), { key: "Escape" });
+
+    await waitFor(() => expect(screen.queryByRole("textbox")).toBeNull());
+    expect(container.querySelector("img")).toBeNull();
+    expect(box(container, "+note-1").textContent).toContain(
+      "<img src=x onerror=alert(1)>",
+    );
+  });
+
+  it("leaves a new note out of a move of the selected boxes", async () => {
+    const move = vi.fn<(moves: Move[]) => Promise<void>>(() =>
+      Promise.resolve(),
+    );
+    const { container } = render(canvasOf(plainBoard(), move));
+    fireEvent.keyDown(window, { key: "n" });
+    const plain = box(container, "plain");
+
+    fireEvent.keyDown(plain, { key: "Enter" });
+    await waitFor(() =>
+      expect(plain.classList.contains("selected")).toBe(true),
+    );
+    fireEvent.keyDown(plain, { key: "ArrowRight" });
+
+    await waitFor(() => expect(move).toHaveBeenCalled());
+    for (const [moves] of move.mock.calls) {
+      for (const { element } of moves) {
+        expect(element.startsWith("+")).toBe(false);
+      }
+    }
   });
 });
 

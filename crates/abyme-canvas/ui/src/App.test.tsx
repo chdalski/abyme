@@ -272,8 +272,8 @@ describe("leaving a board while a note's text is being written", () => {
     let finish = () => {};
     vi.spyOn(client, "apply").mockImplementationOnce(
       () =>
-        new Promise<void>((resolve) => {
-          finish = resolve;
+        new Promise<string[]>((resolve) => {
+          finish = () => resolve([]);
         }),
     );
     const field = await typing(client);
@@ -294,7 +294,7 @@ describe("leaving a board while a note's text is being written", () => {
     let fail: (message: string) => void = () => {};
     vi.spyOn(client, "apply").mockImplementationOnce(
       () =>
-        new Promise<void>((_resolve, reject) => {
+        new Promise<string[]>((_resolve, reject) => {
           fail = reject;
         }),
     );
@@ -338,6 +338,57 @@ describe("leaving a board while a note's text is being written", () => {
     expect(
       await screen.findByRole("heading", { name: "Containers" }),
     ).toBeDefined();
+  });
+
+  describe("with a new note", () => {
+    /** The board `context` is open, with a new note being typed. */
+    async function typingANewNote(client: FakeClient) {
+      await openContext(client);
+      fireEvent.keyDown(window, { key: "n" });
+      const field = screen.getByRole("textbox", { name: "Text of the note" });
+      fireEvent.change(field, { target: { value: "Ask" } });
+      return field;
+    }
+
+    it("goes to the other board once the note is written", async () => {
+      const client = clientWithBoards();
+      let finish = () => {};
+      vi.spyOn(client, "apply").mockImplementationOnce(
+        () =>
+          new Promise<string[]>((resolve) => {
+            finish = () => resolve(["ask"]);
+          }),
+      );
+      const field = await typingANewNote(client);
+
+      fireEvent.blur(field);
+      leave();
+      await settle();
+      expect(screen.getByRole("heading", { name: "Context" })).toBeDefined();
+
+      finish();
+      expect(
+        await screen.findByRole("heading", { name: "Containers" }),
+      ).toBeDefined();
+    });
+
+    it("stays with the text and the message when the note cannot be written", async () => {
+      const client = clientWithBoards();
+      client.applyFailure = "the file is broken";
+      const field = await typingANewNote(client);
+
+      fireEvent.blur(field);
+      leave();
+      await screen.findByRole("alert");
+      await settle();
+
+      expect(screen.getByRole("heading", { name: "Context" })).toBeDefined();
+      expect(
+        screen.getByRole<HTMLTextAreaElement>("textbox", {
+          name: "Text of the note",
+        }).value,
+      ).toBe("Ask");
+    });
   });
 
   it("goes at once without a write", async () => {

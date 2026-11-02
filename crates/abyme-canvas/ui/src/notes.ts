@@ -1,4 +1,6 @@
-import type { NoteUpdate } from "./client";
+import type { XYPosition } from "@xyflow/react";
+
+import type { NewNote, NoteUpdate } from "./client";
 
 /** What a note's text is made of. */
 export type NoteParts = { name: string; body: string };
@@ -29,6 +31,41 @@ export function splitNoteText(text: string): NoteParts | null {
         name: stripped.slice(0, lineBreak.index).trimEnd(),
         body: stripped.slice(lineBreak.index + lineBreak[0].length),
       };
+}
+
+/** The request's name for the element it creates; it reaches no file. */
+const NEW_NOTE_KEY = "note";
+
+/**
+ * The request that creates a note with `parts` on `board` at `position`, rounded
+ * to the integers the board file holds, and pinned: a person placed it there.
+ */
+export function toNewNote(
+  board: string,
+  position: XYPosition,
+  parts: NoteParts,
+): NewNote {
+  const element = { new: NEW_NOTE_KEY };
+  const on = { existing: board };
+  return [
+    {
+      op: "create_element",
+      key: NEW_NOTE_KEY,
+      type_ref: "note",
+      name: parts.name,
+      body: parts.body,
+      statement: "idea",
+    },
+    { op: "place_element", element, board: on },
+    {
+      op: "move_element",
+      element,
+      board: on,
+      x: Math.round(position.x),
+      y: Math.round(position.y),
+      pinned: true,
+    },
+  ];
 }
 
 /** The operation that writes `parts` as the text of the note `element`. */

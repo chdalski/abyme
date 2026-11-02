@@ -29,10 +29,42 @@ export type NoteUpdate = {
 };
 
 /**
- * An operation the canvas may send: the operations `src/admission.rs` admits,
+ * An operation the canvas may send on its own: what `src/admission.rs` admits,
  * typed by hand.
  */
 export type AdmittedOperation = AdmittedMove | NoteUpdate;
+
+/**
+ * The one request that creates an element: a note with its own statement kind
+ * `idea`, placed on a board that exists and pinned where a person put it. Rust
+ * admits it only as a whole.
+ */
+export type NewNote = [
+  {
+    op: "create_element";
+    key: string;
+    type_ref: "note";
+    name: string;
+    body: string;
+    statement: "idea";
+  },
+  {
+    op: "place_element";
+    element: { new: string };
+    board: { existing: string };
+  },
+  {
+    op: "move_element";
+    element: { new: string };
+    board: { existing: string };
+    x: number;
+    y: number;
+    pinned: true;
+  },
+];
+
+/** A request the canvas may send. */
+export type AdmittedRequest = AdmittedOperation[] | NewNote;
 
 /**
  * What the UI asks of the canvas's Rust side. The UI reaches it only through
@@ -44,10 +76,10 @@ export interface AbymeClient {
   /** What the board `board` shows; rejects with the core's message. */
   openBoard(board: string): Promise<BoardView>;
   /**
-   * Applies `operations` to the project, all or none; rejects with the
-   * canvas's or the core's message.
+   * Applies `operations` to the project, all or none, and resolves to the IDs
+   * of the elements it created; rejects with the canvas's or the core's message.
    */
-  apply(operations: AdmittedOperation[]): Promise<void>;
+  apply(operations: AdmittedRequest): Promise<string[]>;
   /**
    * The project's flagged elements with their levels; rejects with why flags
    * are unavailable.
@@ -64,9 +96,7 @@ export interface AbymeClient {
 export const tauriClient: AbymeClient = {
   listBoards: () => invoke<BoardEntry[]>("list_boards"),
   openBoard: (board) => invoke<BoardView>("open_board", { board }),
-  apply: async (operations) => {
-    await invoke("apply", { operations });
-  },
+  apply: (operations) => invoke<string[]>("apply", { operations }),
   reviewFlags: () => invoke<ElementFlag[]>("review_flags"),
   onProjectChanged: (onChange) => listen("project-changed", () => onChange()),
 };

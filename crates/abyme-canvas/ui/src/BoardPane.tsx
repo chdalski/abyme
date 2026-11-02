@@ -5,10 +5,10 @@ import type { BoardView } from "./bindings";
 
 import { BoardCanvas } from "./BoardCanvas";
 import { type BoardState, inOrder, loadBoard } from "./boards";
-import type { AbymeClient, AdmittedOperation } from "./client";
+import type { AbymeClient, AdmittedRequest } from "./client";
 import { useLive } from "./live";
 import { toMove, toRelease } from "./moves";
-import { type NoteParts, toNoteUpdate } from "./notes";
+import { type NoteParts, toNewNote, toNoteUpdate } from "./notes";
 import type { Move } from "./nodes";
 
 /**
@@ -42,8 +42,7 @@ export function BoardPane({
   // repeat, and a release right after a drag finds the box where the drag
   // left it.
   const send = useMemo(
-    () =>
-      inOrder((operations: AdmittedOperation[]) => client.apply(operations)),
+    () => inOrder((request: AdmittedRequest) => client.apply(request)),
     [client],
   );
   const move = useCallback(
@@ -81,6 +80,23 @@ export function BoardPane({
       return write;
     },
     [send, onNoteWrite],
+  );
+  const createNote = useCallback(
+    (position: XYPosition, parts: NoteParts) => {
+      const created = send(toNewNote(board, position, parts)).then(
+        ([id]) => {
+          setWriteFailure(null);
+          return id ?? null;
+        },
+        (error: unknown) => {
+          setWriteFailure(String(error));
+          return null;
+        },
+      );
+      onNoteWrite(created.then((id) => id !== null));
+      return created;
+    },
+    [send, board, onNoteWrite],
   );
 
   const view = state.kind === "loaded" ? state.view : lastView;
@@ -123,6 +139,7 @@ export function BoardPane({
           move={move}
           release={release}
           writeNote={writeNote}
+          createNote={createNote}
           onMoveFailed={setWriteFailure}
           onOpen={onOpen}
         />

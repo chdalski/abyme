@@ -111,7 +111,11 @@ export function ElementBox({
         isConnectable={false}
         className="element-handle"
       />
-      <ElementContent element={data.element} shown={data.shown} />
+      <ElementContent
+        element={data.element}
+        shown={data.shown}
+        draftAt={data.draft === null ? undefined : data.home}
+      />
       {data.pinned && data.shown.kind !== "note" && (
         <PinMarker
           element={data.element}
@@ -137,7 +141,10 @@ export function ElementBox({
 export function ElementContent({
   element,
   shown,
-}: Pick<ElementData, "element" | "shown">) {
+  draftAt,
+}: Pick<ElementData, "element" | "shown"> & {
+  draftAt?: XYPosition | undefined;
+}) {
   switch (shown.kind) {
     case "element":
       return (
@@ -151,7 +158,12 @@ export function ElementContent({
       );
     case "note":
       return (
-        <NoteContent element={element} name={shown.name} body={shown.body} />
+        <NoteContent
+          element={element}
+          name={shown.name}
+          body={shown.body}
+          draftAt={draftAt}
+        />
       );
     case "missing":
       return (

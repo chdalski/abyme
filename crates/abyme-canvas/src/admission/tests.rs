@@ -293,7 +293,7 @@ fn names_only_the_position_and_the_board_of_a_refused_move() {
 
     assert_eq!(
         refused.to_string(),
-        "operation 2: board mirrored is mirrored, so the canvas may only move a note there and keep it pinned"
+        "operation 2: board mirrored is mirrored, so the canvas may only create a note there, or move one and keep it pinned"
     );
 }
 
@@ -466,4 +466,46 @@ fn lets_only_a_move_that_keeps_a_note_pinned_pass_on_a_mirrored_board() {
         refused,
         "no file says it is a note"
     );
+}
+
+/// The three operations that create a note on the board `board`.
+fn a_new_note_on(board: &str) -> Vec<Operation> {
+    [
+        json!({"op": "create_element", "key": "note", "type_ref": "note", "name": "Ask",
+               "body": "", "statement": "idea"}),
+        json!({"op": "place_element", "element": {"new": "note"}, "board": {"existing": board}}),
+        json!({"op": "move_element", "element": {"new": "note"}, "board": {"existing": board},
+               "x": 1, "y": 2, "pinned": true}),
+    ]
+    .into_iter()
+    .map(operation)
+    .collect()
+}
+
+#[test]
+fn admits_and_lets_a_new_note_pass_as_a_whole_request_on_any_board() {
+    for board in ["free", "plain", "mirrored", "nowhere"] {
+        let request = a_new_note_on(board);
+
+        assert_eq!(admit(&request), Ok(()), "{board}");
+        assert_eq!(check_board_files(&snapshot(), &request), Ok(()), "{board}");
+    }
+}
+
+#[test]
+fn a_new_note_with_anything_beside_it_does_not_pass_the_mirrored_check() {
+    let beside = a_move_on("mirrored");
+    let new_note = a_new_note_on("mirrored");
+    let before: Vec<Operation> = std::iter::once(beside.clone())
+        .chain(new_note.iter().cloned())
+        .collect();
+    let after: Vec<Operation> = new_note.iter().cloned().chain([beside]).collect();
+
+    for request in [before, after] {
+        assert!(matches!(
+            check_board_files(&snapshot(), &request),
+            Err(Refused::Mirrored { .. })
+        ));
+        assert!(admit(&request).is_err());
+    }
 }

@@ -31,7 +31,7 @@ is the next plan.
 - [x] A note moves on every board
 - [x] A failed reload keeps the board
 - [x] Editing a note's text
-- [ ] Creating a note
+- [x] Creating a note
 - [ ] Deleting a note
 
 ## Tasks
@@ -156,27 +156,27 @@ board. Only here does the canvas create an element.
 
 Review path: Security-Hybrid
 
-- [ ] The admission takes a request that creates an element only as exactly one
+- [x] The admission takes a request that creates an element only as exactly one
       `create_element` of type `note` with the statement kind `idea`, a name by the same rule as for
       an update of a note's text, a body, and no summary or anchor, then `place_element` and
       `move_element` with `pinned: true` of that key on one existing board, of any mode. Every other
       shape is refused by position, naming no other text; such a request writes nothing.
-- [ ] `N` and a double-click on an empty spot put the note at the mouse; the toolbar and `N` without a
+- [x] `N` and a double-click on an empty spot put the note at the mouse; the toolbar and `N` without a
       known mouse position put it in the middle of the view. Its text field is open at once, and the
       `N` does not land in it. `N` with a modifier, a repeat, or in a text field creates nothing.
-- [ ] The note is written when the input ends, once, at the position it appeared, with its text
+- [x] The note is written when the input ends, once, at the position it appeared, with its text
       split by the rule of Task 5; blank text writes nothing, and the note disappears.
-- [ ] From the moment it appears until the board's next view lists it, the note stays visible, also
+- [x] From the moment it appears until the board's next view lists it, the note stays visible, also
       through a reload that started before the write. `apply` returns the created element's ID for
       this. A failed write keeps the field open with the text.
-- [ ] A double-click on a box that is not a note still opens its first inner board and creates no
+- [x] A double-click on a box that is not a note still opens its first inner board and creates no
       note, and a double-click on an empty spot no longer zooms.
-- [ ] Rust tests cover the accepted request and every refused shape through `apply` over IPC with the
+- [x] Rust tests cover the accepted request and every refused shape through `apply` over IPC with the
       bytes of the files; Vitest covers the three ways, the draft through a reload, and a failed write.
       `admitted.typecheck.ts` covers the request's type.
-- [ ] A reader of Canvas can tell how a note is created, and its Editing section describes what is
+- [x] A reader of Canvas can tell how a note is created, and its Editing section describes what is
       built.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
       `cargo fmt --all --check`, `pnpm --dir crates/abyme-canvas/ui check`, and
       `pnpm --dir crates/abyme-canvas/ui test` pass.
 

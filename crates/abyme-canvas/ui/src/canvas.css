@@ -167,6 +167,11 @@ button.element-pin {
   white-space: pre-wrap;
 }
 
+.board-surface {
+  width: 100%;
+  height: 100%;
+}
+
 .element-note-field {
   display: block;
   box-sizing: border-box;
