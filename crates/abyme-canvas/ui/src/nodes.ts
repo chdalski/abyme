@@ -83,21 +83,22 @@ export function toNodes(view: BoardView): ElementNode[] {
       deletable: placement.shown.kind === "note",
       connectable: false,
       handles: [
+        // No size, as the handles in canvas.css: the two change together.
         {
           type: "target",
           position: Position.Top,
           x: placement.width / 2,
           y: 0,
-          width: 1,
-          height: 1,
+          width: 0,
+          height: 0,
         },
         {
           type: "source",
           position: Position.Bottom,
           x: placement.width / 2,
           y: placement.height,
-          width: 1,
-          height: 1,
+          width: 0,
+          height: 0,
         },
       ],
     };

@@ -171,8 +171,8 @@ describe("BoardCanvas", () => {
       .querySelector(".react-flow__edge-path")
       ?.getAttribute("d");
 
-    expect(path).toMatch(/^M90\.5,91\b/);
-    expect(path).toMatch(/\b90\.5,300$/);
+    expect(path).toMatch(/^M90,90\b/);
+    expect(path).toMatch(/\b90,300$/);
   });
 
   it("moves an arrow with its box", () => {
@@ -1261,10 +1261,10 @@ function layoutOf(element: Element): DOMRect {
   const rect = (x: number, y: number, width: number, height: number) =>
     new DOMRect(x, y, width, height);
   if (element.classList.contains("react-flow__handle-top")) {
-    return rect(87, -3, 6, 6);
+    return rect(90, 0, 0, 0);
   }
   if (element.classList.contains("react-flow__handle-bottom")) {
-    return rect(87, 87, 6, 6);
+    return rect(90, 90, 0, 0);
   }
   return element.classList.contains("react-flow__node")
     ? rect(0, 0, 180, 90)

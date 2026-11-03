@@ -191,8 +191,16 @@ button.element-pin {
   left: 4px;
 }
 
-.element-handle {
+/* Handles have no size, so an arrow ends at the exact middle of the box's
+   edge, before and after React Flow measures them. The handles `toNodes`
+   declares in nodes.ts have no size either: the two change together. */
+.react-flow__handle.element-handle {
   visibility: hidden;
+  width: 0;
+  height: 0;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
 }
 
 .element-type {

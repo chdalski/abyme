@@ -33,7 +33,7 @@ the same code, so that the canvas and the core keep their stated behaviour befor
 - [x] A box placed below fits on its right edge too
 - [x] `Cell` derives nothing it does not use
 - [x] The free space raises its bottom inline
-- [ ] Arrow ends stay where they are after a measure
+- [x] Arrow ends stay where they are after a measure
 - [ ] A box whose file is missing offers neither a release nor a drag
 - [ ] The marks on a box's top edge share it
 - [ ] A window that turns visible asks for flags
@@ -90,13 +90,13 @@ by the canvas's own style, not by copying React Flow's.
 
 Review path: Reviewer-only
 
-- [ ] Handles have no size, declared and drawn, so an arrow leaves at the exact middle of its
+- [x] Handles have no size, declared and drawn, so an arrow leaves at the exact middle of its
       source's bottom edge and arrives at the exact middle of its target's top edge; the existing
       arrow test in `BoardCanvas.test.tsx` asserts `M90,90` and `90,300` for its two boxes.
-- [ ] The declared handle geometry and the canvas's handle style are marked as changing together.
-- [ ] The webview checklist names an arrow between two boxes, looked at after the boxes are
+- [x] The declared handle geometry and the canvas's handle style are marked as changing together.
+- [x] The webview checklist names an arrow between two boxes, looked at after the boxes are
       measured.
-- [ ] `pnpm --dir crates/abyme-canvas/ui check` and `pnpm --dir crates/abyme-canvas/ui test` pass.
+- [x] `pnpm --dir crates/abyme-canvas/ui check` and `pnpm --dir crates/abyme-canvas/ui test` pass.
 
 ### Task 5: A box whose file is missing offers neither a release nor a drag
 
@@ -239,6 +239,11 @@ Review path: Security-Hybrid
 - [ ] The review before the last commit gives the user the webview checklist with every item the
       tasks name.
 - [ ] `pnpm --dir crates/abyme-canvas/ui check` and `pnpm --dir crates/abyme-canvas/ui test` pass.
+
+## Task Notes
+
+- **Task 13:** webview checklist: an arrow between two boxes, looked at after the boxes are measured,
+  ends at the exact middle of the source's bottom edge and of the target's top edge (Task 4).
 
 ## Decisions
 

@@ -23,7 +23,6 @@ share a parent line with one sub-item each.
 
 ## Bugs
 
-- A node's `handles` are 1×1 while the DOM handles are 6×6, so an arrow's end may shift 2 to 3 pixels after a measure: `crates/abyme-canvas/ui/src/nodes.ts` (Reviewer, canvas display Task 4)
 - A real double click on `▸` opens the board on the first click, and the rest of it can land on the new view and go one level deeper; nothing is written, and it is untested in a real webview: `crates/abyme-canvas/ui/src/ElementBox.tsx` (Reviewer, canvas display Task 5)
 - A pinned box whose element file is missing shows the release button, and the core refuses the release with `no element has the ID ...`, as it refuses a drag; a plain marker there would promise nothing. `crates/abyme-canvas/ui/src/ElementBox.tsx`, `PinMarker`. From canvas display, Task 7.
 - On a box narrower than about 110 px (estimated from the CSS), the review mark paints over part of the pin's marker: `crates/abyme-canvas/ui/src/canvas.css` (Reviewer, canvas display Task 8).
@@ -39,6 +38,7 @@ share a parent line with one sub-item each.
 - A full `cargo test --workspace` ended the test process `element_properties` twice, once with SIGKILL and once with the signal unconfirmed (sticky notes Task 1); it passed alone and in the next full runs, cause unknown, and the cgroup's `oom_kill` counter stands above zero: `crates/abyme-model/tests/element_properties.rs` (plan D Task 4).
 - The arrow-key test asserts element, x, and y but not `pinned`; `expect(move?.pinned).toBe(true)` would make it explicit: `crates/abyme-canvas/ui/src/main.test.tsx` (Reviewer, auto-layout Task 4)
 - The order test of `Board::placed` compares with `placements.keys()`, so it pins the map's order but not the element-ID order its doc comment promises; assert the IDs explicitly: `crates/abyme-model/src/board.rs` (Reviewer, attach notes Task 1).
+- The "arrows in a laid-out canvas" fixture measures every element as 180×90 through one `offsetWidth`/`offsetHeight` mock, handles included; a per-element mock would match a browser fully: `crates/abyme-canvas/ui/src/BoardCanvas.test.tsx` (Reviewer, backlog bugs Task 4).
 - No test shows that `detach_note` keeps a pinned note's pin; pin `n` in `detaching_keeps_where_the_note_lies_and_the_relation_and_writes_no_element` and assert it after the detach: `crates/abyme-core/src/apply/tests.rs` (Reviewer, attach notes Task 3).
 - The doc comment of `a_note_beside_the_element` calls the note pinned, but the request places it unpinned: `crates/abyme-mcp/tests/server.rs` (Reviewer, attach notes Task 3).
 - `place_element`'s `UnknownElement` for a missing element cannot be reached, since `resolve_element` looked it up before, so `place_refuses_an_element_the_request_deleted` covers that lookup and not this branch: `crates/abyme-core/src/apply.rs` (Reviewer, auto-layout Task 5)
