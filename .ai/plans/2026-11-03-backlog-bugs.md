@@ -31,7 +31,7 @@ the same code, so that the canvas and the core keep their stated behaviour befor
 ## Steps
 
 - [x] A box placed below fits on its right edge too
-- [ ] `Cell` derives nothing it does not use
+- [x] `Cell` derives nothing it does not use
 - [ ] The free space raises its bottom inline
 - [ ] Arrow ends stay where they are after a measure
 - [ ] A box whose file is missing offers neither a release nor a drag
@@ -64,10 +64,10 @@ Review path: Security-Hybrid
 
 Review path: Reviewer-only
 
-- [ ] `Cell` derives only what the code uses.
-- [ ] The tests of `free_space.rs` and the property tests of `apply` pass with their assertions
+- [x] `Cell` derives only what the code uses.
+- [x] The tests of `free_space.rs` and the property tests of `apply` pass with their assertions
       unchanged.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`, and
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`, and
       `cargo fmt --all --check` pass.
 
 ### Task 3: The free space raises its bottom inline

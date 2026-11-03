@@ -33,7 +33,6 @@ pub struct FreeSpace {
 }
 
 /// What is taken of one grid cell.
-#[derive(Clone, Copy)]
 struct Cell {
     /// Something overlaps a box of the default size in this cell.
     box_taken: bool,
