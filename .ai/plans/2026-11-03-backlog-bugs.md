@@ -32,7 +32,7 @@ the same code, so that the canvas and the core keep their stated behaviour befor
 
 - [x] A box placed below fits on its right edge too
 - [x] `Cell` derives nothing it does not use
-- [ ] The free space raises its bottom inline
+- [x] The free space raises its bottom inline
 - [ ] Arrow ends stay where they are after a measure
 - [ ] A box whose file is missing offers neither a release nor a drag
 - [ ] The marks on a box's top edge share it
@@ -76,10 +76,10 @@ Review path: Reviewer-only
 
 Review path: Reviewer-only
 
-- [ ] No function `raise_bottom` remains; `occupy` raises the lowest bottom itself.
-- [ ] The tests of `free_space.rs` and the property tests of `apply` pass with their assertions
+- [x] No function `raise_bottom` remains; `occupy` raises the lowest bottom itself.
+- [x] The tests of `free_space.rs` and the property tests of `apply` pass with their assertions
       unchanged.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`, and
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`, and
       `cargo fmt --all --check` pass.
 
 ### Task 4: Arrow ends stay where they are after a measure

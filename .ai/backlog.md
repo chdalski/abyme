@@ -51,7 +51,6 @@ share a parent line with one sub-item each.
 
 - `apply` requests accept `RelationKind` in the object form (`"kind": {"uses": null}`), unlike `Mode` and `StatementKind`; files read only the string and get the normal form, so this is about consistency: `crates/abyme-model/src/relation.rs` (security engineer, plan D Task 1, rated Low; fix with a later change there).
 - Make `RECIPE_VERSION` and maybe `ProjectKey` crate-private if nothing outside needs them: `crates/abyme-index/src/lib.rs` (reviewer, search skeleton).
-- `#[derive(Clone, Copy)]` on `Cell` looks unused, and `raise_bottom` has one caller and could stand inline: `crates/abyme-core/src/layout/free_space.rs` (Reviewer, auto-layout Task 3)
 - The doc comment of `draft_board` is wrapped unevenly: `crates/abyme-core/src/apply.rs` (Reviewer, auto-layout Task 3)
 - `lines.min(limit)` at the end of `wrapped_lines` changes nothing, since the loop stops at the limit and raises `lines` by at most one per step; it stays as a guard of `MAX_LINES - lines` until someone wants it gone: `crates/abyme-core/src/layout/box_size.rs` (Reviewer, auto-layout Task 5)
 - `STATEMENT_DETAIL_LIMIT` could be `SHOWN_LIMIT` like its neighbors in `anchor.rs`, `verification.rs`, and `id.rs`: `crates/abyme-model/src/element.rs` (Reviewer, statement kind Task 4)

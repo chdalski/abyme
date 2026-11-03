@@ -90,7 +90,8 @@ impl FreeSpace {
             cell.box_taken |= taken.box_taken;
             cell.area_taken |= taken.area_taken;
         }
-        self.raise_bottom(rect);
+        // `None`, an empty board, orders below every bottom.
+        self.lowest_bottom = self.lowest_bottom.max(Some(rect.bottom()));
     }
 
     /// The first cell whose corner a box of `size` can lie at. A box within one
@@ -113,15 +114,6 @@ impl FreeSpace {
                             .is_some_and(|spanned| !spanned.area_taken)
                     })
         })
-    }
-
-    /// Takes `rect` into account for the space below the board's content.
-    fn raise_bottom(&mut self, rect: &Rect) {
-        let new_bottom = rect.bottom();
-        self.lowest_bottom = Some(
-            self.lowest_bottom
-                .map_or(new_bottom, |lowest| lowest.max(new_bottom)),
-        );
     }
 }
 
