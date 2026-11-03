@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { coalesced, inOrder, loadBoards } from "./boards";
+import { coalesced, inOrder, loadBoard, loadBoards, nextStamp } from "./boards";
 import { FakeClient } from "./fakeClient";
+import { boardView } from "./testBoards";
 
 describe("loadBoards", () => {
   it("turns a rejection into the message shown", async () => {
@@ -11,6 +12,24 @@ describe("loadBoards", () => {
       kind: "failed",
       message: "the board cannot be read",
     });
+  });
+});
+
+describe("loadBoard", () => {
+  it("stamps a view with the moment it was asked for, not when it arrived", async () => {
+    const client = new FakeClient([]);
+    client.views = { context: boardView() };
+    client.hold("context");
+
+    const loading = loadBoard(client, "context");
+    const whileAsked = nextStamp();
+    client.release("context");
+    const loaded = await loading;
+
+    expect(loaded.kind).toBe("loaded");
+    if (loaded.kind === "loaded") {
+      expect(loaded.askedAt).toBeLessThan(whileAsked);
+    }
   });
 });
 

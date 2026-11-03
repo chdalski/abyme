@@ -43,6 +43,8 @@ function isTyping(target: EventTarget | null): boolean {
 
 type BoardCanvasProps = {
   view: BoardView;
+  /** When `view` was asked for, as a stamp of `nextStamp`; none if unknown. */
+  askedAt?: number | null;
   move: (moves: Move[]) => Promise<void>;
   release: (element: string, position: XYPosition) => void;
   writeNote: (element: string, parts: NoteParts) => Promise<boolean>;
@@ -73,6 +75,7 @@ export function BoardCanvas(props: BoardCanvasProps) {
 
 function Flow({
   view,
+  askedAt = null,
   move,
   release,
   writeNote,
@@ -82,7 +85,7 @@ function Flow({
   onOpen,
 }: BoardCanvasProps) {
   const { nodes, onNodesChange, addDraft, dropDraft, draftWritten } =
-    useBoardNodes(view, move, onMoveFailed, deleteNotes);
+    useBoardNodes(view, askedAt, move, onMoveFailed, deleteNotes);
   const edges = useMemo(() => toEdges(view), [view]);
   const { screenToFlowPosition } = useReactFlow();
   const surface = useRef<HTMLDivElement>(null);

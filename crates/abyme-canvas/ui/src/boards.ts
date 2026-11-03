@@ -7,11 +7,25 @@ export type BoardsState =
   | { kind: "loaded"; boards: BoardEntry[] }
   | { kind: "failed"; message: string };
 
-/** What the open board shows. */
+/**
+ * What the open board shows, and for a view the stamp taken when it was asked
+ * for, which tells whether it can know of a write that answered at a stamp.
+ */
 export type BoardState =
   | { kind: "loading" }
-  | { kind: "loaded"; view: BoardView }
+  | { kind: "loaded"; view: BoardView; askedAt: number }
   | { kind: "failed"; message: string };
+
+let lastStamp = 0;
+
+/**
+ * A stamp later than every one taken before it, to tell which of two moments
+ * of this page came first; no clock, so no two stamps are equal.
+ */
+export function nextStamp(): number {
+  lastStamp += 1;
+  return lastStamp;
+}
 
 /** Asks `client` for the boards; a rejection becomes the message shown. */
 export async function loadBoards(client: AbymeClient): Promise<BoardsState> {
@@ -27,8 +41,11 @@ export async function loadBoard(
   client: AbymeClient,
   board: string,
 ): Promise<BoardState> {
+  // Taken before the question goes out, so a view counts as later than a write
+  // only if it was asked for after the write answered.
+  const askedAt = nextStamp();
   try {
-    return { kind: "loaded", view: await client.openBoard(board) };
+    return { kind: "loaded", view: await client.openBoard(board), askedAt };
   } catch (error) {
     return { kind: "failed", message: String(error) };
   }

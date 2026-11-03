@@ -1,4 +1,11 @@
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import type { ReactFlowProps, XYPosition } from "@xyflow/react";
 import { type FunctionComponent, useContext } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -415,6 +422,56 @@ describe("BoardPane", () => {
           pinned: true,
         },
       ]);
+    });
+
+    /** The IDs of the boxes the pane hands to the canvas. */
+    const ids = () => (flow.props?.nodes ?? []).map((node) => node.id);
+
+    /** Starts a new note with `N` and writes it as `new-note`. */
+    async function writeANewNote(client: FakeClient) {
+      vi.spyOn(client, "apply").mockResolvedValue(["new-note"]);
+      act(() => void fireEvent.keyDown(window, { key: "n" }));
+      expect(ids()).toContain("+note-1");
+      await act(async () => {
+        await creator()("+note-1", { x: 1, y: 2 }, { name: "Ask", body: "" });
+      });
+    }
+
+    it("lets a written note go without a message when a later view leaves it out", async () => {
+      const client = paneWith(null);
+      await openPane(client);
+      await waitFor(() => expect(client.listening).toBe(1));
+      await writeANewNote(client);
+      expect(ids()).toContain("+note-1");
+      // Each answer of the core is a new view, which still lacks the note.
+      client.views = { context: { ...VIEW } };
+
+      await act(async () => {
+        client.change();
+        await Promise.resolve();
+      });
+
+      await waitFor(() => expect(ids()).not.toContain("+note-1"));
+      expect(screen.queryAllByRole("alert")).toEqual([]);
+    });
+
+    it("keeps a written note through a view asked for before the write answered", async () => {
+      const client = paneWith(null);
+      await openPane(client);
+      await waitFor(() => expect(client.listening).toBe(1));
+      client.hold("context");
+      client.views = { context: { ...VIEW } };
+      act(() => client.change());
+
+      await writeANewNote(client);
+      await act(async () => {
+        client.release("context");
+        await Promise.resolve();
+      });
+
+      await waitFor(() => expect(client.openCalls).toHaveLength(2));
+      await act(() => new Promise<void>((done) => setTimeout(done, 0)));
+      expect(ids()).toContain("+note-1");
     });
 
     it("says it failed and shows why, as text", async () => {

@@ -6,6 +6,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { BoardView } from "./bindings";
+import { nextStamp } from "./boards";
 import {
   type ElementNode,
   type Move,
@@ -26,10 +27,13 @@ import {
  * boxes return to their positions in the board file and `onMoveFailed`
  * receives the message. A deleted note goes to `remove` and stays until a view
  * leaves it out. A new note lives among the boxes, as React Flow measures only
- * what this state holds, under an ID no element can have.
+ * what this state holds, under an ID no element can have; once written, it
+ * goes when a view asked for after the write answered (`askedAt`, a stamp of
+ * `nextStamp`) leaves it out.
  */
 export function useBoardNodes(
   view: BoardView,
+  askedAt: number | null,
   move: (moves: Move[]) => Promise<void>,
   onMoveFailed: (message: string) => void,
   remove: (elements: string[]) => void,
@@ -38,7 +42,7 @@ export function useBoardNodes(
   const [shownView, setShownView] = useState(view);
   if (view !== shownView) {
     setShownView(view);
-    setNodes((current) => keepUiState(toNodes(view), current));
+    setNodes((current) => keepUiState(toNodes(view), current, askedAt));
   }
 
   // The boxes as last rendered, for deciding where a moved note now hangs; the
@@ -83,13 +87,21 @@ export function useBoardNodes(
     setNodes((current) => current.filter((node) => node.id !== id));
   }, []);
   const draftWritten = useCallback((id: string, createdAs: string) => {
+    // The moment the write answered, taken here so that the updater stays pure.
+    const writtenAt = nextStamp();
     setNodes((current) =>
       // A view can list the note before the write's answer arrives.
       current.some((node) => node.id === createdAs)
         ? current.filter((node) => node.id !== id)
         : current.map((node) =>
             node.id === id
-              ? { ...node, data: { ...node.data, draft: { createdAs } } }
+              ? {
+                  ...node,
+                  data: {
+                    ...node.data,
+                    draft: { createdAs, writtenAt },
+                  },
+                }
               : node,
           ),
     );

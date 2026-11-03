@@ -12,6 +12,7 @@ import type { XYPosition } from "@xyflow/react";
 
 import type { BoardView } from "./bindings";
 import { BoardCanvas } from "./BoardCanvas";
+import { nextStamp } from "./boards";
 import { ReviewMarks } from "./ElementBox";
 import type { Move } from "./nodes";
 import type { NoteParts } from "./notes";
@@ -43,11 +44,13 @@ function canvasOf(
     parts: NoteParts,
   ) => Promise<string | null> = () => Promise.resolve("new-note"),
   deleteNotes: (elements: string[]) => void = () => {},
+  askedAt: number | null = null,
 ) {
   return (
     <div style={{ width: 800, height: 600 }}>
       <BoardCanvas
         view={view}
+        askedAt={askedAt}
         move={move}
         release={release}
         writeNote={writeNote}
@@ -510,6 +513,7 @@ describe("creating a note", () => {
   function canvasWith(
     create: (position: XYPosition, parts: NoteParts) => Promise<string | null>,
     view = plainBoard(),
+    askedAt: number | null = null,
   ) {
     return canvasOf(
       view,
@@ -518,6 +522,8 @@ describe("creating a note", () => {
       noop,
       () => Promise.resolve(true),
       create,
+      noop,
+      askedAt,
     );
   }
 
@@ -662,6 +668,28 @@ describe("creating a note", () => {
         node.getAttribute("data-id"),
       ),
     ).toEqual(["new-note"]);
+  });
+
+  it("keeps a written note through a view asked for before the answer, and drops it with one asked for after", async () => {
+    const create = () => Promise.resolve<string | null>("new-note");
+    const before = nextStamp();
+    const { container, rerender } = render(canvasWith(create));
+    fireEvent.keyDown(window, { key: "n" });
+    fireEvent.change(fieldOf(), { target: { value: "Ask" } });
+    await act(async () => {
+      fireEvent.keyDown(fieldOf(), { key: "Escape" });
+      await Promise.resolve();
+    });
+    const ids = () =>
+      [...container.querySelectorAll(".react-flow__node")].map((node) =>
+        node.getAttribute("data-id"),
+      );
+
+    rerender(canvasWith(create, plainBoard(), before));
+    expect(ids()).toEqual(["plain", "+note-1"]);
+
+    rerender(canvasWith(create, plainBoard(), nextStamp()));
+    expect(ids()).toEqual(["plain"]);
   });
 
   it.each([

@@ -23,6 +23,7 @@ function setup(move: (moves: Move[]) => Promise<void>) {
     ({ board }: { board: BoardView }) =>
       useBoardNodes(
         board,
+        null,
         move,
         (message) => failures.push(message),
         () => {},

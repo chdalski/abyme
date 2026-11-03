@@ -37,9 +37,13 @@ export function BoardPane({
 }) {
   const load = useCallback(() => loadBoard(client, board), [client, board]);
   const state = useLive<BoardState>(client, load, { kind: "loading" });
-  const [lastView, setLastView] = useState<BoardView | null>(null);
-  if (state.kind === "loaded" && state.view !== lastView) {
-    setLastView(state.view);
+  // The view as last loaded, with the stamp of when it was asked for.
+  const [lastLoaded, setLastLoaded] = useState<{
+    view: BoardView;
+    askedAt: number;
+  } | null>(null);
+  if (state.kind === "loaded" && state.view !== lastLoaded?.view) {
+    setLastLoaded({ view: state.view, askedAt: state.askedAt });
   }
   const [writeFailure, setWriteFailure] = useState<string | null>(null);
   // Writes reach the core in the order the user made them, so
@@ -113,7 +117,10 @@ export function BoardPane({
     [send, board, onNoteWrite],
   );
 
-  const view = state.kind === "loaded" ? state.view : lastView;
+  const view =
+    state.kind === "loaded" ? state.view : (lastLoaded?.view ?? null);
+  const askedAt =
+    state.kind === "loaded" ? state.askedAt : (lastLoaded?.askedAt ?? null);
   // Only what the view shows as a note, whatever React Flow hands over; Rust
   // decides again from the files.
   const deleteNotes = useCallback(
@@ -170,6 +177,7 @@ export function BoardPane({
       <div className="flow">
         <BoardCanvas
           view={view}
+          askedAt={askedAt}
           move={move}
           release={release}
           writeNote={writeNote}

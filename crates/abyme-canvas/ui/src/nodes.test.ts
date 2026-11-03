@@ -149,7 +149,7 @@ describe("keepUiState", () => {
         : { ...node, position: { x: 3, y: 4 } },
     );
 
-    const kept = keepUiState(toNodes(VIEW), current);
+    const kept = keepUiState(toNodes(VIEW), current, null);
 
     expect(kept.map((node) => [node.id, node.position, node.dragging])).toEqual(
       [
@@ -166,7 +166,7 @@ describe("keepUiState", () => {
         : node,
     );
 
-    const kept = keepUiState(toNodes(VIEW), current);
+    const kept = keepUiState(toNodes(VIEW), current, null);
 
     expect(kept.map((node) => [node.id, node.position, node.selected])).toEqual(
       [
@@ -187,7 +187,7 @@ describe("keepUiState", () => {
           ...held,
         }));
 
-        const [kept] = keepUiState(nodesWithPin(pinned), current);
+        const [kept] = keepUiState(nodesWithPin(pinned), current, null);
 
         expect(kept?.data.pinned).toBe(pinned);
       }
@@ -196,29 +196,56 @@ describe("keepUiState", () => {
 });
 
 describe("keepUiState and a new note", () => {
-  const written = (draft: ElementNode, createdAs: string): ElementNode => ({
+  const written = (
+    draft: ElementNode,
+    createdAs: string,
+    writtenAt = 5,
+  ): ElementNode => ({
     ...draft,
-    data: { ...draft.data, draft: { createdAs } },
+    data: { ...draft.data, draft: { createdAs, writtenAt } },
+  });
+
+  it("drops a written note that a view asked for after its write answered leaves out", () => {
+    const deleted = written(draftNote("+note-1", { x: 1, y: 2 }), "gone", 5);
+    const other = written(draftNote("+note-2", { x: 3, y: 4 }), "later", 9);
+    const typing = draftNote("+note-3", { x: 5, y: 6 });
+
+    const kept = keepUiState(toNodes(VIEW), [deleted, other, typing], 7);
+
+    expect(kept.map((node) => node.id)).toEqual([
+      "orders",
+      "payments",
+      "+note-2",
+      "+note-3",
+    ]);
+  });
+
+  it("keeps a written note through a view asked for before its write answered", () => {
+    const draft = written(draftNote("+note-1", { x: 1, y: 2 }), "new-one", 5);
+
+    for (const askedAt of [4, null]) {
+      expect(
+        keepUiState(toNodes(VIEW), [draft], askedAt).map((node) => node.id),
+      ).toContain("+note-1");
+    }
   });
 
   it("keeps a new note through a view that does not list it", () => {
     const draft = draftNote("+note-1", { x: 1, y: 2 });
 
-    expect(keepUiState(toNodes(VIEW), [draft]).map((node) => node.id)).toEqual([
-      "orders",
-      "payments",
-      "+note-1",
-    ]);
+    expect(
+      keepUiState(toNodes(VIEW), [draft], null).map((node) => node.id),
+    ).toEqual(["orders", "payments", "+note-1"]);
   });
 
   it("keeps a written note until a view lists its ID, and then drops it", () => {
     const draft = written(draftNote("+note-1", { x: 1, y: 2 }), "new-one");
-    const without = keepUiState(toNodes(VIEW), [draft]);
+    const without = keepUiState(toNodes(VIEW), [draft], null);
     expect(without.map((node) => node.id)).toContain("+note-1");
 
     const listing = boardView({ placements: [placedBox("new-one")] });
     expect(
-      keepUiState(toNodes(listing), [draft]).map((node) => node.id),
+      keepUiState(toNodes(listing), [draft], null).map((node) => node.id),
     ).toEqual(["new-one"]);
   });
 

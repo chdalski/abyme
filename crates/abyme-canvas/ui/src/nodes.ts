@@ -20,7 +20,7 @@ export type ElementData = {
   innerBoards: BoardEntry[];
   pinned: boolean;
   attachedTo: string | null;
-  draft: { createdAs: string | null } | null;
+  draft: { createdAs: string | null; writtenAt: number | null } | null;
 };
 
 /** A box on the canvas. */
@@ -218,11 +218,14 @@ export function finishedMoves(changes: NodeChange<ElementNode>[]): Move[] {
 /**
  * `fresh`, with the state of the canvas that a reload must not reset: a
  * box `current` has selected stays selected, so the arrow keys keep moving
- * it, and a box `current` is dragging stays where the drag holds it.
+ * it, and a box `current` is dragging stays where the drag holds it. A new
+ * note stays until `fresh` lists it, and a written one also leaves once a view
+ * asked for after its write answered (`askedAt`) leaves it out.
  */
 export function keepUiState(
   fresh: ElementNode[],
   current: ElementNode[],
+  askedAt: number | null,
 ): ElementNode[] {
   const held = new Map(current.map((node) => [node.id, node]));
   const listed = new Set(fresh.map((node) => node.id));
@@ -237,12 +240,19 @@ export function keepUiState(
       : { ...node, ...selected };
   });
   // A new note stays until a view lists it, also when that view was asked for
-  // before the note was written.
-  const drafts = current.filter(
-    ({ data: { draft } }) =>
-      draft !== null &&
-      (draft.createdAs === null || !listed.has(draft.createdAs)),
-  );
+  // before the note's write answered; a view asked for after it that leaves the
+  // note out says another writer deleted it.
+  const drafts = current.filter(({ data: { draft } }) => {
+    if (draft === null) {
+      return false;
+    }
+    if (draft.createdAs === null) {
+      return true;
+    }
+    const deleted =
+      askedAt !== null && draft.writtenAt !== null && askedAt > draft.writtenAt;
+    return !listed.has(draft.createdAs) && !deleted;
+  });
   return [...kept, ...drafts];
 }
 
@@ -267,7 +277,7 @@ export function draftNote(id: string, position: XYPosition): ElementNode {
       innerBoards: [],
       pinned: true,
       attachedTo: null,
-      draft: { createdAs: null },
+      draft: { createdAs: null, writtenAt: null },
     },
     style: { pointerEvents: "all" },
     selectable: false,

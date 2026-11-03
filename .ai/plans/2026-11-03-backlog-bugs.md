@@ -40,7 +40,7 @@ the same code, so that the canvas and the core keep their stated behaviour befor
 - [x] A note's field grows with wrapped text
 - [x] A held-back click ends with its press
 - [x] One press opens one board
-- [ ] A new note that is deleted before a view lists it goes
+- [x] A new note that is deleted before a view lists it goes
 - [ ] The canvas knows which note's field is open
 - [ ] A note deleted while it is typed keeps its field
 
@@ -198,13 +198,13 @@ leaves it out; a view asked for earlier may still lack it and keeps it.
 
 Review path: Security-Hybrid
 
-- [ ] A written new note that a view asked for after the write's answer does not list leaves the
+- [x] A written new note that a view asked for after the write's answer does not list leaves the
       board, without a message, and Vitest shows it.
-- [ ] A written new note that a view asked for before the write's answer does not list stays, and
+- [x] A written new note that a view asked for before the write's answer does not list stays, and
       Vitest shows it.
-- [ ] A reader of Canvas can tell when a new note whose file is deleted before a view lists it
+- [x] A reader of Canvas can tell when a new note whose file is deleted before a view lists it
       leaves the board.
-- [ ] `pnpm --dir crates/abyme-canvas/ui check` and `pnpm --dir crates/abyme-canvas/ui test` pass.
+- [x] `pnpm --dir crates/abyme-canvas/ui check` and `pnpm --dir crates/abyme-canvas/ui test` pass.
 
 ### Task 12: The canvas knows which note's field is open
 
