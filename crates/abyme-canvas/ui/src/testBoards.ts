@@ -31,3 +31,14 @@ export function placedBox(
     ...overrides,
   };
 }
+
+/** A box of the default size at the origin whose element file exists, with `overrides`. */
+export function placedElement(
+  element: string,
+  overrides: Partial<Placement> = {},
+): Placement {
+  return placedBox(element, {
+    shown: { kind: "element", type_ref: "t", name: element, summary: null },
+    ...overrides,
+  });
+}

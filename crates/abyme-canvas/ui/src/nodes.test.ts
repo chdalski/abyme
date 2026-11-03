@@ -11,7 +11,7 @@ import {
   returnHome,
   toNodes,
 } from "./nodes";
-import { boardView, placedBox } from "./testBoards";
+import { boardView, placedBox, placedElement } from "./testBoards";
 
 const VIEW: BoardView = boardView({
   placements: [
@@ -52,8 +52,12 @@ describe("toNodes", () => {
   });
 
   it("makes boxes that can be dragged but not connected", () => {
+    const view = boardView({
+      placements: [placedElement("orders"), placedElement("payments")],
+    });
+
     expect(
-      toNodes(VIEW).every(
+      toNodes(view).every(
         (node) => node.draggable === true && node.connectable === false,
       ),
     ).toBe(true);
@@ -61,7 +65,12 @@ describe("toNodes", () => {
 
   it("makes a box that is no note draggable except on a mirrored board", () => {
     const draggable = (mode: BoardView["mode"]) =>
-      toNodes({ ...VIEW, mode }).map((node) => node.draggable);
+      toNodes(
+        boardView({
+          mode,
+          placements: [placedElement("orders"), placedElement("payments")],
+        }),
+      ).map((node) => node.draggable);
 
     expect(draggable("mirrored")).toEqual([false, false]);
     expect(draggable("free")).toEqual([true, true]);
@@ -74,7 +83,7 @@ describe("toNodes", () => {
         boardView({
           mode,
           placements: [
-            placedBox("plain"),
+            placedElement("plain"),
             placedBox("ask", {
               shown: { kind: "note", name: "Ask", body: "" },
             }),
@@ -454,5 +463,18 @@ describe("a note on its box under another box", () => {
     ).toEqual([
       { element: "n", position: { x: 45, y: 0 }, hang: { attachTo: "top" } },
     ]);
+  });
+});
+
+describe("a box whose file is missing", () => {
+  it("cannot be dragged on any board and keeps its pin", () => {
+    for (const mode of [null, "free", "mirrored"] as const) {
+      const [node] = toNodes(
+        boardView({ mode, placements: [placedBox("gone", { pinned: true })] }),
+      );
+
+      expect(node?.draggable).toBe(false);
+      expect(node?.data.pinned).toBe(true);
+    }
   });
 });

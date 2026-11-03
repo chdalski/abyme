@@ -43,9 +43,11 @@ export type Move = {
  * to the box, so it follows a drag of the box; parents come first, as React
  * Flow requires.
  * Every box has the one node type `element`; nothing from the repository
- * chooses a node type, and the node's ID is the validated element ID. On a
- * mirrored board only a note can be dragged: React Flow goes by this value on
- * the node, also for the arrow keys. It offers what Rust's admission decides.
+ * chooses a node type, and the node's ID is the validated element ID. A note
+ * can be dragged on every board, a box whose element file exists only on a
+ * board that is not mirrored, and a box whose file is missing nowhere: React
+ * Flow goes by this value on the node, also for the arrow keys. It offers what
+ * Rust's admission and the core take.
  * Arrows leave at the bottom and arrive at the top; the handles come with the
  * node, since a fresh node after a reload has no measurements and its arrows
  * would vanish until it is measured again.
@@ -79,7 +81,9 @@ export function toNodes(view: BoardView): ElementNode[] {
         attachedTo: parent === undefined ? null : parent.element,
         draft: null,
       },
-      draggable: view.mode !== "mirrored" || placement.shown.kind === "note",
+      draggable:
+        placement.shown.kind === "note" ||
+        (placement.shown.kind === "element" && view.mode !== "mirrored"),
       deletable: placement.shown.kind === "note",
       connectable: false,
       handles: [

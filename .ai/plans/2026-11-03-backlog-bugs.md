@@ -34,7 +34,7 @@ the same code, so that the canvas and the core keep their stated behaviour befor
 - [x] `Cell` derives nothing it does not use
 - [x] The free space raises its bottom inline
 - [x] Arrow ends stay where they are after a measure
-- [ ] A box whose file is missing offers neither a release nor a drag
+- [x] A box whose file is missing offers neither a release nor a drag
 - [ ] The marks on a box's top edge share it
 - [ ] A window that turns visible asks for flags
 - [ ] A note's field grows with wrapped text
@@ -105,14 +105,14 @@ shows a release button and can be dragged.
 
 Review path: Security-Hybrid
 
-- [ ] A pinned box whose element file is missing shows its pin marker as plain text, as on a
+- [x] A pinned box whose element file is missing shows its pin marker as plain text, as on a
       mirrored board, and Vitest shows it.
-- [ ] A box whose element file is missing cannot be dragged or moved with the arrow keys on any
+- [x] A box whose element file is missing cannot be dragged or moved with the arrow keys on any
       board, and Vitest shows it.
-- [ ] The tests of dragging and the arrow keys on free and mirrored boards keep their coverage, on
+- [x] The tests of dragging and the arrow keys on free and mirrored boards keep their coverage, on
       boxes whose file exists.
-- [ ] A reader of Canvas can tell that such a box offers no release and no move.
-- [ ] `pnpm --dir crates/abyme-canvas/ui check` and `pnpm --dir crates/abyme-canvas/ui test` pass.
+- [x] A reader of Canvas can tell that such a box offers no release and no move.
+- [x] `pnpm --dir crates/abyme-canvas/ui check` and `pnpm --dir crates/abyme-canvas/ui test` pass.
 
 ### Task 6: The marks on a box's top edge share it
 

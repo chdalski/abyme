@@ -14,7 +14,7 @@ import type { BoardView } from "./bindings";
 import { BoardCanvas } from "./BoardCanvas";
 import type { Move } from "./nodes";
 import type { NoteParts } from "./notes";
-import { boardView, placedBox } from "./testBoards";
+import { boardView, placedBox, placedElement } from "./testBoards";
 
 afterEach(cleanup);
 
@@ -22,7 +22,10 @@ afterEach(cleanup);
 function boardIn(mode: BoardView["mode"]): BoardView {
   return boardView({
     mode,
-    placements: [placedBox("orders"), placedBox("payments", { x: 200 })],
+    placements: [
+      placedElement("orders"),
+      placedElement("payments", { x: 200 }),
+    ],
   });
 }
 
@@ -61,7 +64,10 @@ const DRAGGABLE_BOX = ".react-flow__node.draggable";
 /** Two boxes in a row and one relation between them with `label`. */
 function boardWithArrow(label: string | null, x = 0): BoardView {
   return boardView({
-    placements: [placedBox("orders", { x }), placedBox("payments", { y: 300 })],
+    placements: [
+      placedElement("orders", { x }),
+      placedElement("payments", { y: 300 }),
+    ],
     relations: [{ from: "orders", kind: "uses", to: "payments", label }],
   });
 }
@@ -242,8 +248,8 @@ function boardWithInnerBoards(...boards: string[]): BoardView {
   return boardView({
     mode: "free",
     placements: [
-      placedBox("plain", { x: 400 }),
-      placedBox("shop", {
+      placedElement("plain", { x: 400 }),
+      placedElement("shop", {
         inner_boards: boards.map((title, index) => ({
           id: `inner-${index}`,
           title,
@@ -295,6 +301,10 @@ describe("the marker of a pin", () => {
     }
     expect(box(container, "free").querySelector(".element-pin")).toBeNull();
     expect(box(container, "kept").querySelector("b")).toBeNull();
+    expect(screen.getAllByRole("button", { name: "Release pin" })).toEqual([
+      box(container, "kept").querySelector("button.element-pin"),
+    ]);
+    expect(box(container, "gone").querySelector("button")).toBeNull();
   });
 
   it("is plain text with no button on a mirrored board", () => {
@@ -302,7 +312,7 @@ describe("the marker of a pin", () => {
       canvasOf(
         boardView({
           mode: "mirrored",
-          placements: [placedBox("kept", { pinned: true })],
+          placements: [placedElement("kept", { pinned: true })],
         }),
         () => Promise.resolve(),
       ),
@@ -324,7 +334,7 @@ describe("the marker of a pin", () => {
           boardView({
             mode,
             placements: [
-              placedBox("kept", {
+              placedElement("kept", {
                 x: 200,
                 y: 30,
                 pinned: true,
@@ -351,7 +361,7 @@ describe("the marker of a pin", () => {
 
   it("offers no release on a box without a pin", () => {
     render(
-      canvasOf(boardView({ placements: [placedBox("free")] }), () =>
+      canvasOf(boardView({ placements: [placedElement("free")] }), () =>
         Promise.resolve(),
       ),
     );
@@ -481,7 +491,7 @@ describe("deleting a note", () => {
 
 describe("creating a note", () => {
   const plainBoard = () =>
-    boardView({ placements: [placedBox("plain", { x: 300, y: 200 })] });
+    boardView({ placements: [placedElement("plain", { x: 300, y: 200 })] });
   const notes = (container: HTMLElement) =>
     [...container.querySelectorAll(".react-flow__node")]
       .map((node) => node.getAttribute("data-id"))
@@ -1067,8 +1077,8 @@ describe("a note on the canvas", () => {
     boardView({
       mode: "mirrored",
       placements: [
-        placedBox("plain"),
-        placedBox("ask", {
+        placedElement("plain"),
+        placedElement("ask", {
           x: 200,
           pinned: true,
           ...(askIsANote
@@ -1366,7 +1376,7 @@ describe("arrows in a laid-out canvas", () => {
     const release = vi.fn();
     const { container } = render(
       canvasOf(
-        boardView({ placements: [placedBox("kept", { pinned: true })] }),
+        boardView({ placements: [placedElement("kept", { pinned: true })] }),
         move,
         () => {},
         release,
@@ -1429,5 +1439,24 @@ describe("moving a note with the arrow keys", () => {
     expect(move.mock.calls).toEqual([
       [[{ element: "n", position: { x: 95, y: 0 }, hang: "detach" }]],
     ]);
+  });
+});
+
+describe("a box whose file is missing", () => {
+  it("cannot be moved with the arrow keys on any board", () => {
+    for (const mode of [null, "free", "mirrored"] as const) {
+      const move = vi.fn(() => Promise.resolve());
+      const { container, unmount } = render(
+        canvasOf(boardView({ mode, placements: [placedBox("gone")] }), move),
+      );
+      const gone = box(container, "gone");
+
+      fireEvent.keyDown(gone, { key: "Enter" });
+      fireEvent.keyDown(gone, { key: "ArrowRight" });
+
+      expect(move).not.toHaveBeenCalled();
+      expect(gone.classList.contains("draggable")).toBe(false);
+      unmount();
+    }
   });
 });

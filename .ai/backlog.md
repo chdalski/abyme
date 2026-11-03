@@ -24,7 +24,6 @@ share a parent line with one sub-item each.
 ## Bugs
 
 - A real double click on `▸` opens the board on the first click, and the rest of it can land on the new view and go one level deeper; nothing is written, and it is untested in a real webview: `crates/abyme-canvas/ui/src/ElementBox.tsx` (Reviewer, canvas display Task 5)
-- A pinned box whose element file is missing shows the release button, and the core refuses the release with `no element has the ID ...`, as it refuses a drag; a plain marker there would promise nothing. `crates/abyme-canvas/ui/src/ElementBox.tsx`, `PinMarker`. From canvas display, Task 7.
 - On a box narrower than about 110 px (estimated from the CSS), the review mark paints over part of the pin's marker: `crates/abyme-canvas/ui/src/canvas.css` (Reviewer, canvas display Task 8).
 - A window that turns visible without getting focus, as on a workspace switch, asks only at the next tick, so its marks can be older than the "at most one interval behind" of Canvas until then; a `visibilitychange` listener in `whileVisible` would close it: `crates/abyme-canvas/ui/src/flags.ts` (Reviewer, canvas display Task 9).
 - When the AI deletes a note while its text is being typed, the typed text goes without a message: `crates/abyme-canvas/ui/src/NoteContent.tsx` (Reviewer, sticky notes Task 5).

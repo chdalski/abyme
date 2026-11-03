@@ -7,6 +7,7 @@ import {
 import { createContext, useContext } from "react";
 
 import { type FlagMarks, NO_MARKS } from "./flags";
+import type { Shown } from "./bindings";
 import type { ElementData, ElementNode } from "./nodes";
 import { NoteContent } from "./NoteContent";
 
@@ -64,18 +65,21 @@ function InnerBoards({ boards }: { boards: ElementData["innerBoards"] }) {
 
 /**
  * The marker of a pinned box: a button that releases the pin where a person
- * may, and says so, or plain text. Like the buttons of inner boards, it neither
- * starts a drag nor moves a selected box with the arrow keys.
+ * may and the box shows an element whose file exists, which the core can
+ * release, or plain text. Like the buttons of inner boards, it neither starts
+ * a drag nor moves a selected box with the arrow keys.
  */
 function PinMarker({
   element,
+  shown,
   position,
 }: {
   element: string;
+  shown: Shown;
   position: XYPosition;
 }) {
   const release = useContext(ReleasePin);
-  if (release === null) {
+  if (release === null || shown.kind !== "element") {
     return <span className="element-pin">pinned</span>;
   }
   return (
@@ -119,6 +123,7 @@ export function ElementBox({
       {data.pinned && data.shown.kind !== "note" && (
         <PinMarker
           element={data.element}
+          shown={data.shown}
           position={{ x: positionAbsoluteX, y: positionAbsoluteY }}
         />
       )}
