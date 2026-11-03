@@ -441,14 +441,13 @@ struct Pin {
 /// row can filter them and stay sorted.
 fn pins_by_left_edge(board: &Board) -> Vec<Pin> {
     let mut pins: Vec<Pin> = board
-        .placements
-        .values()
-        .filter(|placement| placement.pinned)
-        .map(|placement| Pin {
-            left: i64::from(placement.rect.x),
-            right: placement.rect.right(),
-            top: i64::from(placement.rect.y),
-            bottom: placement.rect.bottom(),
+        .placed()
+        .filter(|(_, placement, _)| placement.pinned)
+        .map(|(_, _, rect)| Pin {
+            left: i64::from(rect.x),
+            right: rect.right(),
+            top: i64::from(rect.y),
+            bottom: rect.bottom(),
         })
         .collect();
     pins.sort_unstable_by_key(|pin| pin.left);

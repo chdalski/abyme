@@ -1,5 +1,5 @@
 **Repository:** root
-**Status:** NotStarted
+**Status:** InProgress
 **Created:** 2026-11-03
 
 ## Goal
@@ -29,7 +29,7 @@ it is detached.
 
 ## Steps
 
-- [ ] One way to read a position
+- [x] One way to read a position
 - [ ] Attached notes in the board file
 - [ ] Attaching and detaching a note
 - [ ] Attaching on the canvas
@@ -44,12 +44,12 @@ Every production reader goes through the board first. Behavior does not change.
 
 Review path: Security-Hybrid
 
-- [ ] Every production site that reads where an element lies on a board asks the board for it; no
+- [x] Every production site that reads where an element lies on a board asks the board for it; no
       production code outside `abyme-model` reads a placement's stored rect as a position.
-- [ ] Every existing test passes unchanged, among them the tests of free space, of the layered layout,
+- [x] Every existing test passes unchanged, among them the tests of free space, of the layered layout,
       the property tests of `apply`, and the tests of the outline, the admission, and the projection,
       which pin these reads; the board's new way to read a position has tests of its own.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`, and
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`, and
       `cargo fmt --all --check` pass.
 
 ### Task 2: Attached notes in the board file
@@ -152,6 +152,21 @@ Review path: Security-Hybrid
 - [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
       `cargo fmt --all --check`, `pnpm --dir crates/abyme-canvas/ui check`, and
       `pnpm --dir crates/abyme-canvas/ui test` pass.
+
+## Task Notes
+
+- Task 1: the security engineer's pre-gate conditions. The admission's `lies_at` keeps refusing an
+  element its board does not place, with no fallback rect. `Board::placed` yields every placement
+  once, in the order of `placements`, unfiltered, since `layout_board` zips the layout's rects back in
+  that order, and its doc comment says so. `move_element` still occupies the moved box, taking its
+  position from the board, with no `unwrap`. Projection and outline take width and height from the
+  same rect as the position. Parsing, the writes of the stored rect, the range check, and the error
+  texts stay unchanged. Neither method scans all placements per item.
+- Task 2: `Placement.rect` stays public, so reading it as a position is only a convention; the
+  security engineer will ask in Task 2's pre-gate for something that makes a new direct read visible,
+  and each later review reruns the search for `.rect` reads outside `abyme-model`.
+- Task 2: `move_element` now reports `NotOnBoard` when `rect_of` finds no position after the write,
+  which cannot happen yet; once an attachment can make `rect_of` differ, decide what that branch means.
 
 ## Decisions
 

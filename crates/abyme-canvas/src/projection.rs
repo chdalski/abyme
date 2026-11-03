@@ -8,7 +8,7 @@
 use std::iter::successors;
 
 use abyme_core::{BoardTree, ShownRelation, Snapshot, UnknownBoard, relations_on};
-use abyme_model::{BoardId, Element, ElementId, Mode, RelationKind};
+use abyme_model::{BoardId, Element, ElementId, Mode, Rect, RelationKind};
 use serde::Serialize;
 
 use crate::boards::BoardEntry;
@@ -116,9 +116,8 @@ pub fn project(snapshot: &Snapshot, board: &BoardId) -> Result<BoardView, Unknow
         title: found.title.clone(),
         mode: found.zone.map(|zone| zone.mode),
         placements: found
-            .placements
-            .iter()
-            .map(|(element, placed)| placement(snapshot, &tree, element, placed))
+            .placed()
+            .map(|(element, placed, rect)| placement(snapshot, &tree, element, placed, rect))
             .collect(),
         relations: relations_on(snapshot, found).map(relation).collect(),
         trail: trail(snapshot, &tree, board),
@@ -176,9 +175,9 @@ fn placement(
     tree: &BoardTree,
     id: &ElementId,
     placed: &abyme_model::Placement,
+    rect: Rect,
 ) -> Placement {
     let element: Option<&Element> = snapshot.elements.get(id);
-    let rect = &placed.rect;
     Placement {
         element: id.clone(),
         x: rect.x,

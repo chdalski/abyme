@@ -270,13 +270,12 @@ fn is_note_body(body: &str) -> bool {
     body.chars().all(is_allowed)
 }
 
-/// Whether the file of `board` places `element` at `x` and `y`.
+/// Whether `element` lies at `x` and `y` on `board`.
 fn lies_at(board: &Board, element: &Ref<ElementId>, x: i32, y: i32) -> bool {
     match element {
         Ref::Existing(element) => board
-            .placements
-            .get(element)
-            .is_some_and(|placed| placed.rect.x == x && placed.rect.y == y),
+            .rect_of(element)
+            .is_some_and(|rect| rect.x == x && rect.y == y),
         Ref::New(_) => false,
     }
 }

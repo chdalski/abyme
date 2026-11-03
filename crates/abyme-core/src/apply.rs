@@ -567,7 +567,10 @@ impl<'snapshot> Draft<'snapshot> {
         placement.rect.x = x;
         placement.rect.y = y;
         placement.pinned = pinned.unwrap_or(placement.pinned);
-        free_space.occupy(&placement.rect);
+        let moved = draft_board
+            .rect_of(&element)
+            .ok_or(OperationProblem::NotOnBoard { element, board })?;
+        free_space.occupy(&moved);
         Ok(())
     }
 

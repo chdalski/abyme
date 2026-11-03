@@ -10,7 +10,7 @@
 use std::collections::BTreeMap;
 
 use abyme_model::{
-    Board, BoardId, Element, ElementId, Placement, RelationKind, StatementKind, Zone,
+    Board, BoardId, Element, ElementId, Rect, RelationKind, StatementKind, Zone,
     hides_or_breaks_text,
 };
 
@@ -286,10 +286,10 @@ pub fn outline(
         kind_column,
     )
     .into_iter()
-    .zip(found.placements.values())
-    .map(|(mut columns, placement)| {
+    .zip(found.placed())
+    .map(|(mut columns, (_, placement, rect))| {
         if geometry == Geometry::Shown {
-            columns.insert(1, position(placement));
+            columns.insert(1, position(rect, placement.pinned));
         }
         columns
     })
@@ -599,11 +599,10 @@ fn lines(rows: &[Vec<String>]) -> String {
     text
 }
 
-/// A placement's position and size, built from the board file's numbers
-/// only.
-fn position(placement: &Placement) -> String {
-    let Placement { rect, pinned } = placement;
-    let pin = if *pinned { " pinned" } else { "" };
+/// A placement's position and size on its board and its pin, built from the
+/// board file's numbers only.
+fn position(rect: Rect, pinned: bool) -> String {
+    let pin = if pinned { " pinned" } else { "" };
     format!("@{},{} {}x{}{pin}", rect.x, rect.y, rect.width, rect.height)
 }
 

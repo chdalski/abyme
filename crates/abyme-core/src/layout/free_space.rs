@@ -60,18 +60,11 @@ impl FreeSpace {
         let cells = (0..COLUMNS * ROWS)
             .map(|cell| {
                 Cell::taken_by(cell, |rect| {
-                    board
-                        .placements
-                        .values()
-                        .any(|placement| placement.rect.overlaps(rect))
+                    board.placed().any(|(_, _, placed)| placed.overlaps(rect))
                 })
             })
             .collect();
-        let lowest_bottom = board
-            .placements
-            .values()
-            .map(|placement| placement.rect.bottom())
-            .max();
+        let lowest_bottom = board.placed().map(|(_, _, placed)| placed.bottom()).max();
         Self {
             cells,
             lowest_bottom,

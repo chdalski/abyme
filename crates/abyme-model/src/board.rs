@@ -44,7 +44,8 @@ pub struct Board {
 /// An element's place on a board.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Placement {
-    /// Where the element lies and how large it is.
+    /// The position and size the board file stores. Read where the element
+    /// lies through [`Board::rect_of`] or [`Board::placed`].
     pub rect: Rect,
     /// Whether a person placed it by hand: a move must then say what it wants
     /// with the pin, and a layout leaves it where it is.
@@ -197,6 +198,22 @@ impl Board {
         })
     }
 
+    /// Where `element` lies on this board, if the board places it. Every
+    /// reader of a position asks the board, not the placement's stored rect.
+    #[must_use]
+    pub fn rect_of(&self, element: &ElementId) -> Option<Rect> {
+        self.placements.get(element).map(|placement| placement.rect)
+    }
+
+    /// Every placement with where its element lies on this board: each
+    /// exactly once, in the order of `placements`, which is by element ID.
+    /// A layout relies on that order to write its rects back.
+    pub fn placed(&self) -> impl Iterator<Item = (&ElementId, &Placement, Rect)> {
+        self.placements
+            .iter()
+            .map(|(element, placement)| (element, placement, placement.rect))
+    }
+
     /// Writes the board file, one placement per line, ordered by element ID.
     /// The owner, the summary, and the zone each get a line of their own,
     /// and only when the board has them.
@@ -343,6 +360,70 @@ mod tests {
     /// A valid board file `main` with the placements given as JSON lines.
     fn main_file(placements: &str) -> String {
         format!(r#"{{"format": 1, "id": "main", "title": "t", "placements": [{placements}]}}"#)
+    }
+
+    /// A board whose file lists three placements out of ID order, one pinned.
+    fn unordered_board() -> Board {
+        Board::from_json(
+            &board_id("main"),
+            &main_file(
+                r#"{"element": "c", "x": -7, "y": 11, "width": 3, "height": 5, "pinned": true},
+                   {"element": "a", "x": 40, "y": -2, "width": 250, "height": 60},
+                   {"element": "b", "x": 0, "y": 900, "width": 1, "height": 1}"#,
+            ),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn rect_of_a_placed_element_is_its_stored_rect() {
+        let board = unordered_board();
+
+        for (element, placement) in &board.placements {
+            assert_eq!(board.rect_of(element), Some(placement.rect), "{element}");
+        }
+        assert_eq!(
+            board.rect_of(&element_id("c")),
+            Some(Rect {
+                x: -7,
+                y: 11,
+                width: NonZeroU32::new(3).unwrap(),
+                height: NonZeroU32::new(5).unwrap(),
+            })
+        );
+    }
+
+    #[test]
+    fn rect_of_an_element_the_board_does_not_place_is_none() {
+        let mut board = unordered_board();
+
+        assert_eq!(board.rect_of(&element_id("d")), None);
+        board.placements.clear();
+        assert_eq!(board.rect_of(&element_id("a")), None);
+    }
+
+    #[test]
+    fn placed_yields_every_placement_once_in_id_order_with_its_stored_rect() {
+        let board = unordered_board();
+
+        let placed: Vec<(&ElementId, &Placement, Rect)> = board.placed().collect();
+
+        assert_eq!(placed.len(), board.placements.len());
+        assert_eq!(
+            placed.iter().map(|(id, _, _)| *id).collect::<Vec<_>>(),
+            board.placements.keys().collect::<Vec<_>>()
+        );
+        for (id, placement, rect) in placed {
+            assert_eq!(placement, &board.placements[id]);
+            assert_eq!(rect, placement.rect);
+        }
+    }
+
+    #[test]
+    fn placed_on_an_empty_board_yields_nothing() {
+        let board = Board::from_json(&board_id("main"), &main_file("")).unwrap();
+
+        assert_eq!(board.placed().count(), 0);
     }
 
     #[test]
