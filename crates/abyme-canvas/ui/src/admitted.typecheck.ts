@@ -13,6 +13,11 @@ export function onlyAdmittedOperations(client: AbymeClient): void {
     { op: "move_element", element, board, x: 1, y: 2, pinned: false },
   ]);
   void client.apply([{ op: "update_element", element, name: "N", body: "" }]);
+  void client.apply([{ op: "delete_element", element }]);
+  void client.apply([
+    // @ts-expect-error The canvas deletes only an element that exists.
+    { op: "delete_element", element: { new: "e" } },
+  ]);
   void client.apply([
     // @ts-expect-error The canvas changes a note's name and body together.
     { op: "update_element", element, name: "N" },

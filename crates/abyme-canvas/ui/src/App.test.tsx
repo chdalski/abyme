@@ -403,6 +403,53 @@ describe("leaving a board while a note's text is being written", () => {
   });
 });
 
+describe("deleting a note another element relates to", () => {
+  it("keeps the note and the arrow, and says why", async () => {
+    const client = clientWithBoards();
+    client.views.context = boardView({
+      id: "context",
+      title: "Context",
+      placements: [
+        placedBox("payments", {
+          shown: {
+            kind: "element",
+            type_ref: "c4/container",
+            name: "Payments",
+            summary: null,
+          },
+        }),
+        placedBox("ask", {
+          y: 300,
+          shown: { kind: "note", name: "Ask", body: "" },
+        }),
+      ],
+      relations: [{ from: "payments", kind: "uses", to: "ask", label: "asks" }],
+    });
+    client.applyFailure = "element ask is still related: payments uses it";
+    const { container } = await openContext(client);
+    const note = container.querySelector('.react-flow__node[data-id="ask"]');
+    if (!(note instanceof HTMLElement)) {
+      throw new Error("no note");
+    }
+    fireEvent.keyDown(note, { key: "Enter" });
+    fireEvent.keyUp(note, { key: "Enter" });
+    await waitFor(() => expect(note.classList.contains("selected")).toBe(true));
+
+    fireEvent.keyDown(note, { key: "Delete" });
+
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "element ask is still related: payments uses it",
+    );
+    expect(client.applied).toEqual([
+      [{ op: "delete_element", element: { existing: "ask" } }],
+    ]);
+    expect(note.isConnected).toBe(true);
+    expect(container.querySelector(".react-flow__edge-text")?.textContent).toBe(
+      "asks",
+    );
+  });
+});
+
 describe("a failed reload of the open board", () => {
   it("keeps the box and its selection through the failure and the recovery", async () => {
     const client = clientWithBoards();

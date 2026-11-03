@@ -29,10 +29,19 @@ export type NoteUpdate = {
 };
 
 /**
+ * Deleting an element that exists, which Rust admits only when its file says it
+ * is a note.
+ */
+export type NoteDeletion = {
+  op: "delete_element";
+  element: { existing: string };
+};
+
+/**
  * An operation the canvas may send on its own: what `src/admission.rs` admits,
  * typed by hand.
  */
-export type AdmittedOperation = AdmittedMove | NoteUpdate;
+export type AdmittedOperation = AdmittedMove | NoteUpdate | NoteDeletion;
 
 /**
  * The one request that creates an element: a note with its own statement kind

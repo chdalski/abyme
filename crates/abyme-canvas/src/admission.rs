@@ -9,11 +9,11 @@
 //! for each variant and each mode: on a mirrored board a person moves only a
 //! note, whose file says what it is, and a release of a pin keeps the position
 //! in the board file, so that a release from a stale view does not move a box
-//! back. An update changes only a note, decided the same way. These are rules
-//! of this one client, not a boundary: the files stay open to the AI and to
-//! edits by hand, and the position authorizes nothing, since a page that may
-//! call `apply` can also read it. A move the canvas sends pins the element,
-//! since a person placed it there.
+//! back. An update or a deletion changes only a note, decided the same way.
+//! These are rules of this one client, not a boundary: the files stay open to
+//! the AI and to edits by hand, and the position authorizes nothing, since a
+//! page that may call `apply` can also read it. A move the canvas sends pins
+//! the element, since a person placed it there.
 
 use std::fmt;
 
@@ -48,8 +48,8 @@ pub enum Refused {
         /// The board.
         board: BoardId,
     },
-    /// One operation changes the text of an element whose file does not say
-    /// it is a note.
+    /// One operation changes or deletes an element whose file does not say it
+    /// is a note.
     NotANote {
         /// The operation's position in the request, counted from 1.
         position: usize,
@@ -82,7 +82,7 @@ impl fmt::Display for Refused {
             ),
             Self::NotANote { position } => write!(
                 formatter,
-                "operation {position}: the canvas may only change the text of a note"
+                "operation {position}: the canvas may change and delete only notes"
             ),
             Self::ReleaseElsewhere { position, board } => write!(
                 formatter,
@@ -96,12 +96,13 @@ impl fmt::Display for Refused {
 /// Checks that the canvas may send every operation of a request. Admitted
 /// today: moving and pinning an element that exists on a board that exists,
 /// releasing its pin, which says `pinned: false`, changing the name and body of
-/// an element that exists, and, as a whole request, creating a note.
+/// an element that exists, deleting an element that exists, and, as a whole
+/// request, creating a note.
 ///
 /// Whatever page a debug build loads from the dev server's address can send
-/// every operation admitted here, so it can create notes on any board and write
-/// their text into the repository, where the AI reads it. Admitting another
-/// operation needs a security review of that origin too.
+/// every operation admitted here, so it can create notes on any board, write
+/// their text into the repository, where the AI reads it, and delete them.
+/// Admitting another operation needs a security review of that origin too.
 ///
 /// # Errors
 ///
@@ -129,10 +130,10 @@ pub fn admit(operations: &[Operation]) -> Result<(), Refused> {
 /// as they stand before the request: on a mirrored board none does anything but
 /// move a note and keep it pinned, and none releases a pin anywhere but at the
 /// element's position in the file of the board it names. So no request leaves a
-/// box at a new position without a pin. An update changes only an element whose
-/// file says it is a note. A request that creates a note passes on any board,
-/// and it changes nothing that is there. A board `snapshot` does not have passes,
-/// and the core rejects it.
+/// box at a new position without a pin. An update or a deletion changes only an
+/// element whose file says it is a note, on any board. A request that creates a
+/// note passes on any board, and it changes nothing that is there. A board
+/// `snapshot` does not have passes, and the core rejects it.
 ///
 /// # Errors
 ///
@@ -181,7 +182,8 @@ fn refused_by_board_file(
             }
             Ref::New(_) => None,
         },
-        Operation::UpdateElement { element, .. } => {
+        // A deletion names no board: a note goes from every board, mirrored or not.
+        Operation::UpdateElement { element, .. } | Operation::DeleteElement { element } => {
             (!is_a_note(snapshot, element)).then_some(Refused::NotANote { position })
         }
         Operation::CreateElement { .. }
@@ -189,7 +191,6 @@ fn refused_by_board_file(
         | Operation::UpdateBoard { .. }
         | Operation::PlaceElement { .. }
         | Operation::LayoutBoard { .. }
-        | Operation::DeleteElement { .. }
         | Operation::CreateRelation { .. }
         | Operation::DeleteRelation { .. } => None,
     }
@@ -323,7 +324,10 @@ fn refused_kind(operation: &Operation) -> Option<&'static str> {
             }
             _ => Some("update_element"),
         },
-        Operation::DeleteElement { .. } => Some("delete_element"),
+        Operation::DeleteElement { element } => match element {
+            Ref::Existing(_) => None,
+            Ref::New(_) => Some("delete_element"),
+        },
         Operation::CreateRelation { .. } => Some("create_relation"),
         Operation::DeleteRelation { .. } => Some("delete_relation"),
     }

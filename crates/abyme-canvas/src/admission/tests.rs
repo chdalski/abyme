@@ -138,7 +138,7 @@ fn every_other_operation_is_refused_by_its_position_and_kind() {
             "update_element",
         ),
         (
-            json!({"op": "delete_element", "element": {"existing": "secret-id"}}),
+            json!({"op": "delete_element", "element": {"new": "secret-key"}}),
             "delete_element",
         ),
         (

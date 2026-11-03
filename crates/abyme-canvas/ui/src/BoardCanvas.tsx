@@ -27,6 +27,9 @@ import type { NoteParts } from "./notes";
 /** The one node type the canvas knows. */
 const NODE_TYPES = { element: ElementBox };
 
+/** The keys that delete the selected notes; React Flow ignores them in a text field. */
+const DELETE_KEYS = ["Delete", "Backspace"];
+
 /** Whether a key pressed in `target` belongs to typing. */
 function isTyping(target: EventTarget | null): boolean {
   return (
@@ -45,14 +48,15 @@ type BoardCanvasProps = {
     position: XYPosition,
     parts: NoteParts,
   ) => Promise<string | null>;
+  deleteNotes: (elements: string[]) => void;
   onMoveFailed: (message: string) => void;
   onOpen: (board: string) => void;
 };
 
 /**
  * A board's boxes and the arrows between them on the canvas. Moving boxes
- * moves their elements; the canvas cannot delete a box, since no delete
- * reaches the board file. Arrows follow from the view and hold no state. A
+ * moves their elements; `Delete` and `Backspace` delete the selected notes, and
+ * never a box or an arrow. Arrows follow from the view and hold no state. A
  * mirrored board offers no release of a pin, and a move only of a note. The key
  * `N`, a double-click on an empty spot, and the toolbar start a new note, on
  * every board.
@@ -71,11 +75,12 @@ function Flow({
   release,
   writeNote,
   createNote,
+  deleteNotes,
   onMoveFailed,
   onOpen,
 }: BoardCanvasProps) {
   const { nodes, onNodesChange, addDraft, dropDraft, draftWritten } =
-    useBoardNodes(view, move, onMoveFailed);
+    useBoardNodes(view, move, onMoveFailed, deleteNotes);
   const edges = useMemo(() => toEdges(view), [view]);
   const { screenToFlowPosition } = useReactFlow();
   const surface = useRef<HTMLDivElement>(null);
@@ -178,7 +183,7 @@ function Flow({
                 onNodesChange={onNodesChange}
                 onNodeDoubleClick={openFirstInnerBoard}
                 nodesConnectable={false}
-                deleteKeyCode={null}
+                deleteKeyCode={DELETE_KEYS}
                 zoomOnDoubleClick={false}
                 fitView
               >

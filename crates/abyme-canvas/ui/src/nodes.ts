@@ -56,6 +56,7 @@ export function toNodes(view: BoardView): ElementNode[] {
         draft: null,
       },
       draggable: view.mode !== "mirrored" || placement.shown.kind === "note",
+      deletable: placement.shown.kind === "note",
       connectable: false,
       handles: [
         {
@@ -77,6 +78,22 @@ export function toNodes(view: BoardView): ElementNode[] {
       ],
     };
   });
+}
+
+/**
+ * The elements React Flow takes away in `changes`, each once: the selected notes
+ * a key deleted. A new note no file holds is never among them.
+ */
+export function finishedRemovals(changes: NodeChange<ElementNode>[]): string[] {
+  return [
+    ...new Set(
+      changes.flatMap((change) =>
+        change.type === "remove" && !change.id.startsWith("+")
+          ? [change.id]
+          : [],
+      ),
+    ),
+  ];
 }
 
 /**

@@ -38,6 +38,7 @@ function canvasOf(
     position: XYPosition,
     parts: NoteParts,
   ) => Promise<string | null> = () => Promise.resolve("new-note"),
+  deleteNotes: (elements: string[]) => void = () => {},
 ) {
   return (
     <div style={{ width: 800, height: 600 }}>
@@ -47,6 +48,7 @@ function canvasOf(
         release={release}
         writeNote={writeNote}
         createNote={createNote}
+        deleteNotes={deleteNotes}
         onMoveFailed={() => {}}
         onOpen={onOpen}
       />
@@ -134,6 +136,7 @@ describe("BoardCanvas", () => {
           release={() => {}}
           writeNote={() => Promise.resolve(true)}
           createNote={() => Promise.resolve("new-note")}
+          deleteNotes={() => {}}
           onOpen={() => {}}
           onMoveFailed={() => {}}
         />
@@ -393,6 +396,86 @@ describe("the marker of a pin", () => {
 
     rerender(canvasOf(view(false), () => Promise.resolve()));
     expect(container.querySelector(".element-pin")).toBeNull();
+  });
+});
+
+describe("deleting a note", () => {
+  const withANote = () =>
+    boardView({
+      placements: [
+        placedBox("plain"),
+        placedBox("ask", {
+          x: 300,
+          shown: { kind: "note", name: "Ask", body: "" },
+        }),
+      ],
+    });
+
+  /** A canvas of `withANote` whose `deleteNotes` is `remove`, with `element` selected. */
+  async function selected(
+    element: string,
+    remove: (elements: string[]) => void,
+  ) {
+    const rendered = render(
+      canvasOf(
+        withANote(),
+        () => Promise.resolve(),
+        () => {},
+        () => {},
+        () => Promise.resolve(true),
+        () => Promise.resolve("new-note"),
+        remove,
+      ),
+    );
+    const node = box(rendered.container, element);
+    fireEvent.keyDown(node, { key: "Enter" });
+    // React Flow matches its delete key only while no other key is held.
+    fireEvent.keyUp(node, { key: "Enter" });
+    await waitFor(() => expect(node.classList.contains("selected")).toBe(true));
+    return { ...rendered, node };
+  }
+
+  it.each(["Delete", "Backspace"])(
+    "hands a selected note to the delete with %s, and keeps it on the screen",
+    async (key) => {
+      const remove = vi.fn();
+      const { container, node } = await selected("ask", remove);
+
+      fireEvent.keyDown(node, { key });
+
+      await waitFor(() =>
+        expect(remove).toHaveBeenCalledExactlyOnceWith(["ask"]),
+      );
+      expect(box(container, "ask").isConnected).toBe(true);
+    },
+  );
+
+  it("does not delete a selected box", async () => {
+    const remove = vi.fn();
+    const { container, node } = await selected("plain", remove);
+
+    fireEvent.keyDown(node, { key: "Delete" });
+    await act(() => Promise.resolve());
+
+    expect(remove).not.toHaveBeenCalled();
+    expect(box(container, "plain").isConnected).toBe(true);
+  });
+
+  it("deletes nothing with the keys pressed in a note's text field", async () => {
+    const remove = vi.fn();
+    const { node } = await selected("ask", remove);
+    const text = node.querySelector(".element-note");
+    if (text === null) {
+      throw new Error("no note text");
+    }
+    fireEvent.doubleClick(text);
+    const field = screen.getByRole("textbox", { name: "Text of the note" });
+
+    fireEvent.keyDown(field, { key: "Delete" });
+    fireEvent.keyDown(field, { key: "Backspace" });
+    await act(() => Promise.resolve());
+
+    expect(remove).not.toHaveBeenCalled();
   });
 });
 

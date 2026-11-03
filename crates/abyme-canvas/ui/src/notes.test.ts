@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { noteText, splitNoteText, toNewNote, toNoteUpdate } from "./notes";
+import {
+  noteText,
+  splitNoteText,
+  toNewNote,
+  toNoteDeletion,
+  toNoteUpdate,
+} from "./notes";
 
 describe("noteText", () => {
   it("is the name alone when the body is empty", () => {
@@ -92,6 +98,15 @@ describe("toNewNote", () => {
         pinned: true,
       },
     ]);
+  });
+});
+
+describe("toNoteDeletion", () => {
+  it("names only the element", () => {
+    expect(toNoteDeletion("ask")).toEqual({
+      op: "delete_element",
+      element: { existing: "ask" },
+    });
   });
 });
 

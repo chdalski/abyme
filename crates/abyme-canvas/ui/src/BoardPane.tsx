@@ -8,7 +8,12 @@ import { type BoardState, inOrder, loadBoard } from "./boards";
 import type { AbymeClient, AdmittedRequest } from "./client";
 import { useLive } from "./live";
 import { toMove, toRelease } from "./moves";
-import { type NoteParts, toNewNote, toNoteUpdate } from "./notes";
+import {
+  type NoteParts,
+  toNewNote,
+  toNoteDeletion,
+  toNoteUpdate,
+} from "./notes";
 import type { Move } from "./nodes";
 
 /**
@@ -100,6 +105,26 @@ export function BoardPane({
   );
 
   const view = state.kind === "loaded" ? state.view : lastView;
+  // Only what the view shows as a note, whatever React Flow hands over; Rust
+  // decides again from the files.
+  const deleteNotes = useCallback(
+    (elements: string[]) => {
+      const notes = new Set(
+        (view?.placements ?? [])
+          .filter((placement) => placement.shown.kind === "note")
+          .map((placement) => placement.element),
+      );
+      const deleted = elements.filter((element) => notes.has(element));
+      if (deleted.length === 0) {
+        return;
+      }
+      send(deleted.map(toNoteDeletion)).then(
+        () => setWriteFailure(null),
+        (error: unknown) => setWriteFailure(String(error)),
+      );
+    },
+    [send, view],
+  );
   if (view === null) {
     return state.kind === "failed" ? (
       <p role="alert">{state.message}</p>
@@ -140,6 +165,7 @@ export function BoardPane({
           release={release}
           writeNote={writeNote}
           createNote={createNote}
+          deleteNotes={deleteNotes}
           onMoveFailed={setWriteFailure}
           onOpen={onOpen}
         />

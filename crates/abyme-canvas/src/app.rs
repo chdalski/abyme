@@ -1,8 +1,8 @@
 //! The canvas's side of the IPC boundary: its commands, its one event, its
 //! window, and the watcher that raises the event. The one command that
 //! writes, `apply`, passes a request on only when `admission` admits it, on a
-//! mirrored board it only creates a note or moves one, no release leaves its
-//! position, and it changes the text only of a note.
+//! mirrored board it does nothing that does not concern a note, no release
+//! leaves its position, and it changes and deletes only notes.
 //!
 //! No command takes a path: every command works on the project that the
 //! directory the canvas started in lies in, found anew by the core on each
@@ -111,9 +111,9 @@ async fn open_board(start: State<'_, Start>, board: BoardId) -> Result<BoardView
 }
 
 /// Applies `operations` to the project, all or none, once the canvas may send
-/// every one of them, on a mirrored board none does anything but create a note
-/// or move one and keep it pinned, none releases a pin anywhere but at the
-/// position in the board file, and none changes the text of anything but a note.
+/// every one of them, on a mirrored board none does anything that does not
+/// concern a note, none releases a pin anywhere but at the position in the board
+/// file, and none changes or deletes anything but a note.
 /// Returns the IDs of the elements it created, and nothing else of what it wrote.
 /// The first check comes before any access to the project. The second runs under
 /// the project's lock, on the reading of the files the write starts from, so no

@@ -436,6 +436,69 @@ describe("BoardPane", () => {
     });
   });
 
+  describe("deleting notes", () => {
+    const withNotes = () =>
+      boardView({
+        placements: [
+          placedBox("payments"),
+          placedBox("ask", { shown: { kind: "note", name: "Ask", body: "" } }),
+          placedBox("why", { shown: { kind: "note", name: "Why", body: "" } }),
+        ],
+      });
+    const removeThrough = (ids: string[]) => {
+      const change = flow.props?.onNodesChange;
+      if (change === undefined) {
+        throw new Error("the pane gave React Flow no change handler");
+      }
+      act(() => change(ids.map((id) => ({ type: "remove" as const, id }))));
+    };
+
+    it("sends one request for the notes, and none for a box beside them", async () => {
+      const client = paneWith(null);
+      client.views = { context: withNotes() };
+      await openPane(client);
+
+      removeThrough(["ask", "payments", "why"]);
+
+      await waitFor(() => expect(client.applied).toHaveLength(1));
+      expect(client.applied).toEqual([
+        [
+          { op: "delete_element", element: { existing: "ask" } },
+          { op: "delete_element", element: { existing: "why" } },
+        ],
+      ]);
+      expect(Object.keys(positionsOnCanvas())).toEqual([
+        "payments",
+        "ask",
+        "why",
+      ]);
+    });
+
+    it("sends nothing when no note is among them", async () => {
+      const client = paneWith(null);
+      client.views = { context: withNotes() };
+      await openPane(client);
+
+      removeThrough(["payments"]);
+      await act(() => Promise.resolve());
+
+      expect(client.applied).toEqual([]);
+    });
+
+    it("shows the core's refusal as text and keeps the note", async () => {
+      const message = "<img src=x onerror=alert(1)> still relates to ask";
+      const client = paneWith(message);
+      client.views = { context: withNotes() };
+      const { container } = await openPane(client);
+
+      removeThrough(["ask"]);
+
+      expect((await screen.findByRole("alert")).textContent).toBe(message);
+      expect(container.querySelector("img")).toBeNull();
+      expect(Object.keys(positionsOnCanvas())).toContain("ask");
+    });
+  });
+
   describe("a failed reload", () => {
     const OUT_OF_DATE = "This board may be out of date: ";
     const alerts = () =>
@@ -558,9 +621,13 @@ describe("BoardPane", () => {
     });
   });
 
-  it("gives React Flow no key that deletes a box", async () => {
+  it("gives React Flow the delete keys, and no box a way to be deleted", async () => {
     await openPane(paneWith(null));
 
-    expect(flow.props?.deleteKeyCode).toBeNull();
+    expect(flow.props?.deleteKeyCode).toEqual(["Delete", "Backspace"]);
+    expect(flow.props?.nodes?.map((node) => node.deletable)).toEqual([
+      false,
+      false,
+    ]);
   });
 });

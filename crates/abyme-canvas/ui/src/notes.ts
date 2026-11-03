@@ -1,6 +1,6 @@
 import type { XYPosition } from "@xyflow/react";
 
-import type { NewNote, NoteUpdate } from "./client";
+import type { NewNote, NoteDeletion, NoteUpdate } from "./client";
 
 /** What a note's text is made of. */
 export type NoteParts = { name: string; body: string };
@@ -66,6 +66,11 @@ export function toNewNote(
       pinned: true,
     },
   ];
+}
+
+/** The operation that deletes the note `element`. */
+export function toNoteDeletion(element: string): NoteDeletion {
+  return { op: "delete_element", element: { existing: element } };
 }
 
 /** The operation that writes `parts` as the text of the note `element`. */

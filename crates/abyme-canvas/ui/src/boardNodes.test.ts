@@ -21,7 +21,12 @@ function setup(move: (moves: Move[]) => Promise<void>) {
   const failures: string[] = [];
   const hook = renderHook(
     ({ board }: { board: BoardView }) =>
-      useBoardNodes(board, move, (message) => failures.push(message)),
+      useBoardNodes(
+        board,
+        move,
+        (message) => failures.push(message),
+        () => {},
+      ),
     { initialProps: { board: view({ x: 0, y: 0 }, { x: 300, y: 0 }) } },
   );
   return { hook, failures };

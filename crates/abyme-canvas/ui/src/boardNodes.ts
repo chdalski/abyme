@@ -11,6 +11,7 @@ import {
   type Move,
   draftNote,
   finishedMoves,
+  finishedRemovals,
   keepUiState,
   returnHome,
   toNodes,
@@ -21,13 +22,15 @@ import {
  * replaces them, but keeps what the user selected and is dragging. Every finished move goes
  * to `move`, all moves of one change in one call; when that fails, their
  * boxes return to their positions in the board file and `onMoveFailed`
- * receives the message. A new note lives among the boxes, as React Flow measures
- * only what this state holds, under an ID no element can have.
+ * receives the message. A deleted note goes to `remove` and stays until a view
+ * leaves it out. A new note lives among the boxes, as React Flow measures only
+ * what this state holds, under an ID no element can have.
  */
 export function useBoardNodes(
   view: BoardView,
   move: (moves: Move[]) => Promise<void>,
   onMoveFailed: (message: string) => void,
+  remove: (elements: string[]) => void,
 ) {
   const [nodes, setNodes] = useState(() => toNodes(view));
   const [shownView, setShownView] = useState(view);
@@ -38,7 +41,16 @@ export function useBoardNodes(
 
   const onNodesChange = useCallback(
     (changes: NodeChange<ElementNode>[]) => {
-      setNodes((current) => applyNodeChanges(changes, current));
+      setNodes((current) =>
+        applyNodeChanges(
+          changes.filter((change) => change.type !== "remove"),
+          current,
+        ),
+      );
+      const removals = finishedRemovals(changes);
+      if (removals.length > 0) {
+        remove(removals);
+      }
       const moves = finishedMoves(changes);
       if (moves.length === 0) {
         return;
@@ -49,7 +61,7 @@ export function useBoardNodes(
         onMoveFailed(String(error));
       });
     },
-    [move, onMoveFailed],
+    [move, onMoveFailed, remove],
   );
 
   const nextDraft = useRef(1);

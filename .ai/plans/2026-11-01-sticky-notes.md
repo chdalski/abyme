@@ -32,7 +32,7 @@ is the next plan.
 - [x] A failed reload keeps the board
 - [x] Editing a note's text
 - [x] Creating a note
-- [ ] Deleting a note
+- [x] Deleting a note
 
 ## Tasks
 
@@ -187,25 +187,25 @@ box stays undeletable.
 
 Review path: Security-Hybrid
 
-- [ ] The admission takes `delete_element` only of an existing element whose file says it is a note.
+- [x] The admission takes `delete_element` only of an existing element whose file says it is a note.
       An element of another type and an element whose file is missing are refused by position, naming
       no other text; a request with such an operation writes nothing, and a missing element's
       placements stay on every board.
-- [ ] The key sends one request for the selected notes, in order with the canvas's moves; a selected
+- [x] The key sends one request for the selected notes, in order with the canvas's moves; a selected
       box beside them stays and is not sent. The note stays on the screen until the board's next view
       leaves it out, and a refusal from the core shows as text.
-- [ ] Keys pressed in a note's text field delete nothing.
-- [ ] Rust tests cover each state through `apply` over IPC with the bytes of the files, including a
+- [x] Keys pressed in a note's text field delete nothing.
+- [x] Rust tests cover each state through `apply` over IPC with the bytes of the files, including a
       note another element relates to; Vitest covers the key with notes and with boxes selected.
       `admitted.typecheck.ts` covers the type.
-- [ ] A reader of Canvas can tell how a note is deleted and that boxes cannot be, and its table of
+- [x] A reader of Canvas can tell how a note is deleted and that boxes cannot be, and its table of
       editing and Board Graph's section on deleting agree with that: no question, notes only.
-- [ ] No comment in `crates/abyme-canvas/src/` and `ui/src/` states a rule this plan changed: that a
+- [x] No comment in `crates/abyme-canvas/src/` and `ui/src/` states a rule this plan changed: that a
       mirrored board offers no move, that the canvas writes only moves, or that it cannot delete.
-- [ ] A reader of the canvas row of the root `CLAUDE.md` can tell what the canvas may write: moves,
+- [x] A reader of the canvas row of the root `CLAUDE.md` can tell what the canvas may write: moves,
       and creating, editing, and deleting notes, and that a mirrored board allows only what concerns
       a note.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
       `cargo fmt --all --check`, `pnpm --dir crates/abyme-canvas/ui check`, and
       `pnpm --dir crates/abyme-canvas/ui test` pass.
 

@@ -1175,7 +1175,7 @@ fn element_one(root: &Path) -> Element {
         .unwrap()
 }
 
-const NOT_A_NOTE: &str = "operation 1: the canvas may only change the text of a note";
+const NOT_A_NOTE: &str = "operation 1: the canvas may change and delete only notes";
 const MAY_NOT_SEND_AN_UPDATE: &str = "the canvas may not send update_element";
 
 #[test]
@@ -1767,6 +1767,192 @@ fn text_in_a_new_note_cannot_change_its_other_fields() {
     assert_eq!(note.statement(), Some(StatementKind::Idea));
     assert_eq!(note.anchor(), None);
     assert_eq!(note.relations(), &Relations::new());
+}
+
+fn a_deletion_of(element: &str) -> Value {
+    json!({"op": "delete_element", "element": {"existing": element}})
+}
+
+/// `mirrored_board_with_a_note`, with a free board `free` that places `ask` and
+/// `payment-service` too, both board files as the core writes them.
+fn a_note_on_two_boards(root: &Path) {
+    mirrored_board_with_a_note(root);
+    fs::write(
+        root.join("abyme/boards/free.board.json"),
+        r#"{"format": 1, "id": "free", "title": "Free", "placements": [
+            {"element": "ask", "x": 5, "y": 6, "width": 180, "height": 90},
+            {"element": "payment-service", "x": 300, "y": 6, "width": 180, "height": 90}]}"#,
+    )
+    .unwrap();
+    // A move makes the core write the file in its own form.
+    let operations: Vec<Operation> =
+        serde_json::from_value(json!([a_move_of("payment-service", "free", 300, 6)])).unwrap();
+    Project::discover(root).unwrap().apply(&operations).unwrap();
+}
+
+/// `text` without its lines that name `element`, as a board file is written
+/// without that element.
+fn without_lines_of(text: &str, element: &str) -> String {
+    let named = format!("\"{element}\"");
+    text.lines()
+        .filter(|line| !line.contains(&named))
+        .flat_map(|line| [line, "\n"])
+        .collect()
+}
+
+#[test]
+fn a_deletion_takes_a_note_from_every_board_and_changes_nothing_else() {
+    let root = tempfile::tempdir().unwrap();
+    a_note_on_two_boards(root.path());
+    let mut before = project_files(root.path());
+    let context = PathBuf::from("abyme/boards/context.board.json");
+    let free = PathBuf::from("abyme/boards/free.board.json");
+    let context_before = String::from_utf8(before.remove(&context).unwrap()).unwrap();
+    let free_before = String::from_utf8(before.remove(&free).unwrap()).unwrap();
+    before
+        .remove(&PathBuf::from("abyme/elements/ask.md"))
+        .unwrap();
+    let (_app, window) = canvas(root.path());
+
+    let deleted = apply_from(&window, &json!([a_deletion_of("ask")]));
+
+    assert_eq!(deleted, Ok(json!([])));
+    let mut after = project_files(root.path());
+    let context_after = String::from_utf8(after.remove(&context).unwrap()).unwrap();
+    let free_after = String::from_utf8(after.remove(&free).unwrap()).unwrap();
+    assert_eq!(after, before);
+    assert_eq!(context_after, without_lines_of(&context_before, "ask"));
+    assert_eq!(free_after, without_lines_of(&free_before, "ask"));
+    assert!(context_after.contains(MIRRORED), "{context_after}");
+}
+
+#[test]
+fn a_deletion_of_what_is_no_note_writes_nothing_and_names_only_its_position() {
+    let root = tempfile::tempdir().unwrap();
+    a_note_on_two_boards(root.path());
+    let before = project_files(root.path());
+    let (_app, window) = canvas(root.path());
+
+    // `payment-service` is a box; `orders` lies on the board, but its file is
+    // missing, so its placements stay.
+    for element in ["payment-service", "orders"] {
+        let refused = apply_from(&window, &json!([a_deletion_of(element)]));
+
+        assert_eq!(refused, Err(json!(NOT_A_NOTE)), "{element}");
+        assert_eq!(project_files(root.path()), before, "{element}");
+    }
+    let new = apply_from(
+        &window,
+        &json!([{"op": "delete_element", "element": {"new": "k"}}]),
+    );
+    assert!(
+        new.unwrap_err()
+            .to_string()
+            .contains("the canvas may not send delete_element"),
+    );
+    assert_eq!(project_files(root.path()), before);
+}
+
+#[test]
+fn a_deletion_of_a_type_that_only_resembles_note_writes_nothing() {
+    for type_ref in ["Note", "notes", "c4/note"] {
+        let root = tempfile::tempdir().unwrap();
+        project_with_one_element(root.path(), type_ref, "", "");
+        let before = project_files(root.path());
+        let (_app, window) = canvas(root.path());
+
+        let refused = apply_from(&window, &json!([a_deletion_of("one")]));
+
+        assert_eq!(refused, Err(json!(NOT_A_NOTE)), "{type_ref}");
+        assert_eq!(project_files(root.path()), before, "{type_ref}");
+    }
+}
+
+#[test]
+fn a_deletion_from_a_stale_view_is_refused_by_what_the_file_says_now() {
+    let root = tempfile::tempdir().unwrap();
+    project_with_one_element(root.path(), "note", "", "");
+    let (_app, window) = canvas(root.path());
+    open_board_from(&window, json!({"board": "context"})).unwrap();
+    fs::write(
+        root.path().join("abyme/elements/one.md"),
+        "---\nid: one\ntype: t\nname: N\n---\n",
+    )
+    .unwrap();
+    let before = project_files(root.path());
+
+    let refused = apply_from(&window, &json!([a_deletion_of("one")]));
+
+    assert_eq!(refused, Err(json!(NOT_A_NOTE)));
+    assert_eq!(project_files(root.path()), before);
+}
+
+#[test]
+fn a_note_that_another_element_relates_to_or_that_owns_a_board_stays() {
+    let root = tempfile::tempdir().unwrap();
+    mirrored_board_with_a_note(root.path());
+    let operations = json!([
+        {"op": "create_relation", "from": {"existing": "payment-service"}, "kind": "uses",
+         "to": {"existing": "ask"}}
+    ]);
+    let operations: Vec<Operation> = serde_json::from_value(operations).unwrap();
+    Project::discover(root.path())
+        .unwrap()
+        .apply(&operations)
+        .unwrap();
+    let before = project_files(root.path());
+    let (_app, window) = canvas(root.path());
+
+    let related = apply_from(&window, &json!([a_deletion_of("ask")]))
+        .unwrap_err()
+        .to_string();
+
+    assert!(related.contains("payment-service"), "{related}");
+    assert!(related.contains("uses"), "{related}");
+    assert_eq!(project_files(root.path()), before);
+
+    let owner = tempfile::tempdir().unwrap();
+    project_with_one_element(owner.path(), "note", "", "");
+    fs::write(
+        owner.path().join("abyme/boards/inside.board.json"),
+        r#"{"format": 1, "id": "inside", "title": "Inside", "owner": "one", "placements": []}"#,
+    )
+    .unwrap();
+    let before = project_files(owner.path());
+    let (_app, window) = canvas(owner.path());
+
+    let owning = apply_from(&window, &json!([a_deletion_of("one")]))
+        .unwrap_err()
+        .to_string();
+
+    assert!(owning.contains("owns board inside"), "{owning}");
+    assert_eq!(project_files(owner.path()), before);
+}
+
+#[test]
+fn a_deletion_goes_with_other_admitted_operations_and_fails_with_a_refused_one() {
+    let root = tempfile::tempdir().unwrap();
+    project_with_a_board(root.path());
+    let (_app, window) = canvas(root.path());
+    apply_from(&window, &json!(a_new_note("context", "Ask", ""))).unwrap();
+    apply_from(&window, &json!(a_new_note("context", "Other", ""))).unwrap();
+
+    apply_from(&window, &json!([a_move(10, 20), a_deletion_of("ask")])).unwrap();
+    assert!(!root.path().join("abyme/elements/ask.md").exists());
+
+    let before = project_files(root.path());
+    let refused = apply_from(
+        &window,
+        &json!([a_deletion_of("other"), a_deletion_of("payment-service")]),
+    );
+    assert_eq!(
+        refused,
+        Err(json!(
+            "operation 2: the canvas may change and delete only notes"
+        ))
+    );
+    assert_eq!(project_files(root.path()), before);
+    assert!(root.path().join("abyme/elements/other.md").exists());
 }
 
 #[test]

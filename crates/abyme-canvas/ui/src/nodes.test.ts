@@ -5,6 +5,7 @@ import {
   type ElementNode,
   draftNote,
   finishedMoves,
+  finishedRemovals,
   keepUiState,
   returnHome,
   toNodes,
@@ -217,6 +218,36 @@ describe("keepUiState and a new note", () => {
       false,
       false,
     ]);
+  });
+});
+
+describe("toNodes and deleting", () => {
+  it("makes only a note deletable", () => {
+    const view = boardView({
+      placements: [
+        placedBox("plain"),
+        placedBox("ask", { shown: { kind: "note", name: "Ask", body: "" } }),
+      ],
+    });
+
+    expect(toNodes(view).map((node) => [node.id, node.deletable])).toEqual([
+      ["plain", false],
+      ["ask", true],
+    ]);
+  });
+});
+
+describe("finishedRemovals", () => {
+  it("takes each removed element once, and no new note", () => {
+    expect(
+      finishedRemovals([
+        { type: "remove", id: "ask" },
+        { type: "remove", id: "ask" },
+        { type: "remove", id: "+note-1" },
+        { type: "select", id: "plain", selected: true },
+        { type: "remove", id: "other" },
+      ]),
+    ).toEqual(["ask", "other"]);
   });
 });
 
