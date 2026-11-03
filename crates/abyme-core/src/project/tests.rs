@@ -1,3 +1,8 @@
+#![expect(
+    clippy::disallowed_fields,
+    reason = "the tests check the fields as the board file stores them"
+)]
+
 use std::fs;
 use std::thread;
 use std::time::Duration;

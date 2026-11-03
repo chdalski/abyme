@@ -60,11 +60,12 @@ export type Placement = {
  */
 element: string, 
 /**
- * The left edge, from the board file.
+ * The left edge on the board, which for an attached element the core
+ * computes from the box it hangs on.
  */
 x: number, 
 /**
- * The top edge, from the board file.
+ * The top edge on the board, computed like the left edge.
  */
 y: number, 
 /**

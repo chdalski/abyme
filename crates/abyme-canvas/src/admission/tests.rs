@@ -327,6 +327,7 @@ fn snapshot_with_payments_at(x: i32, y: i32) -> Snapshot {
                     height: NonZeroU32::new(90).unwrap(),
                 },
                 pinned: true,
+                attached_to: None,
             },
         );
     snapshot
@@ -508,4 +509,75 @@ fn a_new_note_with_anything_beside_it_does_not_pass_the_mirrored_check() {
         ));
         assert!(admit(&request).is_err());
     }
+}
+
+/// `snapshot_with_a_note` with the box `checkout` at 100, 200 on the boards
+/// `plain` and `mirrored`, and `payments` hanging on it at the offset `dx`,
+/// `dy`, pinned.
+fn snapshot_with_an_attached_note(dx: i32, dy: i32) -> Snapshot {
+    let mut snapshot = snapshot_with_a_note();
+    for board in ["plain", "mirrored"] {
+        let id: BoardId = board.parse().unwrap();
+        let mode = snapshot.boards[&id].zone.map(|zone| zone.mode.as_str());
+        let zone = mode.map_or(String::new(), |mode| {
+            format!(r#""zone": {{"mode": "{mode}", "statement": "current"}}, "#)
+        });
+        let text = format!(
+            r#"{{"format": 1, "id": "{board}", "title": "{board}", {zone}"placements": [
+                {{"element": "checkout", "x": 100, "y": 200, "width": 180, "height": 90}},
+                {{"element": "payments", "x": {dx}, "y": {dy}, "width": 180, "height": 90, "pinned": true, "attached_to": "checkout"}}
+            ]}}"#
+        );
+        snapshot
+            .boards
+            .insert(id.clone(), Board::from_json(&id, &text).unwrap());
+    }
+    snapshot
+}
+
+#[test]
+fn lets_a_release_of_an_attached_note_pass_only_at_its_position_on_the_board() {
+    // The note lies at 10, 20 on the board: 100 - 90 and 200 - 180.
+    assert_eq!(
+        check_board_files(
+            &snapshot_with_an_attached_note(-90, -180),
+            &[a_release_on("plain")]
+        ),
+        Ok(())
+    );
+    // Stored at 10, 20, the note lies at 110, 220.
+    assert_eq!(
+        check_board_files(
+            &snapshot_with_an_attached_note(10, 20),
+            &[a_release_on("plain")]
+        ),
+        Err(Refused::ReleaseElsewhere {
+            position: 1,
+            board: "plain".parse().unwrap(),
+        })
+    );
+}
+
+#[test]
+fn lets_a_move_of_an_attached_note_pass_on_a_mirrored_board_but_not_of_its_box() {
+    let a_move = |element: &str| {
+        operation(json!({
+            "op": "move_element",
+            "element": {"existing": element},
+            "board": {"existing": "mirrored"},
+            "x": 10,
+            "y": 20,
+            "pinned": true
+        }))
+    };
+    let snapshot = snapshot_with_an_attached_note(5, 6);
+
+    assert_eq!(check_board_files(&snapshot, &[a_move("payments")]), Ok(()));
+    assert_eq!(
+        check_board_files(&snapshot, &[a_move("checkout")]),
+        Err(Refused::Mirrored {
+            position: 1,
+            board: "mirrored".parse().unwrap(),
+        })
+    );
 }

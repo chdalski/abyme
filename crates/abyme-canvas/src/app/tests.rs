@@ -1,6 +1,10 @@
 //! Tests of the IPC boundary through Tauri's own message handling and the
 //! app's real configuration and access list, and of that configuration.
 
+#![expect(
+    clippy::disallowed_fields,
+    reason = "the tests check the fields as the board file stores them"
+)]
 use super::*;
 use std::collections::BTreeMap;
 use std::fs;

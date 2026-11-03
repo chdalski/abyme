@@ -124,15 +124,17 @@ A board is a JSON file. Its structure follows JSON Canvas, so an export to `.can
   "zone": {"mode": "mirrored", "statement": "current"},
   "placements": [
     {"element": "checkout-service", "x": 80, "y": 200, "width": 180, "height": 90},
+    {"element": "is-it-idempotent", "x": 20, "y": 110, "width": 180, "height": 90, "pinned": true, "attached_to": "payment-service"},
     {"element": "payment-service", "x": 400, "y": 200, "width": 180, "height": 90}
   ]
 }
 ```
 
-- **Fields:** `format`, which is 1, `id`, which equals the file name, `title`, the optional `owner`, the element whose inside the board is (its [[Board Graph|inner board]]), the optional `summary`, the optional `zone` with its `mode` and `statement` (see [[Boards and Zones]]), and the placements with `element`, `x`, `y`, `width`, `height`, and, at the end of the line and only for a [[Placement and Layout#Rules|pinned]] element, `"pinned": true`. The owner, the summary, and the zone each have a line of their own and are written only when present. Positions are integers, sizes positive integers. The file must be a JSON object; other fields and an element placed twice are rejected.
-- **One placement per line**, sorted by element ID. Moving or pinning a box changes exactly one line.
+- **Fields:** `format`, which is 1, `id`, which equals the file name, `title`, the optional `owner`, the element whose inside the board is (its [[Board Graph|inner board]]), the optional `summary`, the optional `zone` with its `mode` and `statement` (see [[Boards and Zones]]), and the placements with `element`, `x`, `y`, `width`, `height`, then, only for a [[Placement and Layout#Rules|pinned]] element, `"pinned": true`, and last, only for an attached element, `attached_to` with the ID of the element it hangs on. The owner, the summary, and the zone each have a line of their own and are written only when present. Positions are integers, sizes positive integers. The file must be a JSON object; other fields and an element placed twice are rejected.
+- **One placement per line**, sorted by element ID. Moving or pinning a box changes exactly one line, and so does attaching, detaching, or moving a note.
+- **Attached positions are relative:** While an attachment holds, `x` and `y` are the offset from the position of the element it names, so in the example the note lies at 420, 310, and moving `payment-service` changes only that element's line. An attachment holds when the element it names lies on the same board, is not the placement's own element, hangs on nothing itself, and the position it gives lies within -1,000,000 to 1,000,000, the range of a move. Otherwise `x` and `y` are a board position, and the field stays as written: a merge or a hand edit can break an attachment, and readers show the board rather than fail. Width and height are always the placement's own.
 - **Arrows are not in the file.** They follow from the relations of the elements.
-- **Later fields:** `frames` on the board; `frame`, `presentation`, and `attached_to` on a placement. An attached sticky note's coordinates will be relative to the element it hangs on (see [[Presentation#Sticky Notes]]).
+- **Later fields:** `frames` on the board; `frame` and `presentation` on a placement.
 
 ## Project File
 

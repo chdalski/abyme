@@ -15,8 +15,47 @@ use crate::object_only::ObjectOnly;
 use crate::untrusted::shown;
 use crate::zone::Zone;
 
+pub use placement::Placement;
+
+/// The placement type, in a module of its own so that its derives may read
+/// the fields that the rest of the workspace reads only through [`Board`].
+mod placement {
+    #![expect(
+        clippy::disallowed_fields,
+        reason = "the derives compare, copy, and print the fields as stored"
+    )]
+
+    use super::{ElementId, Rect};
+
+    /// An element's place on a board.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct Placement {
+        /// The position and size the board file stores: a board position,
+        /// or, while the attachment holds, the offset from the box it hangs
+        /// on. Read where the element lies through
+        /// [`Board::rect_of`](super::Board::rect_of) or
+        /// [`Board::placed`](super::Board::placed), and change it through
+        /// [`Board::set_rect`](super::Board::set_rect).
+        pub rect: Rect,
+        /// Whether a person placed it by hand: a move must then say what it
+        /// wants with the pin, and a layout leaves it where it is.
+        pub pinned: bool,
+        /// The element the placement hangs on, as the file names it. Whether
+        /// the attachment holds is for
+        /// [`Board::attachment`](super::Board::attachment) to say.
+        pub attached_to: Option<ElementId>,
+    }
+}
+
 /// The version of the board file format this crate reads and writes.
 pub const BOARD_FORMAT: u32 = 1;
+
+/// The largest distance of a position from the origin, in each direction.
+///
+/// A move accepts no position beyond it and an attached element reaches none:
+/// a position near the `i32` limit would leave later placements on that board
+/// no room below it.
+pub const MAX_COORDINATE: i32 = 1_000_000;
 
 /// How many characters of a parser message an error shows.
 const DETAIL_LIMIT: usize = 200;
@@ -39,17 +78,6 @@ pub struct Board {
     /// The placement of each element on the board. A map, so an element
     /// lies on a board at most once and the order is always by element ID.
     pub placements: BTreeMap<ElementId, Placement>,
-}
-
-/// An element's place on a board.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Placement {
-    /// The position and size the board file stores. Read where the element
-    /// lies through [`Board::rect_of`] or [`Board::placed`].
-    pub rect: Rect,
-    /// Whether a person placed it by hand: a move must then say what it wants
-    /// with the pin, and a layout leaves it where it is.
-    pub pinned: bool,
 }
 
 /// A position and a size on a board.
@@ -89,6 +117,17 @@ impl Rect {
             && i64::from(self.y) < other.bottom()
             && i64::from(other.y) < self.bottom()
     }
+}
+
+/// Why a position cannot be stored on a board.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum PositionError {
+    /// The board does not place the element.
+    #[error("the board does not place the element")]
+    NotPlaced,
+    /// The offset from the box the element hangs on does not fit in `i32`.
+    #[error("the offset from the box the element hangs on does not fit")]
+    OffsetTooLarge,
 }
 
 /// A board file that cannot be read.
@@ -156,6 +195,8 @@ struct PlacementLine {
     height: NonZeroU32,
     #[serde(default)]
     pinned: bool,
+    #[serde(default)]
+    attached_to: Option<ElementId>,
 }
 
 impl Board {
@@ -199,10 +240,14 @@ impl Board {
     }
 
     /// Where `element` lies on this board, if the board places it. Every
-    /// reader of a position asks the board, not the placement's stored rect.
+    /// reader of a position asks the board, not the placement's stored rect:
+    /// while the attachment holds, the stored position is an offset from the
+    /// box.
     #[must_use]
     pub fn rect_of(&self, element: &ElementId) -> Option<Rect> {
-        self.placements.get(element).map(|placement| placement.rect)
+        self.placements
+            .get(element)
+            .map(|placement| self.resolved(element, placement).0)
     }
 
     /// Every placement with where its element lies on this board: each
@@ -211,7 +256,140 @@ impl Board {
     pub fn placed(&self) -> impl Iterator<Item = (&ElementId, &Placement, Rect)> {
         self.placements
             .iter()
-            .map(|(element, placement)| (element, placement, placement.rect))
+            .map(|(element, placement)| (element, placement, self.resolved(element, placement).0))
+    }
+
+    /// The element `element` hangs on, if its attachment holds: the file names
+    /// an element that this board places, that is not `element` itself and
+    /// hangs on nothing, and the position it gives lies within
+    /// [`MAX_COORDINATE`] in both directions.
+    #[must_use]
+    pub fn attachment(&self, element: &ElementId) -> Option<&ElementId> {
+        self.placements
+            .get(element)
+            .and_then(|placement| self.resolved(element, placement).1)
+    }
+
+    /// The element the file says `element` hangs on, whether the attachment
+    /// holds or not.
+    #[must_use]
+    #[expect(
+        clippy::disallowed_fields,
+        reason = "the one reader of the field as written, for an output that tells whether it holds"
+    )]
+    pub fn named_attachment(&self, element: &ElementId) -> Option<&ElementId> {
+        self.placements
+            .get(element)
+            .and_then(|placement| placement.attached_to.as_ref())
+    }
+
+    /// The box `element` names, if the board places it, it is another element,
+    /// and it hangs on nothing. The attachment may still not hold, when the
+    /// position it gives lies beyond [`MAX_COORDINATE`]: where the element
+    /// lies, [`Board::rect_of`] says, and whether it hangs on the box,
+    /// [`Board::attachment`].
+    #[must_use]
+    pub fn named_box(&self, element: &ElementId) -> Option<&ElementId> {
+        let placement = self.placements.get(element)?;
+        self.host(element, placement).map(|(named, _)| named)
+    }
+
+    /// The elements whose attachment to `element` holds, by ID.
+    #[must_use]
+    pub fn hanging_on(&self, element: &ElementId) -> Vec<ElementId> {
+        self.placements
+            .iter()
+            .filter(|(id, placement)| self.resolved(id, placement).1 == Some(element))
+            .map(|(id, _)| id.clone())
+            .collect()
+    }
+
+    /// Puts `element` at `rect`, a board position with its size. While the
+    /// element hangs on a box that this board places, that is another element
+    /// and hangs on nothing, the position is stored as the offset from that
+    /// box, so it moves along with the box.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PositionError::NotPlaced`] when the board does not place the
+    /// element, and [`PositionError::OffsetTooLarge`] when the offset does not
+    /// fit in `i32`; then nothing changes.
+    #[expect(
+        clippy::disallowed_fields,
+        reason = "the one writer of a position, which stores it relative to the box"
+    )]
+    pub fn set_rect(&mut self, element: &ElementId, rect: Rect) -> Result<(), PositionError> {
+        let placement = self
+            .placements
+            .get(element)
+            .ok_or(PositionError::NotPlaced)?;
+        let stored = match self.host(element, placement) {
+            Some((_, host)) => Rect {
+                x: offset(rect.x, host.x)?,
+                y: offset(rect.y, host.y)?,
+                ..rect
+            },
+            None => rect,
+        };
+        if let Some(placement) = self.placements.get_mut(element) {
+            placement.rect = stored;
+        }
+        Ok(())
+    }
+
+    /// Ends every attachment to `element` on this board: each element that
+    /// names it keeps where it lies, now stored as a board position.
+    #[expect(
+        clippy::disallowed_fields,
+        reason = "detaching rewrites the stored position and the field together"
+    )]
+    pub fn detach_from(&mut self, element: &ElementId) {
+        let detached: Vec<(ElementId, Rect)> = self
+            .placements
+            .iter()
+            .filter(|(_, placement)| placement.attached_to.as_ref() == Some(element))
+            .map(|(id, placement)| (id.clone(), self.resolved(id, placement).0))
+            .collect();
+        for (id, rect) in detached {
+            if let Some(placement) = self.placements.get_mut(&id) {
+                placement.rect = rect;
+                placement.attached_to = None;
+            }
+        }
+    }
+
+    /// The box `placement` of `element` names, with the box's stored rect,
+    /// when the board places it, it is another element, and it hangs on
+    /// nothing; its stored rect is then its board position.
+    #[expect(
+        clippy::disallowed_fields,
+        reason = "the rule of an attachment reads the fields as written"
+    )]
+    fn host(&self, element: &ElementId, placement: &Placement) -> Option<(&ElementId, Rect)> {
+        let named = placement
+            .attached_to
+            .as_ref()
+            .filter(|named| *named != element)?;
+        let (named, host) = self.placements.get_key_value(named)?;
+        host.attached_to.is_none().then_some((named, host.rect))
+    }
+
+    /// Where `placement` of `element` lies, and the box it hangs on if its
+    /// attachment holds. A position computed from a box must lie within
+    /// [`MAX_COORDINATE`]; otherwise the stored rect counts as a board
+    /// position.
+    #[expect(
+        clippy::disallowed_fields,
+        reason = "resolving a position reads the stored rect"
+    )]
+    fn resolved(&self, element: &ElementId, placement: &Placement) -> (Rect, Option<&ElementId>) {
+        let stored = placement.rect;
+        let held = self.host(element, placement).and_then(|(named, host)| {
+            let x = within_range(i64::from(host.x) + i64::from(stored.x))?;
+            let y = within_range(i64::from(host.y) + i64::from(stored.y))?;
+            Some((Rect { x, y, ..stored }, named))
+        });
+        held.map_or((stored, None), |(rect, named)| (rect, Some(named)))
     }
 
     /// Writes the board file, one placement per line, ordered by element ID.
@@ -252,6 +430,19 @@ impl Board {
     }
 }
 
+/// `value` as a position, if it lies within [`MAX_COORDINATE`].
+fn within_range(value: i64) -> Option<i32> {
+    i32::try_from(value)
+        .ok()
+        .filter(|value| (-MAX_COORDINATE..=MAX_COORDINATE).contains(value))
+}
+
+/// The offset of `position` from `origin`, if it fits in `i32`.
+fn offset(position: i32, origin: i32) -> Result<i32, PositionError> {
+    i32::try_from(i64::from(position) - i64::from(origin))
+        .map_err(|_| PositionError::OffsetTooLarge)
+}
+
 /// The line `  "key": value,` for a field the board has, or nothing.
 fn optional_line(key: &str, value: Option<String>) -> String {
     value.map_or(String::new(), |value| format!("  \"{key}\": {value},\n"))
@@ -276,6 +467,7 @@ fn collect_placements(
                 slot.insert(Placement {
                     rect,
                     pinned: line.pinned,
+                    attached_to: line.attached_to,
                 });
             }
             Entry::Occupied(slot) => {
@@ -289,12 +481,23 @@ fn collect_placements(
     Ok(placements)
 }
 
-/// One placement as a line of the file.
+/// One placement as a line of the file, with the stored rect as it is.
+#[expect(
+    clippy::disallowed_fields,
+    reason = "the file holds the fields as stored"
+)]
 fn placement_line(element: &ElementId, placement: &Placement) -> String {
-    let Placement { rect, pinned } = placement;
+    let Placement {
+        rect,
+        pinned,
+        attached_to,
+    } = placement;
     let pin = if *pinned { ", \"pinned\": true" } else { "" };
+    let attached = attached_to.as_ref().map_or(String::new(), |named| {
+        format!(", \"attached_to\": {}", json_string(named.as_str()))
+    });
     format!(
-        "    {{\"element\": {}, \"x\": {}, \"y\": {}, \"width\": {}, \"height\": {}{pin}}}",
+        "    {{\"element\": {}, \"x\": {}, \"y\": {}, \"width\": {}, \"height\": {}{pin}{attached}}}",
         json_string(element.as_str()),
         rect.x,
         rect.y,
@@ -311,6 +514,11 @@ fn json_string(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #![expect(
+        clippy::disallowed_fields,
+        reason = "the tests compare the fields as stored with what the board reads"
+    )]
+
     use super::*;
     use rstest::rstest;
 
@@ -344,6 +552,7 @@ mod tests {
                     Placement {
                         rect: rect(80, 200),
                         pinned: false,
+                        attached_to: None,
                     },
                 ),
                 (
@@ -351,6 +560,7 @@ mod tests {
                     Placement {
                         rect: rect(400, 200),
                         pinned: false,
+                        attached_to: None,
                     },
                 ),
             ]),
@@ -525,6 +735,7 @@ mod tests {
             Placement {
                 rect: rect(420, 240),
                 pinned: false,
+                attached_to: None,
             },
         );
 
@@ -984,5 +1195,312 @@ mod tests {
         let expected = i64::from(i32::MAX) + i64::from(u32::MAX);
         assert_eq!(extreme.right(), expected);
         assert_eq!(extreme.bottom(), expected);
+    }
+
+    /// The line of `element` at `x` and `y`, 180 by 90, with `rest` after the
+    /// height.
+    fn line(element: &str, x: i32, y: i32, rest: &str) -> String {
+        format!(
+            r#"{{"element": "{element}", "x": {x}, "y": {y}, "width": 180, "height": 90{rest}}}"#
+        )
+    }
+
+    /// A board `main` with these placement lines.
+    fn board_of(lines: &[String]) -> Board {
+        Board::from_json(&board_id("main"), &main_file(&lines.join(", "))).unwrap()
+    }
+
+    /// A board with the box `b` at 100, 200 and the note `n` named on it with
+    /// the offset `dx`, `dy`.
+    fn note_on_box(dx: i32, dy: i32) -> Board {
+        board_of(&[
+            line("b", 100, 200, ""),
+            line("n", dx, dy, r#", "attached_to": "b""#),
+        ])
+    }
+
+    fn at(x: i32, y: i32, width: u32, height: u32) -> Rect {
+        Rect {
+            x,
+            y,
+            width: NonZeroU32::new(width).unwrap(),
+            height: NonZeroU32::new(height).unwrap(),
+        }
+    }
+
+    #[test]
+    fn writes_an_attachment_last_on_its_line_and_reads_it_back() {
+        let text = main_file(&line("n", 5, 6, r#", "pinned": true, "attached_to": "b""#));
+        let board = Board::from_json(&board_id("main"), &text).unwrap();
+
+        let json = board.to_json();
+
+        assert!(
+            json.contains(
+                r#"    {"element": "n", "x": 5, "y": 6, "width": 180, "height": 90, "pinned": true, "attached_to": "b"}"#
+            ),
+            "{json}"
+        );
+        assert_eq!(Board::from_json(&board.id, &json), Ok(board));
+    }
+
+    #[test]
+    fn reads_a_null_attachment_as_none_and_writes_nothing_for_it() {
+        let board = board_of(&[line("n", 0, 0, r#", "attached_to": null"#)]);
+
+        assert_eq!(board.named_attachment(&element_id("n")), None);
+        assert!(
+            !board.to_json().contains("attached_to"),
+            "{}",
+            board.to_json()
+        );
+    }
+
+    #[rstest]
+    #[case::path(r#""attached_to": "../x""#)]
+    #[case::capitals(r#""attached_to": "Shop""#)]
+    #[case::empty(r#""attached_to": """#)]
+    #[case::too_long(&format!(r#""attached_to": "{}""#, "a".repeat(65)))]
+    #[case::number(r#""attached_to": 1"#)]
+    #[case::object(r#""attached_to": {"id": "b"}"#)]
+    #[case::array(r#""attached_to": ["b"]"#)]
+    #[case::boolean(r#""attached_to": true"#)]
+    #[case::twice(r#""attached_to": "b", "attached_to": "c""#)]
+    #[case::camel_case(r#""attachedTo": "b""#)]
+    #[case::hyphen(r#""attached-to": "b""#)]
+    #[case::capitalized(r#""Attached_to": "b""#)]
+    #[case::line_break(r#""attached_to": "b\nc""#)]
+    #[case::escape(r#""attached_to": "b\u001b[31m""#)]
+    fn rejects_an_attachment_that_is_no_element_id(#[case] field: &str) {
+        let text = main_file(&line("n", 0, 0, &format!(", {field}")));
+
+        let error = Board::from_json(&board_id("main"), &text).unwrap_err();
+
+        assert!(matches!(error, BoardError::Invalid { .. }), "{error:?}");
+        let message = error.to_string();
+        assert!(message.starts_with("board main: "), "{message}");
+        assert!(!message.chars().any(char::is_control), "{message:?}");
+    }
+
+    #[test]
+    fn attaching_or_moving_a_note_changes_exactly_one_line_and_moving_its_box_only_the_box() {
+        let loose = board_of(&[line("b", 100, 200, ""), line("n", 5, 6, "")]);
+        let attached = note_on_box(5, 6);
+        let mut moved_note = attached.clone();
+        moved_note
+            .set_rect(&element_id("n"), at(300, 300, 180, 90))
+            .unwrap();
+        let mut moved_box = attached.clone();
+        moved_box
+            .set_rect(&element_id("b"), at(0, 0, 180, 90))
+            .unwrap();
+
+        for (before, after) in [
+            (&loose, &attached),
+            (&attached, &moved_note),
+            (&attached, &moved_box),
+        ] {
+            let (before, after) = (before.to_json(), after.to_json());
+            let changed = before
+                .lines()
+                .zip(after.lines())
+                .filter(|(old, new)| old != new)
+                .count();
+            assert_eq!(changed, 1, "{before}\n{after}");
+        }
+        let box_line = moved_box.to_json();
+        assert!(
+            box_line.contains(r#""element": "b", "x": 0, "y": 0"#),
+            "{box_line}"
+        );
+    }
+
+    #[test]
+    fn a_holding_attachment_puts_the_note_at_the_box_plus_its_offset_with_its_own_size() {
+        let board = board_of(&[
+            line("b", 100, 200, ""),
+            r#"{"element": "n", "x": -10, "y": 20, "width": 7, "height": 3, "attached_to": "b"}"#
+                .to_owned(),
+        ]);
+
+        assert_eq!(board.rect_of(&element_id("n")), Some(at(90, 220, 7, 3)));
+        assert_eq!(board.attachment(&element_id("n")), Some(&element_id("b")));
+        assert_eq!(board.rect_of(&element_id("b")), Some(at(100, 200, 180, 90)));
+        assert_eq!(board.attachment(&element_id("b")), None);
+    }
+
+    #[rstest]
+    #[case::x_at_the_upper_limit(MAX_COORDINATE - 100, 0, true)]
+    #[case::x_beyond_the_upper_limit(MAX_COORDINATE - 99, 0, false)]
+    #[case::x_at_the_lower_limit(-MAX_COORDINATE - 100, 0, true)]
+    #[case::x_beyond_the_lower_limit(-MAX_COORDINATE - 101, 0, false)]
+    #[case::y_at_the_upper_limit(0, MAX_COORDINATE - 200, true)]
+    #[case::y_beyond_the_upper_limit(0, MAX_COORDINATE - 199, false)]
+    #[case::y_at_the_lower_limit(0, -MAX_COORDINATE - 200, true)]
+    #[case::y_beyond_the_lower_limit(0, -MAX_COORDINATE - 201, false)]
+    fn an_attachment_holds_only_within_the_range_of_a_move(
+        #[case] dx: i32,
+        #[case] dy: i32,
+        #[case] holds: bool,
+    ) {
+        let board = note_on_box(dx, dy);
+        let note = element_id("n");
+
+        let expected = if holds {
+            at(100 + dx, 200 + dy, 180, 90)
+        } else {
+            at(dx, dy, 180, 90)
+        };
+
+        assert_eq!(board.rect_of(&note), Some(expected));
+        assert_eq!(board.attachment(&note).is_some(), holds);
+        assert_eq!(board.named_attachment(&note), Some(&element_id("b")));
+    }
+
+    #[rstest]
+    #[case::box_at_min_offset_at_min(i32::MIN, i32::MIN)]
+    #[case::box_at_min_offset_at_max(i32::MIN, i32::MAX)]
+    #[case::box_at_max_offset_at_max(i32::MAX, i32::MAX)]
+    #[case::box_at_max_offset_at_min(i32::MAX, i32::MIN)]
+    fn extreme_positions_overflow_nothing(#[case] position: i32, #[case] offset: i32) {
+        let board = board_of(&[
+            line("b", position, position, ""),
+            line("n", offset, offset, r#", "attached_to": "b""#),
+        ]);
+        let note = element_id("n");
+
+        let rect = board.rect_of(&note).unwrap();
+        let sum = i64::from(position) + i64::from(offset);
+        if (-1_000_000..=1_000_000).contains(&sum) {
+            assert_eq!(board.attachment(&note), Some(&element_id("b")));
+        } else {
+            assert_eq!(rect, at(offset, offset, 180, 90));
+            assert_eq!(board.attachment(&note), None);
+        }
+    }
+
+    #[rstest]
+    #[case::itself(vec![line("n", 5, 6, r#", "attached_to": "n""#)])]
+    #[case::an_element_the_board_does_not_place(vec![line("n", 5, 6, r#", "attached_to": "b""#)])]
+    #[case::an_attached_box(vec![
+        line("a", 1000, 1000, ""),
+        line("b", 100, 200, r#", "attached_to": "a""#),
+        line("n", 5, 6, r#", "attached_to": "b""#),
+    ])]
+    #[case::a_box_attached_to_it(vec![
+        line("b", 100, 200, r#", "attached_to": "n""#),
+        line("n", 5, 6, r#", "attached_to": "b""#),
+    ])]
+    fn an_attachment_to_no_free_box_on_the_board_reads_as_none(#[case] lines: Vec<String>) {
+        let board = board_of(&lines);
+        let note = element_id("n");
+
+        assert_eq!(board.rect_of(&note), Some(at(5, 6, 180, 90)));
+        assert_eq!(board.attachment(&note), None);
+        assert!(board.named_attachment(&note).is_some());
+        for (id, _, rect) in board.placed() {
+            assert_eq!(board.rect_of(id), Some(rect), "{id}");
+        }
+    }
+
+    #[test]
+    fn placed_yields_board_positions_once_each_in_id_order() {
+        let board = board_of(&[
+            line("c", 1, 2, r#", "attached_to": "b""#),
+            line("b", 100, 200, ""),
+            line("a", 3, 4, r#", "attached_to": "b""#),
+        ]);
+
+        let placed: Vec<(String, Rect)> = board
+            .placed()
+            .map(|(id, _, rect)| (id.to_string(), rect))
+            .collect();
+
+        assert_eq!(
+            placed,
+            [
+                ("a".to_owned(), at(103, 204, 180, 90)),
+                ("b".to_owned(), at(100, 200, 180, 90)),
+                ("c".to_owned(), at(101, 202, 180, 90)),
+            ]
+        );
+        assert_eq!(
+            board.hanging_on(&element_id("b")),
+            [element_id("a"), element_id("c")]
+        );
+        assert_eq!(board.hanging_on(&element_id("a")), Vec::<ElementId>::new());
+    }
+
+    #[test]
+    fn set_rect_stores_a_board_position_relative_to_the_box_the_note_hangs_on() {
+        let mut board = note_on_box(5, 6);
+        let note = element_id("n");
+
+        board.set_rect(&note, at(-20, 300, 50, 60)).unwrap();
+
+        assert_eq!(board.rect_of(&note), Some(at(-20, 300, 50, 60)));
+        assert_eq!(board.placements[&note].rect, at(-120, 100, 50, 60));
+    }
+
+    #[test]
+    fn set_rect_stores_a_board_position_as_it_is_without_a_free_box() {
+        let mut board = board_of(&[line("n", 5, 6, r#", "attached_to": "gone""#)]);
+        let note = element_id("n");
+
+        board.set_rect(&note, at(-20, 300, 50, 60)).unwrap();
+
+        assert_eq!(board.placements[&note].rect, at(-20, 300, 50, 60));
+        assert_eq!(board.named_attachment(&note), Some(&element_id("gone")));
+    }
+
+    #[test]
+    fn set_rect_refuses_an_element_the_board_does_not_place_and_an_offset_beyond_i32() {
+        let mut far = board_of(&[
+            line("b", i32::MIN, 0, ""),
+            line("n", 0, 0, r#", "attached_to": "b""#),
+        ]);
+        let before = far.clone();
+
+        assert_eq!(
+            far.set_rect(&element_id("x"), at(0, 0, 1, 1)),
+            Err(PositionError::NotPlaced)
+        );
+        assert_eq!(
+            far.set_rect(&element_id("n"), at(MAX_COORDINATE, 0, 1, 1)),
+            Err(PositionError::OffsetTooLarge)
+        );
+        assert_eq!(far, before);
+    }
+
+    #[test]
+    fn detaching_keeps_where_each_note_lies_and_drops_the_field() {
+        let mut board = board_of(&[
+            line("b", 100, 200, ""),
+            line("m", 7, 8, r#", "attached_to": "b""#),
+            line("n", 5, 6, r#", "attached_to": "b""#),
+            line("o", 1, 1, r#", "attached_to": "x""#),
+        ]);
+        let before: Vec<(ElementId, Rect)> = board
+            .placed()
+            .map(|(id, _, rect)| (id.clone(), rect))
+            .collect();
+
+        board.detach_from(&element_id("b"));
+
+        let after: Vec<(ElementId, Rect)> = board
+            .placed()
+            .map(|(id, _, rect)| (id.clone(), rect))
+            .collect();
+        assert_eq!(after, before);
+        assert_eq!(board.named_attachment(&element_id("m")), None);
+        assert_eq!(board.named_attachment(&element_id("n")), None);
+        assert_eq!(
+            board.named_attachment(&element_id("o")),
+            Some(&element_id("x"))
+        );
+        assert_eq!(
+            board.placements[&element_id("n")].rect,
+            at(105, 206, 180, 90)
+        );
     }
 }

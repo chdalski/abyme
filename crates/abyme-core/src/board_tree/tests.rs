@@ -41,6 +41,7 @@ fn board(id: &str, owner: Option<&str>, elements: &[&str]) -> (BoardId, Board) {
                         Placement {
                             rect,
                             pinned: false,
+                            attached_to: None,
                         },
                     )
                 })

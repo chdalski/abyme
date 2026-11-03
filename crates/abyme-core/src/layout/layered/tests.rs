@@ -1,5 +1,9 @@
 //! Tests of the layered layout.
 
+#![expect(
+    clippy::disallowed_fields,
+    reason = "the tests check the fields as the board file stores them"
+)]
 use super::*;
 use std::collections::BTreeSet;
 use std::num::NonZeroU32;
@@ -52,6 +56,7 @@ fn board(free: &[&str], pinned: &[(&str, Rect)]) -> Board {
             Placement {
                 rect: rect(-999, -999, 7, 7),
                 pinned: false,
+                attached_to: None,
             },
         )
     });
@@ -61,6 +66,7 @@ fn board(free: &[&str], pinned: &[(&str, Rect)]) -> Board {
             Placement {
                 rect: *rect,
                 pinned: true,
+                attached_to: None,
             },
         )
     });

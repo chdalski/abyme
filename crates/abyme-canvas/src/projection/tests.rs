@@ -24,6 +24,7 @@ fn placed(x: i32, y: i32, width: u32, height: u32) -> abyme_model::Placement {
             height: NonZeroU32::new(height).unwrap(),
         },
         pinned: false,
+        attached_to: None,
     }
 }
 
@@ -405,4 +406,30 @@ fn says_a_placement_is_pinned_also_when_its_element_file_is_missing() {
     assert!(orders.pinned);
     assert_eq!(orders.shown, Shown::Missing);
     assert!(!payments.pinned);
+}
+
+#[test]
+fn an_attached_note_lies_at_its_position_on_the_board_with_its_own_size() {
+    let text = r#"{"format": 1, "id": "context", "title": "Context", "placements": [
+        {"element": "b", "x": 100, "y": 200, "width": 180, "height": 90},
+        {"element": "lost", "x": 7, "y": 8, "width": 30, "height": 40, "attached_to": "gone"},
+        {"element": "n", "x": 5, "y": 6, "width": 50, "height": 60, "attached_to": "b"}
+    ]}"#;
+    let board = Board::from_json(&board_id("context"), text).unwrap();
+    let snapshot = Snapshot {
+        elements: BTreeMap::new(),
+        boards: BTreeMap::from([(board.id.clone(), board)]),
+    };
+
+    let view = project(&snapshot, &board_id("context")).unwrap();
+
+    let rect_of = |id: &str| {
+        view.placements
+            .iter()
+            .find(|placement| placement.element == element_id(id))
+            .map(|placement| (placement.x, placement.y, placement.width, placement.height))
+    };
+    assert_eq!(rect_of("n"), Some((105, 206, 50, 60)));
+    assert_eq!(rect_of("lost"), Some((7, 8, 30, 40)));
+    assert_eq!(rect_of("b"), Some((100, 200, 180, 90)));
 }

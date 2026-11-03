@@ -183,6 +183,7 @@ mod tests {
                         Placement {
                             rect: *rect,
                             pinned: false,
+                            attached_to: None,
                         },
                     )
                 })

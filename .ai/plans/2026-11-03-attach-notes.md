@@ -30,7 +30,7 @@ it is detached.
 ## Steps
 
 - [x] One way to read a position
-- [ ] Attached notes in the board file
+- [x] Attached notes in the board file
 - [ ] Attaching and detaching a note
 - [ ] Attaching on the canvas
 
@@ -60,39 +60,39 @@ or by a later task already reads and behaves right.
 
 Review path: Security-Hybrid
 
-- [ ] A placement line can end with `"attached_to": "<id>"`, written only when present and read back
+- [x] A placement line can end with `"attached_to": "<id>"`, written only when present and read back
       unchanged, so attaching, detaching, or moving a note changes exactly one line, and moving its
       box changes only the box's line. A malformed value is refused as any other malformed field is.
-- [ ] An attachment holds only when the element it names lies on the same board, is not the placed
+- [x] An attachment holds only when the element it names lies on the same board, is not the placed
       element itself, and is not attached itself. Then the placement's position is its box's
       position plus its stored one; otherwise the stored position is a board position, and the file
       keeps the field as written.
-- [ ] Moving a box moves the notes that hang on it on that board, with no line of theirs written, and
+- [x] Moving a box moves the notes that hang on it on that board, with no line of theirs written, and
       the free space of a request counts them where they now are. A move of an attached note takes a
       board position and stores it relative to its box.
-- [ ] An attachment whose board position would lie outside the range of `move_element`, -1,000,000
+- [x] An attachment whose board position would lie outside the range of `move_element`, -1,000,000
       to 1,000,000, does not hold when read. No request leaves an attached note's board position
       outside that range: a move or a layout of its box, or a move of the note, that would is refused,
       writing nothing.
-- [ ] A layout of the board leaves an attached note on its box, neither moving it nor letting it block
+- [x] A layout of the board leaves an attached note on its box, neither moving it nor letting it block
       another box, and counts none of its relations.
-- [ ] Deleting an element that notes hang on writes those notes' board positions on every board where
+- [x] Deleting an element that notes hang on writes those notes' board positions on every board where
       they hung, so none jumps.
-- [ ] `read_board` with coordinates shows an attached note's board position and the box it hangs on,
+- [x] `read_board` with coordinates shows an attached note's board position and the box it hangs on,
       and says so when an attachment does not hold; without coordinates it is unchanged. The canvas's
       `open_board` returns board positions.
-- [ ] A board file without `attached_to` reads, lays out, and writes exactly as before, as the
+- [x] A board file without `attached_to` reads, lays out, and writes exactly as before, as the
       existing tests show.
-- [ ] Rust tests cover each rule above, also with board files written by hand. A property test with
+- [x] Rust tests cover each rule above, also with board files written by hand. A property test with
       attached notes among the generated boards shows, after any request of moves, layouts, and
       deletions: each attached note's board position is its box's plus its stored one and lies in
       range, a repeated layout changes no byte, and pins and freedom from overlap hold for every
       placement that is not attached.
-- [ ] A reader of Storage in Git, Data Model, and Placement and Layout can tell how an attachment is
+- [x] A reader of Storage in Git, Data Model, and Placement and Layout can tell how an attachment is
       stored and read, and what moves along with a box. The tool description of `read_board`, its
       text in `crates/abyme-mcp/README.md` and in `docs/4 AI Interface/MCP Server.md`, and Canvas's
       sentence on what `open_board` returns state the attached note's position.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`, and
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`, and
       `cargo fmt --all --check` pass.
 
 ### Task 3: Attaching and detaching a note
@@ -167,6 +167,14 @@ Review path: Security-Hybrid
   and each later review reruns the search for `.rect` reads outside `abyme-model`.
 - Task 2: `move_element` now reports `NotOnBoard` when `rect_of` finds no position after the write,
   which cannot happen yet; once an attachment can make `rect_of` differ, decide what that branch means.
+- Task 3: `Board::named_attachment` reads the field as written, and the lint on the fields does not
+  see a call to it. Before attaching or detaching adds a reader, add `disallowed-methods` for it to
+  `clippy.toml`, with one `#[expect]` in the outline's `position`; that change goes through the
+  task's security gate (security engineer, Task 2's post-gate).
+- Task 4: the hold rule ignores element types, so a hand-written file can hang a box that is no note
+  on a note; on a mirrored board an admitted move or deletion of that note then carries the box
+  along. When attaching is admitted there, decide from the element files whether such a move or
+  deletion is refused (security engineer, Task 2's pre-gate).
 
 ## Decisions
 
@@ -198,6 +206,19 @@ Review path: Security-Hybrid
   declined: the note would jump after the reload instead of following.
 - **A replacement of the stored rect by a position type was declined:** it would touch every reference
   to the rect, most of them in tests, and the first task gives most of its safety.
+- **Gate demands on Task 2 (security engineer):** a clippy `disallowed-fields` rule on the stored
+  `rect` and `attached_to` of a placement, so that only `abyme-model` and tests read them; every write
+  of a position goes through `Board::set_rect`, after which the core checks that the board reads the
+  element where the operation put it, which replaces the `NotOnBoard` after a move's write; canvas
+  admission tests for an attached note; and a property test that generates broken attachments too.
+- **A layout leaves out every placement that names a box on the board, even one whose attachment does
+  not hold:** which placements take part then depends on no position, so a repeated layout changes no
+  byte; a note whose attachment does not hold because of the range keeps its position. Found by the
+  property test, decided with the security engineer.
+- **Hand-written states may move a note:** in a hand-written chain, a deletion can make a note start
+  to hold; a note whose attachment does not hold only because of the range can start to hold when its
+  box moves; and a stale `attached_to` holds once its element is placed. The core never writes these
+  states, and the result stays in range. Accepted by the security engineer.
 - **All tasks are Security-Hybrid:** the board file and the operations take new input, and the canvas
   decides what it may attach, also on mirrored boards.
 

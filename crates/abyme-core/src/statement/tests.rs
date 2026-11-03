@@ -60,6 +60,7 @@ fn board(id: &str, kind: Option<StatementKind>, owner: Option<&str>, placed: &[&
                     Placement {
                         rect,
                         pinned: false,
+                        attached_to: None,
                     },
                 )
             })

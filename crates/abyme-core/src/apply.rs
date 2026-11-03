@@ -10,7 +10,7 @@ use std::fmt;
 
 use abyme_model::{
     Anchor, Board, BoardId, Element, ElementFields, ElementId, ElementProblem, NOTE_TYPE,
-    Placement, RelationKind, Relations, StatementKind, TypeRef, Zone,
+    Placement, PositionError, Rect, RelationKind, Relations, StatementKind, TypeRef, Zone,
 };
 
 use crate::board_tree::BoardTree;
@@ -145,6 +145,29 @@ pub enum OperationProblem {
          release it"
     )]
     Pinned {
+        /// The element.
+        element: ElementId,
+        /// The board.
+        board: BoardId,
+    },
+    /// A move or a layout would carry an element that hangs on a box beyond
+    /// the range a move accepts.
+    #[error(
+        "element {element} hangs on a box on board {board} and would lie outside \
+         -{MAX_COORDINATE} to {MAX_COORDINATE}"
+    )]
+    LeavesRange {
+        /// The element that hangs on the box.
+        element: ElementId,
+        /// The board.
+        board: BoardId,
+    },
+    /// The position cannot be stored relative to the box the element hangs on.
+    #[error(
+        "the position of element {element} on board {board} cannot be stored relative to the box \
+         it hangs on"
+    )]
+    PositionNotStored {
         /// The element.
         element: ElementId,
         /// The board.
@@ -534,6 +557,7 @@ impl<'snapshot> Draft<'snapshot> {
             Placement {
                 rect,
                 pinned: false,
+                attached_to: None,
             },
         );
         self.homed.insert(element);
@@ -555,28 +579,41 @@ impl<'snapshot> Draft<'snapshot> {
             return Err(OperationProblem::OutOfRange { x, y });
         }
         let (draft_board, free_space) = self.draft_board(&board)?;
-        let placement = draft_board.placements.get_mut(&element).ok_or_else(|| {
-            OperationProblem::NotOnBoard {
-                element: element.clone(),
-                board: board.clone(),
-            }
-        })?;
+        let not_on_board = || OperationProblem::NotOnBoard {
+            element: element.clone(),
+            board: board.clone(),
+        };
+        let current = draft_board.rect_of(&element).ok_or_else(not_on_board)?;
+        let placement = draft_board
+            .placements
+            .get_mut(&element)
+            .ok_or_else(not_on_board)?;
         if placement.pinned && pinned.is_none() {
             return Err(OperationProblem::Pinned { element, board });
         }
-        placement.rect.x = x;
-        placement.rect.y = y;
         placement.pinned = pinned.unwrap_or(placement.pinned);
-        let moved = draft_board
-            .rect_of(&element)
-            .ok_or(OperationProblem::NotOnBoard { element, board })?;
+        let hanging: Vec<(ElementId, ElementId)> = draft_board
+            .hanging_on(&element)
+            .into_iter()
+            .map(|note| (note, element.clone()))
+            .collect();
+        let moved = Rect { x, y, ..current };
+        put(draft_board, &board, &element, moved)?;
+        still_hanging(draft_board, &board, &hanging)?;
         free_space.occupy(&moved);
+        for (note, _) in &hanging {
+            if let Some(rect) = draft_board.rect_of(note) {
+                free_space.occupy(&rect);
+            }
+        }
         Ok(())
     }
 
     /// Arranges the board as the request stands at this operation. Writes only
     /// the board file, and the free space follows, so a later placement of the
-    /// request overlaps nothing.
+    /// request overlaps nothing. An element that names a box on the board takes
+    /// no part, whether its attachment holds or not, so a repeated layout
+    /// changes nothing: while it holds, the element moves along with its box.
     fn layout_board(&mut self, board: &Ref<BoardId>) -> Result<(), OperationProblem> {
         let board = self.resolve_board(board)?;
         self.draft_board(&board)?;
@@ -584,19 +621,29 @@ impl<'snapshot> Draft<'snapshot> {
             .boards
             .get(&board)
             .ok_or_else(|| OperationProblem::UnknownBoard(board.clone()))?;
+        let hanging = attachments(found);
+        let mut boxes = found.clone();
+        boxes
+            .placements
+            .retain(|id, _| found.named_box(id).is_none());
         let mut work = self.layout_work;
         let rects =
-            layered(found, |id| self.element(id), &mut work).map_err(|problem| match problem {
+            layered(&boxes, |id| self.element(id), &mut work).map_err(|problem| match problem {
                 LayoutProblem::TooLarge => OperationProblem::LayoutTooLarge(board.clone()),
                 LayoutProblem::OutOfRange => OperationProblem::BoardFull(board.clone()),
             })?;
         self.layout_work = work;
+        let laid: Vec<(&ElementId, Rect)> = boxes
+            .placements
+            .keys()
+            .zip(rects)
+            .filter_map(|(id, rect)| rect.map(|rect| (id, rect)))
+            .collect();
         let (draft_board, free_space) = self.draft_board(&board)?;
-        for (placement, rect) in draft_board.placements.values_mut().zip(rects) {
-            if let Some(rect) = rect {
-                placement.rect = rect;
-            }
+        for (id, rect) in laid {
+            put(draft_board, &board, id, rect)?;
         }
+        still_hanging(draft_board, &board, &hanging)?;
         *free_space = FreeSpace::of(draft_board);
         Ok(())
     }
@@ -784,6 +831,7 @@ impl<'snapshot> Draft<'snapshot> {
         }
         for board in self.boards_placing(&id) {
             let (draft_board, free_space) = self.draft_board(&board)?;
+            draft_board.detach_from(&id);
             draft_board.placements.remove(&id);
             *free_space = FreeSpace::of(draft_board);
         }
@@ -1063,6 +1111,60 @@ impl fmt::Display for Kind {
             Self::Element => "an element",
             Self::Board => "a board",
         })
+    }
+}
+
+/// Puts `element` at `rect` on `board` and checks that the board then reads
+/// it there.
+fn put(
+    board: &mut Board,
+    board_id: &BoardId,
+    element: &ElementId,
+    rect: Rect,
+) -> Result<(), OperationProblem> {
+    let not_stored = || OperationProblem::PositionNotStored {
+        element: element.clone(),
+        board: board_id.clone(),
+    };
+    board.set_rect(element, rect).map_err(|error| match error {
+        PositionError::NotPlaced => OperationProblem::NotOnBoard {
+            element: element.clone(),
+            board: board_id.clone(),
+        },
+        PositionError::OffsetTooLarge => not_stored(),
+    })?;
+    if board.rect_of(element) == Some(rect) {
+        Ok(())
+    } else {
+        Err(not_stored())
+    }
+}
+
+/// Each element of `board` that hangs on a box, with the box.
+fn attachments(board: &Board) -> Vec<(ElementId, ElementId)> {
+    board
+        .placements
+        .keys()
+        .filter_map(|id| board.attachment(id).map(|host| (id.clone(), host.clone())))
+        .collect()
+}
+
+/// Checks that each element of `hanging` still hangs on its box, which a move
+/// of the box beyond the range would end.
+fn still_hanging(
+    board: &Board,
+    board_id: &BoardId,
+    hanging: &[(ElementId, ElementId)],
+) -> Result<(), OperationProblem> {
+    match hanging
+        .iter()
+        .find(|(element, host)| board.attachment(element) != Some(host))
+    {
+        Some((element, _)) => Err(OperationProblem::LeavesRange {
+            element: element.clone(),
+            board: board_id.clone(),
+        }),
+        None => Ok(()),
     }
 }
 

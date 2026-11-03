@@ -60,6 +60,7 @@ fn snapshot(title: &str, elements: Vec<Element>, missing: &[&str]) -> Snapshot {
                     Placement {
                         rect: rect(),
                         pinned: false,
+                        attached_to: None,
                     },
                 )
             })
@@ -469,6 +470,7 @@ fn with_rect(mut snapshot: Snapshot, id: &str, rect: Rect) -> Snapshot {
             Placement {
                 rect,
                 pinned: false,
+                attached_to: None,
             },
         );
     snapshot
@@ -547,6 +549,60 @@ fn shows_a_pin_after_the_size_only_with_the_geometry() {
         "Board: b · T\n\na  @5,6 7x8 pinned  t  n\n"
     );
     assert_eq!(outline_of(&snapshot), unpinned_without_geometry);
+}
+
+/// `snapshot` with `a` placed at 100, 200 and `n` named as hanging on
+/// `host` at the offset 5, 6, pinned.
+fn with_a_note_on(snapshot: Snapshot, host: &str) -> Snapshot {
+    let mut snapshot = with_rect(snapshot, "a", sized(100, 200, 7, 8));
+    snapshot
+        .boards
+        .get_mut(&"b".parse().unwrap())
+        .unwrap()
+        .placements
+        .insert(
+            "n".parse().unwrap(),
+            Placement {
+                rect: sized(5, 6, 3, 4),
+                pinned: true,
+                attached_to: Some(host.parse().unwrap()),
+            },
+        );
+    snapshot
+}
+
+#[test]
+fn shows_where_an_attached_note_lies_on_the_board_and_its_box_only_with_the_geometry() {
+    let elements = vec![
+        element("a", "t", "A", None),
+        element("n", "note", "Ask", None),
+    ];
+    let attached = with_a_note_on(snapshot("T", elements.clone(), &[]), "a");
+    let loose = with_rect(snapshot("T", elements, &[]), "a", sized(100, 200, 7, 8));
+
+    assert_eq!(
+        outline_with_geometry(&attached),
+        "Board: b · T\n\n\
+         a  @100,200 7x8              t     A\n\
+         n  @105,206 3x4 pinned on a  note  Ask\n"
+    );
+    assert_eq!(outline_of(&attached), outline_of(&loose));
+}
+
+#[test]
+fn says_so_when_an_attachment_does_not_hold() {
+    let elements = vec![
+        element("a", "t", "A", None),
+        element("n", "note", "Ask", None),
+    ];
+    let snapshot = with_a_note_on(snapshot("T", elements, &[]), "gone");
+
+    assert_eq!(
+        outline_with_geometry(&snapshot),
+        "Board: b · T\n\n\
+         a  @100,200 7x8                              t     A\n\
+         n  @5,6 3x4 pinned not on gone (attachment does not hold)  note  Ask\n"
+    );
 }
 
 #[test]
@@ -842,6 +898,7 @@ fn detail_snapshot() -> Snapshot {
             Placement {
                 rect: rect(),
                 pinned: false,
+                attached_to: None,
             },
         )]),
     };
@@ -1416,6 +1473,7 @@ fn hierarchy_board(id: &str, owner: Option<&str>, placed: &[&str]) -> Board {
                     Placement {
                         rect: rect(),
                         pinned: false,
+                        attached_to: None,
                     },
                 )
             })
@@ -2223,6 +2281,7 @@ fn the_kind_column_shows_an_own_kind_on_a_board_that_is_no_zone() {
             Placement {
                 rect: rect(),
                 pinned: false,
+                attached_to: None,
             },
         );
 

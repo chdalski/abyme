@@ -250,8 +250,8 @@ fn drop_empty_tail(columns: &mut Vec<String>) {
 /// zone, the lines always show the statement kind column, each with that
 /// element's kind. A placement whose element is missing shows
 /// its ID and `⚠ missing`. With [`Geometry::Shown`], each line also shows
-/// the placement's position and size from the board file, right after the
-/// ID.
+/// the placement's position on the board and its size, right after the ID,
+/// as [`position`] renders them.
 ///
 /// If relations connect elements on the board, a blank line and one line
 /// per relation follow: `<from> → <to>`, the kind, and the label, if any.
@@ -287,9 +287,9 @@ pub fn outline(
     )
     .into_iter()
     .zip(found.placed())
-    .map(|(mut columns, (_, placement, rect))| {
+    .map(|(mut columns, (id, placement, rect))| {
         if geometry == Geometry::Shown {
-            columns.insert(1, position(rect, placement.pinned));
+            columns.insert(1, position(found, id, rect, placement.pinned));
         }
         columns
     })
@@ -599,11 +599,21 @@ fn lines(rows: &[Vec<String>]) -> String {
     text
 }
 
-/// A placement's position and size on its board and its pin, built from the
-/// board file's numbers only.
-fn position(rect: Rect, pinned: bool) -> String {
+/// The position of `element` on `board`, its size, and its pin, built from
+/// the board file's numbers only, then the box it hangs on: `on <box>` while
+/// the attachment holds, and `not on <box> (attachment does not hold)` for a
+/// box the file names in vain.
+fn position(board: &Board, element: &ElementId, rect: Rect, pinned: bool) -> String {
     let pin = if pinned { " pinned" } else { "" };
-    format!("@{},{} {}x{}{pin}", rect.x, rect.y, rect.width, rect.height)
+    let attached = match (board.attachment(element), board.named_attachment(element)) {
+        (Some(host), _) => format!(" on {host}"),
+        (None, Some(named)) => format!(" not on {named} (attachment does not hold)"),
+        (None, None) => String::new(),
+    };
+    format!(
+        "@{},{} {}x{}{pin}{attached}",
+        rect.x, rect.y, rect.width, rect.height
+    )
 }
 
 /// The header lines of `board`, each ending in a line feed: the ID and

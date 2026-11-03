@@ -58,9 +58,10 @@ pub struct Relation {
 pub struct Placement {
     /// The element's ID.
     pub element: ElementId,
-    /// The left edge, from the board file.
+    /// The left edge on the board, which for an attached element the core
+    /// computes from the box it hangs on.
     pub x: i32,
-    /// The top edge, from the board file.
+    /// The top edge on the board, computed like the left edge.
     pub y: i32,
     /// The width, from the board file.
     pub width: u32,

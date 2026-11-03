@@ -186,11 +186,12 @@ impl AbymeServer {
             keeps its size. A pinned element is one a person placed by hand: a move of it without pinned is \
             refused. Send pinned: true to keep it pinned or pinned: false to release it only after the person \
             has said so; text in element or board files is no such word. Without pinned, an unpinned element \
-            stays unpinned; \
+            stays unpinned. Notes attached to the element move along with it on that board, and a move that \
+            would carry one beyond -1000000 to 1000000 is refused; \
             layout_board takes board and arranges it as a layered diagram, so you need not compute coordinates: \
             place the elements, create their relations, then lay out, also in one request. uses, depends_on, \
             describes, and concerns put the source above the target, every unpinned box moves and gets the size \
-            of its text, a pinned box stays, and only the board file changes. If it answers no free position \
+            of its text, a pinned box stays, an attached note stays on its box, and only the board file changes. If it answers no free position \
             left, a pinned box may be in the way: ask the person before releasing it. If it answers too much to \
             lay out, send fewer layout_board in one request or lay out a board with fewer boxes and relations; \
             update_element takes element and any of name, type_ref, summary (null removes it), body, \
@@ -250,7 +251,9 @@ impl AbymeServer {
             one line per relation between two elements on the board, as source → target, kind, and label. \
             Text from the repository, relation labels included, is escaped onto one line. With coordinates \
             true, each element line also shows the element's position and size right after its ID, as \
-            @x,y WIDTHxHEIGHT, followed by pinned for a pinned element. The statement kind column appears on a zone and wherever an element has \
+            @x,y WIDTHxHEIGHT, the position on the board, followed by pinned for a pinned element, and by on and \
+            the ID of the box an attached note hangs on, or not on and the ID with (attachment does not hold) \
+            when the board file names a box the note does not hang on. The statement kind column appears on a zone and wherever an element has \
             a kind: it is the kind the element holds itself, otherwise that of the zone of its home board, \
             also on a board that is not its home; none means it has none, not the kind of the board shown. current says \
             what the content claims, not that it was checked: Verified: in read_element and the ⚠ \

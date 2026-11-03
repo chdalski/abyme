@@ -7,16 +7,12 @@
 
 use std::fmt;
 
+pub use abyme_model::MAX_COORDINATE;
 use abyme_model::{BoardId, ElementId, ObjectOnly, RelationKind, StatementKind, Zone, shown};
 use serde::{Deserialize, Serialize};
 
 /// The longest local key, in characters.
 pub const MAX_KEY_LEN: usize = 64;
-
-/// The largest distance of a moved element's position from the origin,
-/// in each direction: a position near the `i32` limit would leave later
-/// placements on that board no room below it.
-pub const MAX_COORDINATE: i32 = 1_000_000;
 
 /// How many characters of a rejected key an error shows.
 const SHOWN_LIMIT: usize = 80;

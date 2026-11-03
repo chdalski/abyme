@@ -925,6 +925,7 @@ fn zoned(
                         Placement {
                             rect,
                             pinned: false,
+                            attached_to: None,
                         },
                     ))
                 })

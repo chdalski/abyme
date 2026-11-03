@@ -19,6 +19,7 @@ share a parent line with one sub-item each.
 - While another process holds the project's lock, a note's write and the way to another board wait without a limit: `crates/abyme-core/src/project/store.rs`, `crates/abyme-canvas/ui/src/App.tsx` (security engineer, sticky notes Task 5).
 - A note whose slug equals a relation's target without a file takes over that incoming relation, and then cannot be deleted while it holds; `taken_elements` holds no relation targets: `crates/abyme-core/src/apply.rs` (security engineer, sticky notes Task 6).
 - `listed_id` ignores entries that are no regular file or have no valid ID as a name, so a symlink `note.md` counts as free and is replaced by the rename, and on a case-insensitive file system `Note.md` too: `crates/abyme-core/src/project/store.rs` (security engineer, sticky notes Task 6).
+- When a box moves, a note whose attachment did not hold only because of the range can start to hold, and the request's free space does not count it where it now lies, so a later `place_element` of the request can overlap it; only a hand-edited board file gets there: `crates/abyme-core/src/apply.rs`, `move_element` (security engineer, attach notes Task 2, accepted Low).
 
 ## Bugs
 

@@ -2,3 +2,7 @@ allow-unwrap-in-tests = true
 allow-expect-in-tests = true
 allow-panic-in-tests = true
 allow-indexing-slicing-in-tests = true
+disallowed-fields = [
+    { path = "abyme_model::Placement::rect", reason = "stored, relative while attached: read positions through Board::rect_of or Board::placed, write them through Board::set_rect" },
+    { path = "abyme_model::Placement::attached_to", reason = "the field as written, which may not hold: ask Board::attachment" },
+]

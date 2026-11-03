@@ -1,5 +1,9 @@
 //! Properties of `apply` that hold for any snapshot and any request.
 
+#![expect(
+    clippy::disallowed_fields,
+    reason = "the tests check the fields as the board file stores them"
+)]
 use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU32;
 
@@ -107,7 +111,11 @@ fn snapshot() -> impl Strategy<Value = Snapshot> {
         any::<String>(),
         prop::collection::btree_map(
             element_id(),
-            (rect(), any::<bool>()).prop_map(|(rect, pinned)| Placement { rect, pinned }),
+            (rect(), any::<bool>()).prop_map(|(rect, pinned)| Placement {
+                rect,
+                pinned,
+                attached_to: None,
+            }),
             0..4,
         ),
     )
@@ -730,6 +738,7 @@ fn board_with_pins(
             height: NonZeroU32::MIN,
         },
         pinned,
+        attached_to: None,
     };
     let board = Board {
         id: main,
@@ -865,6 +874,243 @@ proptest! {
         if let Ok(applied) = applied {
             prop_assert_eq!(applied.created.len(), operations.len().div_ceil(2));
             check(&snapshot, &operations, &applied)?;
+        }
+    }
+}
+
+/// The elements of the board with attached notes: boxes and notes alike, all
+/// with files, and `nowhere`, which no board places.
+const ATTACHED_IDS: [&str; 5] = ["a", "b", "c", "d", "nowhere"];
+
+/// A position near the origin, at the edge of the range of a move, or any.
+fn position() -> impl Strategy<Value = i32> {
+    prop_oneof![
+        4 => -500..2_000_i32,
+        1 => prop::sample::select(vec![
+            -1_000_001, -1_000_000, 999_999, 1_000_000, 1_000_001
+        ]),
+        1 => any::<i32>(),
+    ]
+}
+
+/// One placement of the board with attached notes: mostly hanging on another
+/// element, sometimes on itself, on `nowhere`, or on nothing.
+fn attached_placement() -> impl Strategy<Value = Placement> {
+    let named = proptest::option::weighted(
+        0.7,
+        prop::sample::select(ATTACHED_IDS.to_vec())
+            .prop_filter_map("valid ID", |id| id.parse::<ElementId>().ok()),
+    );
+    (position(), position(), any::<bool>(), named).prop_map(|(x, y, pinned, attached_to)| {
+        Placement {
+            rect: Rect {
+                x,
+                y,
+                width: NonZeroU32::new(180).unwrap_or(NonZeroU32::MIN),
+                height: NonZeroU32::new(90).unwrap_or(NonZeroU32::MIN),
+            },
+            pinned,
+            attached_to,
+        }
+    })
+}
+
+/// A snapshot whose board `main` places some of `a` to `d`, many of them
+/// hanging on another, in chains and cycles among them, and every one of them
+/// with a file.
+fn attached_snapshot() -> impl Strategy<Value = Snapshot> {
+    prop::collection::btree_map(
+        prop::sample::select(ATTACHED_IDS[..4].to_vec())
+            .prop_filter_map("valid ID", |id| id.parse::<ElementId>().ok()),
+        attached_placement(),
+        1..=4,
+    )
+    .prop_map(|placements| {
+        let elements = ATTACHED_IDS[..4]
+            .iter()
+            .filter_map(|id| {
+                let id: ElementId = id.parse().ok()?;
+                Some((id.clone(), element(id, Relations::new())?))
+            })
+            .collect();
+        let main: BoardId = "main".parse().unwrap_or_else(|_| unreachable!());
+        let board = Board {
+            id: main.clone(),
+            title: "Main".to_owned(),
+            owner: None,
+            summary: None,
+            zone: None,
+            placements,
+        };
+        Snapshot {
+            elements,
+            boards: BTreeMap::from([(main, board)]),
+        }
+    })
+}
+
+/// A move, a layout, or a deletion on the board with attached notes.
+fn attached_operation() -> impl Strategy<Value = Operation> {
+    let id = prop::sample::select(ATTACHED_IDS.to_vec())
+        .prop_filter_map("valid ID", |id| id.parse::<ElementId>().ok());
+    let main = || Ref::Existing("main".parse().unwrap_or_else(|_| unreachable!()));
+    prop_oneof![
+        3 => (
+            id.clone(),
+            position(),
+            position(),
+            proptest::option::of(any::<bool>()),
+        )
+            .prop_map(move |(element, x, y, pinned)| Operation::MoveElement {
+                element: Ref::Existing(element),
+                board: main(),
+                x,
+                y,
+                pinned,
+            }),
+        1 => Just(Operation::LayoutBoard { board: main() }),
+        1 => id.prop_map(|element| Operation::DeleteElement {
+            element: Ref::Existing(element),
+        }),
+    ]
+}
+
+/// The board `main` as `applied` writes it, or as `snapshot` has it.
+fn main_after(snapshot: &Snapshot, applied: &Applied) -> Board {
+    applied
+        .writes
+        .iter()
+        .find_map(|write| match write {
+            Write::Board(board) if board.id.as_str() == "main" => Some(board.clone()),
+            Write::Board(_) | Write::Element(_) | Write::RemoveElement(_) => None,
+        })
+        .unwrap_or_else(|| {
+            snapshot
+                .boards
+                .values()
+                .next()
+                .cloned()
+                .unwrap_or_else(|| unreachable!())
+        })
+}
+
+/// Each element of `board` with the box it hangs on.
+fn holding(board: &Board) -> Vec<(ElementId, ElementId)> {
+    board
+        .placements
+        .keys()
+        .filter_map(|id| board.attachment(id).map(|host| (id.clone(), host.clone())))
+        .collect()
+}
+
+/// Checks that each attachment of `board` that holds puts its element at the
+/// box's position plus the stored offset, within the range of a move.
+fn check_attachments(board: &Board) -> Result<(), TestCaseError> {
+    for (element, host) in holding(board) {
+        let (rect, host_rect) = (board.rect_of(&element), board.rect_of(&host));
+        let (Some(rect), Some(host_rect)) = (rect, host_rect) else {
+            return Err(TestCaseError::fail(format!(
+                "{element} or {host} is not placed"
+            )));
+        };
+        let Some(stored) = board
+            .placements
+            .get(&element)
+            .map(|placement| placement.rect)
+        else {
+            return Err(TestCaseError::fail(format!("{element} has no placement")));
+        };
+        prop_assert_eq!(
+            (i64::from(rect.x), i64::from(rect.y)),
+            (
+                i64::from(host_rect.x) + i64::from(stored.x),
+                i64::from(host_rect.y) + i64::from(stored.y)
+            ),
+            "{} on {}",
+            element,
+            host
+        );
+        prop_assert_eq!((rect.width, rect.height), (stored.width, stored.height));
+        for value in [rect.x, rect.y] {
+            prop_assert!(
+                (-1_000_000..=1_000_000).contains(&value),
+                "{element}: {value}"
+            );
+        }
+    }
+    Ok(())
+}
+
+proptest! {
+    #[test]
+    fn attached_notes_stay_on_their_boxes_and_within_range_after_any_request(
+        snapshot in attached_snapshot(),
+        operations in prop::collection::vec(attached_operation(), 0..6),
+        last in attached_operation(),
+    ) {
+        let request: Vec<Operation> = operations.into_iter().chain([last.clone()]).collect();
+
+        if let Ok(applied) = apply(&snapshot, &request) {
+            let before = &snapshot.boards.values().next().cloned().unwrap_or_else(|| unreachable!());
+            let after = main_after(&snapshot, &applied);
+            check_attachments(&after)?;
+            for (element, host) in holding(before) {
+                if after.placements.contains_key(&element) && after.placements.contains_key(&host) {
+                    prop_assert_eq!(after.attachment(&element), Some(&host), "{} came off", element);
+                }
+            }
+            if let Operation::MoveElement { element: Ref::Existing(element), x, y, .. } = last {
+                let rect = after.rect_of(&element).unwrap_or_else(|| unreachable!());
+                prop_assert_eq!((rect.x, rect.y), (x, y));
+            }
+        }
+    }
+
+    #[test]
+    fn a_layout_with_attached_notes_keeps_pins_overlaps_nothing_and_repeats_byte_for_byte(
+        snapshot in attached_snapshot(),
+        operations in prop::collection::vec(attached_operation(), 0..4),
+    ) {
+        let layout = Operation::LayoutBoard {
+            board: Ref::Existing("main".parse().unwrap_or_else(|_| unreachable!())),
+        };
+        let once: Vec<Operation> = operations.iter().cloned().chain([layout.clone()]).collect();
+        let twice: Vec<Operation> = once.iter().cloned().chain([layout]).collect();
+
+        if let (Ok(prepared), Ok(first), Ok(second)) =
+            (apply(&snapshot, &operations), apply(&snapshot, &once), apply(&snapshot, &twice))
+        {
+            let (before, board, repeated) = (
+                main_after(&snapshot, &prepared),
+                main_after(&snapshot, &first),
+                main_after(&snapshot, &second),
+            );
+            prop_assert_eq!(board.to_json(), repeated.to_json());
+            check_attachments(&board)?;
+            let line_of = |board: &Board, id: &ElementId| {
+                let needle = format!(r#""element": "{id}","#);
+                board.to_json().lines().find(|line| line.contains(&needle)).map(str::to_owned)
+            };
+            for id in before.placements.keys().filter(|id| before.named_box(id).is_some()) {
+                prop_assert_eq!(line_of(&board, id), line_of(&before, id), "{} was laid out", id);
+            }
+            let free: Vec<(ElementId, Rect, bool)> = board
+                .placed()
+                .filter(|(id, _, _)| board.named_box(id).is_none())
+                .map(|(id, placement, rect)| (id.clone(), rect, placement.pinned))
+                .collect();
+            for (element, rect, pinned) in &free {
+                if *pinned {
+                    prop_assert_eq!(Some(*rect), before.rect_of(element), "{} moved", element);
+                    continue;
+                }
+                for (other, other_rect, _) in &free {
+                    prop_assert!(
+                        other == element || !rect.overlaps(other_rect),
+                        "{element} overlaps {other}"
+                    );
+                }
+            }
         }
     }
 }
