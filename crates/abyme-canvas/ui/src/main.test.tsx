@@ -25,6 +25,7 @@ const shop = vi.hoisted(() => ({
         shown: { kind: "missing" as const },
         inner_boards: [],
         pinned: false,
+        attached_to: null,
       },
       {
         element: "orders",
@@ -35,6 +36,7 @@ const shop = vi.hoisted(() => ({
         shown: { kind: "missing" as const },
         inner_boards: [],
         pinned: false,
+        attached_to: null,
       },
     ],
     relations: [
@@ -61,6 +63,7 @@ const shop = vi.hoisted(() => ({
         shown: { kind: "missing" as const },
         inner_boards: [],
         pinned: false,
+        attached_to: null,
       },
       {
         element: "web-shop",
@@ -76,6 +79,7 @@ const shop = vi.hoisted(() => ({
         },
         inner_boards: [],
         pinned: false,
+        attached_to: null,
       },
     ],
     relations: [],

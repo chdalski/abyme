@@ -27,6 +27,7 @@ export function placedBox(
     shown: { kind: "missing" },
     inner_boards: [],
     pinned: false,
+    attached_to: null,
     ...overrides,
   };
 }

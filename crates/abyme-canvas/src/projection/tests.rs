@@ -91,6 +91,7 @@ fn shows_a_box_per_placement_with_its_rect_and_the_element_s_fields() {
                     shown: Shown::Missing,
                     inner_boards: Vec::new(),
                     pinned: false,
+                    attached_to: None,
                 },
                 Placement {
                     element: element_id("payments"),
@@ -105,6 +106,7 @@ fn shows_a_box_per_placement_with_its_rect_and_the_element_s_fields() {
                     },
                     inner_boards: Vec::new(),
                     pinned: false,
+                    attached_to: None,
                 },
             ],
             relations: Vec::new(),
@@ -156,6 +158,7 @@ fn the_projection_carries_exactly_the_named_fields_and_no_body() {
     assert_eq!(
         keys(&placements[0]),
         [
+            "attached_to",
             "element",
             "height",
             "inner_boards",
@@ -432,4 +435,13 @@ fn an_attached_note_lies_at_its_position_on_the_board_with_its_own_size() {
     assert_eq!(rect_of("n"), Some((105, 206, 50, 60)));
     assert_eq!(rect_of("lost"), Some((7, 8, 30, 40)));
     assert_eq!(rect_of("b"), Some((100, 200, 180, 90)));
+    let attached_to = |id: &str| {
+        view.placements
+            .iter()
+            .find(|placement| placement.element == element_id(id))
+            .and_then(|placement| placement.attached_to.clone())
+    };
+    assert_eq!(attached_to("n"), Some(element_id("b")));
+    assert_eq!(attached_to("lost"), None);
+    assert_eq!(attached_to("b"), None);
 }

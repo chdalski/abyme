@@ -129,4 +129,46 @@ export function onlyAdmittedOperations(client: AbymeClient): void {
       pinned: true,
     },
   ]);
+  const note = { existing: "ask" };
+  void client.apply([
+    { op: "move_element", element: note, board, x: 1, y: 2, pinned: true },
+    { op: "attach_note", note, to: element, board, pinned: true },
+  ]);
+  void client.apply([{ op: "detach_note", note, board }]);
+  void client.apply([
+    // @ts-expect-error An attachment from the canvas always confirms the pin.
+    { op: "attach_note", note, to: element, board },
+  ]);
+  void client.apply([
+    // @ts-expect-error Attaching never releases a pin.
+    { op: "attach_note", note, to: element, board, pinned: false },
+  ]);
+  void client.apply([
+    {
+      op: "attach_note",
+      // @ts-expect-error The canvas attaches only a note that exists.
+      note: { new: "n" },
+      to: element,
+      board,
+      pinned: true,
+    },
+  ]);
+  void client.apply([
+    {
+      op: "attach_note",
+      note,
+      // @ts-expect-error The canvas attaches only to an element that exists.
+      to: { new: "e" },
+      board,
+      pinned: true,
+    },
+  ]);
+  void client.apply([
+    // @ts-expect-error The canvas detaches only on a board that exists.
+    { op: "detach_note", note, board: { new: "b" } },
+  ]);
+  void client.apply([
+    // @ts-expect-error A detachment takes no box.
+    { op: "detach_note", note, board, to: element },
+  ]);
 }

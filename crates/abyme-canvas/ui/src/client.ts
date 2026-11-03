@@ -38,10 +38,35 @@ export type NoteDeletion = {
 };
 
 /**
+ * Hanging a note that exists on an element that exists on a board that exists,
+ * where the note lies, which Rust admits only when its file says it is a note.
+ * The canvas sends it right after its own move of the note, which pins it, so it
+ * always confirms the pin.
+ */
+export type NoteAttachment = {
+  op: "attach_note";
+  note: { existing: string };
+  to: { existing: string };
+  board: { existing: string };
+  pinned: true;
+};
+
+/**
+ * Ending the attachment of a note that exists on a board that exists, where the
+ * note lies, which Rust admits only when its file says it is a note.
+ */
+export type NoteDetachment = {
+  op: "detach_note";
+  note: { existing: string };
+  board: { existing: string };
+};
+
+/**
  * An operation the canvas may send on its own: what `src/admission.rs` admits,
  * typed by hand.
  */
-export type AdmittedOperation = AdmittedMove | NoteUpdate | NoteDeletion;
+export type AdmittedOperation =
+  AdmittedMove | NoteUpdate | NoteDeletion | NoteAttachment | NoteDetachment;
 
 /**
  * The one request that creates an element: a note with its own statement kind

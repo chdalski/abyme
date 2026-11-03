@@ -88,7 +88,12 @@ inner_boards: Array<BoardEntry>,
 /**
  * Whether the placement is pinned, from the board file.
  */
-pinned: boolean, };
+pinned: boolean, 
+/**
+ * The element this one hangs on, while that attachment holds; a box the
+ * file names in vain is not given.
+ */
+attached_to: string | null, };
 
 export type Relation = { 
 /**

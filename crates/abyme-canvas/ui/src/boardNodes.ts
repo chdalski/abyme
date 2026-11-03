@@ -3,7 +3,7 @@ import {
   type XYPosition,
   applyNodeChanges,
 } from "@xyflow/react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { BoardView } from "./bindings";
 import {
@@ -13,6 +13,7 @@ import {
   finishedMoves,
   finishedRemovals,
   keepUiState,
+  onTheBoardAndHung,
   returnHome,
   toNodes,
 } from "./nodes";
@@ -20,7 +21,8 @@ import {
 /**
  * The boxes of `view` as React Flow's controlled state. A new projection
  * replaces them, but keeps what the user selected and is dragging. Every finished move goes
- * to `move`, all moves of one change in one call; when that fails, their
+ * to `move` at its position on the board, a note's with the box it now hangs
+ * on, all moves of one change in one call; when that fails, their
  * boxes return to their positions in the board file and `onMoveFailed`
  * receives the message. A deleted note goes to `remove` and stays until a view
  * leaves it out. A new note lives among the boxes, as React Flow measures only
@@ -39,19 +41,26 @@ export function useBoardNodes(
     setNodes((current) => keepUiState(toNodes(view), current));
   }
 
+  // The boxes as last rendered, for deciding where a moved note now hangs; the
+  // state itself changes only through updaters, so that no batch of changes
+  // overwrites another that React has not rendered yet.
+  const shown = useRef(nodes);
+  useEffect(() => {
+    shown.current = nodes;
+  }, [nodes]);
+
   const onNodesChange = useCallback(
     (changes: NodeChange<ElementNode>[]) => {
-      setNodes((current) =>
-        applyNodeChanges(
-          changes.filter((change) => change.type !== "remove"),
-          current,
-        ),
-      );
+      const kept = changes.filter((change) => change.type !== "remove");
+      setNodes((current) => applyNodeChanges(kept, current));
       const removals = finishedRemovals(changes);
       if (removals.length > 0) {
         remove(removals);
       }
-      const moves = finishedMoves(changes);
+      const moves = onTheBoardAndHung(
+        finishedMoves(changes),
+        applyNodeChanges(kept, shown.current),
+      );
       if (moves.length === 0) {
         return;
       }

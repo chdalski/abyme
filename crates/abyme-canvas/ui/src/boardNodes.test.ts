@@ -191,3 +191,33 @@ describe("useBoardNodes", () => {
     });
   });
 });
+
+describe("two batches of changes before React renders", () => {
+  it("keeps both", () => {
+    const { hook } = setup(() => Promise.resolve());
+
+    act(() => {
+      hook.result.current.onNodesChange([
+        {
+          type: "position",
+          id: "payments",
+          position: { x: 7, y: 8 },
+          dragging: true,
+        },
+      ]);
+      hook.result.current.onNodesChange([
+        {
+          type: "position",
+          id: "orders",
+          position: { x: 9, y: 10 },
+          dragging: true,
+        },
+      ]);
+    });
+
+    expect(positions(hook.result.current.nodes)).toEqual({
+      orders: { x: 9, y: 10 },
+      payments: { x: 7, y: 8 },
+    });
+  });
+});

@@ -8,7 +8,7 @@
 use std::iter::successors;
 
 use abyme_core::{BoardTree, ShownRelation, Snapshot, UnknownBoard, relations_on};
-use abyme_model::{BoardId, Element, ElementId, Mode, Rect, RelationKind};
+use abyme_model::{Board, BoardId, Element, ElementId, Mode, Rect, RelationKind};
 use serde::Serialize;
 
 use crate::boards::BoardEntry;
@@ -74,6 +74,9 @@ pub struct Placement {
     pub inner_boards: Vec<BoardEntry>,
     /// Whether the placement is pinned, from the board file.
     pub pinned: bool,
+    /// The element this one hangs on, while that attachment holds; a box the
+    /// file names in vain is not given.
+    pub attached_to: Option<ElementId>,
 }
 
 /// What the box of a placement shows.
@@ -118,7 +121,7 @@ pub fn project(snapshot: &Snapshot, board: &BoardId) -> Result<BoardView, Unknow
         mode: found.zone.map(|zone| zone.mode),
         placements: found
             .placed()
-            .map(|(element, placed, rect)| placement(snapshot, &tree, element, placed, rect))
+            .map(|(element, placed, rect)| placement(snapshot, &tree, found, element, placed, rect))
             .collect(),
         relations: relations_on(snapshot, found).map(relation).collect(),
         trail: trail(snapshot, &tree, board),
@@ -174,6 +177,7 @@ fn shown(element: &Element) -> Shown {
 fn placement(
     snapshot: &Snapshot,
     tree: &BoardTree,
+    board: &Board,
     id: &ElementId,
     placed: &abyme_model::Placement,
     rect: Rect,
@@ -191,5 +195,6 @@ fn placement(
             .filter_map(|board| entry(snapshot, board))
             .collect(),
         pinned: placed.pinned,
+        attached_to: board.attachment(id).cloned(),
     }
 }

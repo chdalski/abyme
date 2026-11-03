@@ -1397,3 +1397,37 @@ describe("arrows in a laid-out canvas", () => {
     expect(release).toHaveBeenCalledExactlyOnceWith("kept", position);
   });
 });
+
+describe("moving a note with the arrow keys", () => {
+  it("takes it off its box when its centre leaves the box, as a drag does", () => {
+    const view = boardView({
+      placements: [
+        placedBox("b", {
+          shown: { kind: "element", type_ref: "t", name: "B", summary: null },
+        }),
+        // The note's centre lies on the right edge of `b`.
+        placedBox("n", {
+          x: 90,
+          y: 0,
+          shown: { kind: "note", name: "Ask", body: "" },
+          attached_to: "b",
+        }),
+      ],
+    });
+    const move = vi.fn<(moves: Move[]) => Promise<void>>(() =>
+      Promise.resolve(),
+    );
+    const { container } = render(canvasOf(view, move));
+    const note = container.querySelector('.react-flow__node[data-id="n"]');
+    if (note === null) {
+      throw new Error("no note");
+    }
+
+    fireEvent.keyDown(note, { key: "Enter" });
+    fireEvent.keyDown(note, { key: "ArrowRight" });
+
+    expect(move.mock.calls).toEqual([
+      [[{ element: "n", position: { x: 95, y: 0 }, hang: "detach" }]],
+    ]);
+  });
+});

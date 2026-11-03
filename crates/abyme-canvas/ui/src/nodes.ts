@@ -10,8 +10,8 @@ import type { BoardEntry, BoardView, Shown } from "./bindings";
 /**
  * What a box shows: its element's ID and what the projection says of it,
  * its position in the board file, where it returns when a move fails, the
- * boards its element owns, whether the board file pins it, and, for a new note no
- * file holds yet, the ID the write gave it.
+ * boards its element owns, whether the board file pins it, the box it hangs on,
+ * and, for a new note no file holds yet, the ID the write gave it.
  */
 export type ElementData = {
   element: string;
@@ -19,17 +19,29 @@ export type ElementData = {
   home: XYPosition;
   innerBoards: BoardEntry[];
   pinned: boolean;
+  attachedTo: string | null;
   draft: { createdAs: string | null } | null;
 };
 
 /** A box on the canvas. */
 export type ElementNode = Node<ElementData, "element">;
 
-/** A box the user put somewhere else: by dragging it, alone or with others, or with the arrow keys. */
-export type Move = { element: string; position: XYPosition };
+/**
+ * A box the user put somewhere else, at its position on the board: by
+ * dragging it, alone or with others, or with the arrow keys. A note's move may
+ * also hang it on another box, or take it off the one it hung on.
+ */
+export type Move = {
+  element: string;
+  position: XYPosition;
+  hang?: { attachTo: string } | "detach";
+};
 
 /**
- * The boxes of `view`, one per placement, at the rect from the board file.
+ * The boxes of `view`, one per placement, at the rect the projection gives. A
+ * note that hangs on a box is that box's child node, at its position relative
+ * to the box, so it follows a drag of the box; parents come first, as React
+ * Flow requires.
  * Every box has the one node type `element`; nothing from the repository
  * chooses a node type, and the node's ID is the validated element ID. On a
  * mirrored board only a note can be dragged: React Flow goes by this value on
@@ -39,12 +51,23 @@ export type Move = { element: string; position: XYPosition };
  * would vanish until it is measured again.
  */
 export function toNodes(view: BoardView): ElementNode[] {
-  return view.placements.map((placement) => {
-    const home = { x: placement.x, y: placement.y };
+  const placed = new Map(
+    view.placements.map((placement) => [placement.element, placement]),
+  );
+  const nodes = view.placements.map((placement): ElementNode => {
+    const parent =
+      placement.attached_to === null
+        ? undefined
+        : placed.get(placement.attached_to);
+    const home =
+      parent === undefined
+        ? { x: placement.x, y: placement.y }
+        : { x: placement.x - parent.x, y: placement.y - parent.y };
     return {
       id: placement.element,
       type: "element",
       position: home,
+      ...(parent === undefined ? {} : { parentId: parent.element }),
       width: placement.width,
       height: placement.height,
       data: {
@@ -53,6 +76,7 @@ export function toNodes(view: BoardView): ElementNode[] {
         home,
         innerBoards: placement.inner_boards,
         pinned: placement.pinned,
+        attachedTo: parent === undefined ? null : parent.element,
         draft: null,
       },
       draggable: view.mode !== "mirrored" || placement.shown.kind === "note",
@@ -77,6 +101,80 @@ export function toNodes(view: BoardView): ElementNode[] {
         },
       ],
     };
+  });
+  return [
+    ...nodes.filter((node) => node.parentId === undefined),
+    ...nodes.filter((node) => node.parentId !== undefined),
+  ];
+}
+
+/** Where `node` lies on the board: its position, plus its parent's for a child node. */
+function onTheBoard(
+  node: ElementNode,
+  byId: Map<string, ElementNode>,
+): XYPosition {
+  const parent =
+    node.parentId === undefined ? undefined : byId.get(node.parentId);
+  return parent === undefined
+    ? node.position
+    : {
+        x: parent.position.x + node.position.x,
+        y: parent.position.y + node.position.y,
+      };
+}
+
+/**
+ * `moves`, as React Flow reports them for `nodes` as they stand after the
+ * moves, each at its position on the board, and a note's with where it now
+ * hangs: on the box drawn on top whose rect holds the note's centre, being no
+ * note, no box whose file is missing, and not the note itself; else on the box
+ * it hangs on while that box holds the centre, whatever it shows now; and off
+ * that box otherwise.
+ */
+export function onTheBoardAndHung(moves: Move[], nodes: ElementNode[]): Move[] {
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  return moves.map((move) => {
+    const node = byId.get(move.element);
+    if (node === undefined) {
+      return move;
+    }
+    const position = onTheBoard({ ...node, position: move.position }, byId);
+    if (node.data.shown.kind !== "note" || node.data.draft !== null) {
+      return { element: move.element, position };
+    }
+    const centre = {
+      x: position.x + (node.width ?? 0) / 2,
+      y: position.y + (node.height ?? 0) / 2,
+    };
+    const holdsCentre = (box: ElementNode) => {
+      const at = onTheBoard(box, byId);
+      return (
+        centre.x >= at.x &&
+        centre.x <= at.x + (box.width ?? 0) &&
+        centre.y >= at.y &&
+        centre.y <= at.y + (box.height ?? 0)
+      );
+    };
+    const current = node.data.attachedTo;
+    const below = nodes.filter(
+      (box) =>
+        box.id !== node.id &&
+        box.data.draft === null &&
+        box.data.shown.kind !== "note" &&
+        box.data.shown.kind !== "missing" &&
+        holdsCentre(box),
+    );
+    const target = below.at(-1)?.id;
+    if (target !== undefined && target !== current) {
+      return { element: move.element, position, hang: { attachTo: target } };
+    }
+    // A note stays on its box, whatever the box shows now, while its centre
+    // lies on it.
+    const host = current === null ? undefined : byId.get(current);
+    if (target === undefined && host !== undefined && !holdsCentre(host)) {
+      return { element: move.element, position, hang: "detach" };
+    }
+    return { element: move.element, position };
   });
 }
 
@@ -163,6 +261,7 @@ export function draftNote(id: string, position: XYPosition): ElementNode {
       home: position,
       innerBoards: [],
       pinned: true,
+      attachedTo: null,
       draft: { createdAs: null },
     },
     style: { pointerEvents: "all" },

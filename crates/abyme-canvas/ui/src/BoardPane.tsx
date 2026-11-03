@@ -7,7 +7,7 @@ import { BoardCanvas } from "./BoardCanvas";
 import { type BoardState, inOrder, loadBoard } from "./boards";
 import type { AbymeClient, AdmittedRequest } from "./client";
 import { useLive } from "./live";
-import { toMove, toRelease } from "./moves";
+import { toAttachment, toDetachment, toMove, toRelease } from "./moves";
 import {
   type NoteParts,
   toNewNote,
@@ -52,8 +52,17 @@ export function BoardPane({
   );
   const move = useCallback(
     async (moves: Move[]) => {
+      // A note's attachment goes right after its move, so that it hangs on
+      // the box where the move put it.
       await send(
-        moves.map(({ element, position }) => toMove(board, element, position)),
+        moves.flatMap(({ element, position, hang }) => [
+          toMove(board, element, position),
+          ...(hang === undefined
+            ? []
+            : hang === "detach"
+              ? [toDetachment(board, element)]
+              : [toAttachment(board, element, hang.attachTo)]),
+        ]),
       );
       setWriteFailure(null);
     },

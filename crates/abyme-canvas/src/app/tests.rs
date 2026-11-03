@@ -722,7 +722,7 @@ fn a_move_on_a_mirrored_board_is_refused_and_writes_nothing() {
     assert_eq!(
         applied,
         Err(json!(
-            "operation 1: board context is mirrored, so the canvas may only create a note there, or move one and keep it pinned"
+            "operation 1: board context is mirrored, so the canvas may only create a note there, or move one and keep it pinned, attach, or detach one on which nothing hangs"
         ))
     );
     assert_eq!(project_files(root.path()), before);
@@ -750,7 +750,7 @@ fn a_request_that_also_moves_on_a_mirrored_board_writes_nothing() {
     assert_eq!(
         applied,
         Err(json!(
-            "operation 2: board context is mirrored, so the canvas may only create a note there, or move one and keep it pinned"
+            "operation 2: board context is mirrored, so the canvas may only create a note there, or move one and keep it pinned, attach, or detach one on which nothing hangs"
         ))
     );
     assert_eq!(project_files(root.path()), before);
@@ -899,7 +899,7 @@ fn a_release_on_a_mirrored_board_is_refused() {
 
     assert!(
         error.contains(
-            "board context is mirrored, so the canvas may only create a note there, or move one and keep it pinned"
+            "board context is mirrored, so the canvas may only create a note there, or move one and keep it pinned, attach, or detach one on which nothing hangs"
         ),
         "{error}"
     );
@@ -1056,7 +1056,7 @@ fn on_a_mirrored_board_no_move_but_a_note_s_is_written() {
 
         assert!(
             error.contains(
-                "operation 1: board context is mirrored, so the canvas may only create a note there, or move one and keep it pinned"
+                "operation 1: board context is mirrored, so the canvas may only create a note there, or move one and keep it pinned, attach, or detach one on which nothing hangs"
             ),
             "{refused}: {error}"
         );
@@ -1179,7 +1179,8 @@ fn element_one(root: &Path) -> Element {
         .unwrap()
 }
 
-const NOT_A_NOTE: &str = "operation 1: the canvas may change and delete only notes";
+const NOT_A_NOTE: &str =
+    "operation 1: the canvas may change, delete, attach, and detach only notes";
 const MAY_NOT_SEND_AN_UPDATE: &str = "the canvas may not send update_element";
 
 #[test]
@@ -1952,7 +1953,7 @@ fn a_deletion_goes_with_other_admitted_operations_and_fails_with_a_refused_one()
     assert_eq!(
         refused,
         Err(json!(
-            "operation 2: the canvas may change and delete only notes"
+            "operation 2: the canvas may change, delete, attach, and detach only notes"
         ))
     );
     assert_eq!(project_files(root.path()), before);
@@ -2329,4 +2330,148 @@ fn the_page_carries_its_own_content_security_policy() {
     assert!(script_sources(policy).starts_with("script-src 'self'"));
     assert!(!script_sources(policy).contains("'unsafe-inline'"));
     assert!(!script_sources(policy).contains("'unsafe-eval'"));
+}
+
+fn an_attachment_of(note: &str, to: &str, board: &str) -> Value {
+    json!({
+        "op": "attach_note",
+        "note": {"existing": note},
+        "to": {"existing": to},
+        "board": {"existing": board},
+        "pinned": true
+    })
+}
+
+fn a_detachment_of(note: &str, board: &str) -> Value {
+    json!({"op": "detach_note", "note": {"existing": note}, "board": {"existing": board}})
+}
+
+#[test]
+fn a_note_dropped_on_a_box_of_a_mirrored_board_writes_its_relation_and_only_its_line() {
+    let root = tempfile::tempdir().unwrap();
+    mirrored_board_with_a_note(root.path());
+    let context = PathBuf::from("abyme/boards/context.board.json");
+    let note = PathBuf::from("abyme/elements/ask.md");
+    let mut others = project_files(root.path());
+    let before = String::from_utf8(others.remove(&context).unwrap()).unwrap();
+    others.remove(&note).unwrap();
+    let (_app, window) = canvas(root.path());
+
+    apply_from(
+        &window,
+        &json!([
+            a_move_of("ask", "context", 30, 40),
+            an_attachment_of("ask", "payment-service", "context")
+        ]),
+    )
+    .unwrap();
+
+    let mut files = project_files(root.path());
+    let after = String::from_utf8(files.remove(&context).unwrap()).unwrap();
+    let written = String::from_utf8(files.remove(&note).unwrap()).unwrap();
+    assert_eq!(files, others);
+    let lines = new_lines(&before, &after);
+    assert_eq!(lines.len(), 1, "{after}");
+    assert!(
+        lines[0].contains(r#""element": "ask""#)
+            && lines[0].contains(r#""pinned": true, "attached_to": "payment-service""#),
+        "{after}"
+    );
+    assert!(written.contains("concerns"), "{written}");
+    let view = open_board_from(&window, json!({"board": "context"})).unwrap();
+    let ask = view["placements"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|placement| placement["element"] == "ask")
+        .unwrap();
+    assert_eq!((&ask["x"], &ask["y"]), (&json!(30), &json!(40)));
+    assert_eq!(ask["attached_to"], json!("payment-service"));
+}
+
+#[test]
+fn a_note_dragged_off_its_box_changes_only_its_line() {
+    let root = tempfile::tempdir().unwrap();
+    mirrored_board_with_a_note(root.path());
+    let (_app, window) = canvas(root.path());
+    apply_from(
+        &window,
+        &json!([
+            a_move_of("ask", "context", 30, 40),
+            an_attachment_of("ask", "payment-service", "context")
+        ]),
+    )
+    .unwrap();
+    let context = PathBuf::from("abyme/boards/context.board.json");
+    let mut others = project_files(root.path());
+    let before = String::from_utf8(others.remove(&context).unwrap()).unwrap();
+
+    apply_from(
+        &window,
+        &json!([
+            a_move_of("ask", "context", 900, 900),
+            a_detachment_of("ask", "context")
+        ]),
+    )
+    .unwrap();
+
+    let mut files = project_files(root.path());
+    let after = String::from_utf8(files.remove(&context).unwrap()).unwrap();
+    assert_eq!(files, others);
+    assert_eq!(
+        new_lines(&before, &after),
+        [
+            r#"    {"element": "ask", "x": 900, "y": 900, "width": 180, "height": 90, "pinned": true},"#
+        ]
+    );
+}
+
+#[test]
+fn a_refused_attachment_or_detachment_writes_nothing() {
+    let root = tempfile::tempdir().unwrap();
+    mirrored_board_with_a_note(root.path());
+    // A hand edit hangs `orders` on the note `ask`, so the note may not change
+    // on the mirrored board, nor go.
+    let file = root.path().join("abyme/boards/context.board.json");
+    let text = fs::read_to_string(&file).unwrap().replace(
+        r#""element": "orders", "x": 220, "y": 0, "width": 180, "height": 90}"#,
+        r#""element": "orders", "x": 220, "y": 0, "width": 180, "height": 90, "attached_to": "ask"}"#,
+    );
+    assert!(text.contains(r#""attached_to": "ask""#), "{text}");
+    fs::write(&file, text).unwrap();
+    let before = project_files(root.path());
+    let (_app, window) = canvas(root.path());
+    let mirrored = "operation 1: board context is mirrored, so the canvas may only create a note \
+                    there, or move one and keep it pinned, attach, or detach one on which nothing \
+                    hangs";
+
+    for (request, expected) in [
+        (
+            json!([an_attachment_of("payment-service", "orders", "context")]),
+            "operation 1: the canvas may change, delete, attach, and detach only notes",
+        ),
+        (
+            json!([{"op": "attach_note", "note": {"existing": "ask"},
+                    "to": {"existing": "payment-service"}, "board": {"existing": "context"}}]),
+            "operation 1: the canvas may not send attach_note without pinned",
+        ),
+        (
+            json!([an_attachment_of("ask", "payment-service", "context")]),
+            mirrored,
+        ),
+        (json!([a_detachment_of("ask", "context")]), mirrored),
+        (json!([a_move_of("ask", "context", 1, 2)]), mirrored),
+        (
+            json!([{"op": "delete_element", "element": {"existing": "ask"}}]),
+            "operation 1: something on board context hangs on the note, so the canvas does not \
+             delete it",
+        ),
+    ] {
+        assert_eq!(
+            apply_from(&window, &request),
+            Err(json!(expected)),
+            "{request}"
+        );
+    }
+    assert_eq!(project_files(root.path()), before);
 }

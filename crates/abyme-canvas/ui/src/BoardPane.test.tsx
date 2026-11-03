@@ -631,3 +631,96 @@ describe("BoardPane", () => {
     ]);
   });
 });
+
+describe("attaching a note", () => {
+  const NOTE = { kind: "note", name: "Ask", body: "" } as const;
+  const WITH_A_NOTE: BoardView = boardView({
+    placements: [
+      placement("b", 100),
+      placement("c", 400),
+      placedBox("n", { x: 120, y: 10, shown: NOTE, attached_to: "b" }),
+    ],
+  });
+
+  function paneWithANote(): FakeClient {
+    const client = new FakeClient([]);
+    client.views = { context: WITH_A_NOTE };
+    return client;
+  }
+
+  it("sends the move at whole numbers on the board, then the attachment, in one request", async () => {
+    const client = paneWithANote();
+    await openPane(client);
+
+    // Relative to `b` at 100, 0: the note lands at 400.6, 10.4, on `c`.
+    await dragTogether({ n: { x: 300.6, y: 10.4 } });
+
+    expect(client.applied).toEqual([
+      [
+        {
+          op: "move_element",
+          element: { existing: "n" },
+          board: { existing: "context" },
+          x: 401,
+          y: 10,
+          pinned: true,
+        },
+        {
+          op: "attach_note",
+          note: { existing: "n" },
+          to: { existing: "c" },
+          board: { existing: "context" },
+          pinned: true,
+        },
+      ],
+    ]);
+  });
+
+  it("sends the move, then the detachment, when the note leaves its box for none", async () => {
+    const client = paneWithANote();
+    await openPane(client);
+
+    await dragTogether({ n: { x: 0, y: 500 } });
+
+    expect(client.applied).toEqual([
+      [
+        {
+          op: "move_element",
+          element: { existing: "n" },
+          board: { existing: "context" },
+          x: 100,
+          y: 500,
+          pinned: true,
+        },
+        {
+          op: "detach_note",
+          note: { existing: "n" },
+          board: { existing: "context" },
+        },
+      ],
+    ]);
+  });
+
+  it("sends only the box's move when the box is dragged with its note", async () => {
+    const client = paneWithANote();
+    await openPane(client);
+
+    await dragTogether({ b: { x: 600, y: 300 } });
+
+    expect(client.applied).toEqual([
+      [
+        {
+          op: "move_element",
+          element: { existing: "b" },
+          board: { existing: "context" },
+          x: 600,
+          y: 300,
+          pinned: true,
+        },
+      ],
+    ]);
+    const note = flow.props?.nodes?.find((node) => node.id === "n");
+    expect(note?.parentId).toBe("b");
+    expect(note?.position).toEqual({ x: 20, y: 10 });
+  });
+});

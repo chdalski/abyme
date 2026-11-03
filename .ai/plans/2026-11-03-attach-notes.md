@@ -32,7 +32,7 @@ it is detached.
 - [x] One way to read a position
 - [x] Attached notes in the board file
 - [x] Attaching and detaching a note
-- [ ] Attaching on the canvas
+- [x] Attaching on the canvas
 
 ## Tasks
 
@@ -131,25 +131,25 @@ A person attaches a note by dropping it onto a box and detaches it by dragging i
 
 Review path: Security-Hybrid
 
-- [ ] A note dropped with its centre inside a box that is no note is attached there; where its centre
+- [x] A note dropped with its centre inside a box that is no note is attached there; where its centre
       lies inside several such boxes, to the one drawn on top. Dragged off with its centre outside its
       box and inside no other, it is detached; dropped inside another box, it is attached there with
       one `attach_note` and no `detach_note`. Each goes out in the same request as the move, in order
       with the canvas's other writes. A move that ends on the same box attaches nothing.
-- [ ] Moving a note with the arrow keys attaches and detaches it the same way.
-- [ ] An attached note moves on the screen with its box while the box is dragged, and a drag of the
+- [x] Moving a note with the arrow keys attaches and detaches it the same way.
+- [x] An attached note moves on the screen with its box while the box is dragged, and a drag of the
       box writes only the box's move.
-- [ ] The admission takes `attach_note` and `detach_note` of an existing note, on every board, also a
+- [x] The admission takes `attach_note` and `detach_note` of an existing note, on every board, also a
       mirrored one; any other form is refused by position, naming no other text.
-- [ ] The canvas does not draw the relation `concerns` from an attached note to its box as an arrow;
+- [x] The canvas does not draw the relation `concerns` from an attached note to its box as an arrow;
       the note's other relations still show.
-- [ ] Rust tests cover the admission through `apply` over IPC with the bytes of the files; Vitest
+- [x] Rust tests cover the admission through `apply` over IPC with the bytes of the files; Vitest
       covers the drop, the drag off, a drop from one box onto another, a drop on overlapping boxes,
       the arrow keys, a drop on a note, a drag of the box, and the hidden arrow.
       `admitted.typecheck.ts` covers the types.
-- [ ] A reader of Canvas can tell how a note is attached and detached, and `First Slice.md`'s MVP and
+- [x] A reader of Canvas can tell how a note is attached and detached, and `First Slice.md`'s MVP and
       the canvas row of the root `CLAUDE.md` state what is built.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
       `cargo fmt --all --check`, `pnpm --dir crates/abyme-canvas/ui check`, and
       `pnpm --dir crates/abyme-canvas/ui test` pass.
 
@@ -238,6 +238,13 @@ Review path: Security-Hybrid
   reached by hand or by `update_element`, reads and moves as any attachment; a stale `attached_to` on
   another element that names an attached note keeps reading as a board position. Accepted by the
   security engineer.
+- **On a mirrored board a note that a file names stays put:** a placement whose `attached_to` names a
+  note can start to hold when the note moves, is attached or detached, or goes, and then the box moves
+  along on a mirrored board. So there the canvas moves, attaches, and detaches only a note that no
+  placement names, judged by the field as written, and deletes only a note that no board names. Free
+  boards keep their behaviour for moves, attachments, and detachments; a deletion names no board, so
+  the canvas refuses it on every board while a board names the note. A gate demand of the security
+  engineer on Task 4, which also had `Board::attach` refuse an element something hangs on.
 - **All tasks are Security-Hybrid:** the board file and the operations take new input, and the canvas
   decides what it may attach, also on mirrored boards.
 

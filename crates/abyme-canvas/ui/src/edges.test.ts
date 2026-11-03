@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Relation, RelationKind } from "./bindings";
 import { toEdges } from "./edges";
-import { boardView } from "./testBoards";
+import { boardView, placedBox } from "./testBoards";
 
 function edgeOf(overrides: Partial<Relation> = {}) {
   const relation: Relation = {
@@ -73,5 +73,34 @@ describe("toEdges", () => {
     const label = `${"x".repeat(39)}😀😀`;
 
     expect(edgeOf({ label })?.label).toBe(`${"x".repeat(39)}😀…`);
+  });
+});
+
+describe("the arrow of an attached note", () => {
+  const relations: Relation[] = [
+    { from: "n", kind: "concerns", to: "b", label: null },
+    { from: "n", kind: "concerns", to: "c", label: null },
+    { from: "n", kind: "see_also", to: "b", label: null },
+    { from: "m", kind: "concerns", to: "b", label: null },
+  ];
+
+  it("is hidden for concerns to the box it hangs on, and no other", () => {
+    const edges = toEdges(
+      boardView({
+        placements: [
+          placedBox("b"),
+          placedBox("c"),
+          placedBox("m"),
+          placedBox("n", { attached_to: "b" }),
+        ],
+        relations,
+      }),
+    );
+
+    expect(edges.map((edge) => edge.id)).toEqual([
+      "n|concerns|c",
+      "n|see_also|b",
+      "m|concerns|b",
+    ]);
   });
 });

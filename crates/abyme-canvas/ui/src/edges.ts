@@ -28,10 +28,23 @@ function shownLabel(label: string | null): { label: string } | object {
 /**
  * The arrows of `view`, one per relation, built from fixed fields: only the
  * validated IDs and the label come from the repository, and the kind only
- * decides the dash. An arrow cannot be selected, deleted, or reconnected.
+ * decides the dash. An arrow cannot be selected, deleted, or reconnected. The
+ * relation `concerns` from an attached note to the box it hangs on has none:
+ * the note hangs on the box visibly.
  */
 export function toEdges(view: BoardView): Edge[] {
-  return view.relations.map((relation) => ({
+  const hangsOn = new Map(
+    view.placements.map((placement) => [
+      placement.element,
+      placement.attached_to,
+    ]),
+  );
+  const shown = view.relations.filter(
+    (relation) =>
+      relation.kind !== "concerns" ||
+      hangsOn.get(relation.from) !== relation.to,
+  );
+  return shown.map((relation) => ({
     id: `${relation.from}|${relation.kind}|${relation.to}`,
     source: relation.from,
     target: relation.to,

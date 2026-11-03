@@ -349,14 +349,18 @@ impl Board {
     /// Returns [`PositionError::NotPlaced`] when the board does not place the
     /// element, [`PositionError::OffsetTooLarge`] when its offset from `host`
     /// does not fit in `i32`, and [`PositionError::DoesNotHold`] when the
-    /// attachment would not hold where the element lies; then nothing
-    /// changes.
+    /// attachment would not hold where the element lies, or something hangs
+    /// on the element; then nothing changes.
     #[expect(
         clippy::disallowed_fields,
         reason = "attaching sets the field, and restores the placement when it fails"
     )]
     pub fn attach(&mut self, element: &ElementId, host: &ElementId) -> Result<(), PositionError> {
         let rect = self.rect_of(element).ok_or(PositionError::NotPlaced)?;
+        // What hangs on the element would stop holding and move.
+        if !self.hanging_on(element).is_empty() {
+            return Err(PositionError::DoesNotHold);
+        }
         let saved = self
             .placements
             .get(element)
@@ -399,6 +403,20 @@ impl Board {
     /// names it keeps where it lies, now stored as a board position.
     pub fn detach_from(&mut self, element: &ElementId) {
         self.detach_where(|_, named| named == element);
+    }
+
+    /// Whether the file of any placement on this board names `element` as
+    /// the box it hangs on, whether the attachment holds or not: a change of
+    /// `element` can make such an attachment start to hold.
+    #[must_use]
+    #[expect(
+        clippy::disallowed_fields,
+        reason = "whether anything names a given element, which reveals no box"
+    )]
+    pub fn is_named(&self, element: &ElementId) -> bool {
+        self.placements
+            .values()
+            .any(|placement| placement.attached_to.as_ref() == Some(element))
     }
 
     /// Whether the file says that `element` hangs on `host`, whether the
@@ -1714,5 +1732,42 @@ mod tests {
         assert_eq!(board.rect_of(&element_id("n")), Some(at(5, 6, 180, 90)));
         assert!(!board.names(&element_id("n"), &element_id("gone")));
         assert_eq!(board.attachment(&element_id("m")), Some(&element_id("b")));
+    }
+
+    #[test]
+    fn attaching_an_element_something_hangs_on_changes_no_byte() {
+        let mut board = board_of(&[
+            line("b", 100, 200, ""),
+            line("c", 0, 0, ""),
+            line("x", 1, 2, r#", "attached_to": "c""#),
+        ]);
+        let before = board.to_json();
+
+        assert_eq!(
+            board.attach(&element_id("c"), &element_id("b")),
+            Err(PositionError::DoesNotHold)
+        );
+        assert_eq!(board.to_json(), before);
+    }
+
+    #[rstest]
+    #[case::holding(vec![line("n", 0, 0, ""), line("x", 1, 2, r#", "attached_to": "n""#)])]
+    #[case::out_of_range(vec![
+        line("n", 0, 0, ""),
+        line("x", 2_000_000, 2, r#", "attached_to": "n""#),
+    ])]
+    #[case::in_a_chain(vec![
+        line("b", 0, 0, ""),
+        line("n", 0, 0, r#", "attached_to": "b""#),
+        line("x", 1, 2, r#", "attached_to": "n""#),
+    ])]
+    #[case::unplaced(vec![line("x", 1, 2, r#", "attached_to": "n""#)])]
+    fn an_element_is_named_by_a_file_whether_the_attachment_holds_or_not(
+        #[case] lines: Vec<String>,
+    ) {
+        let board = board_of(&lines);
+
+        assert!(board.is_named(&element_id("n")));
+        assert!(!board.is_named(&element_id("x")));
     }
 }

@@ -149,24 +149,14 @@ fn every_other_operation_is_refused_by_its_position_and_kind() {
             json!({"op": "delete_relation", "from": {"existing": "secret-id"}, "kind": "uses", "to": {"existing": "payments"}}),
             "delete_relation",
         ),
-        (
-            json!({"op": "attach_note", "note": {"existing": "secret-id"}, "to": {"existing": "payments"}, "board": {"existing": "context"}}),
-            "attach_note",
-        ),
-        (
-            json!({"op": "attach_note", "note": {"new": "secret-key"}, "to": {"existing": "payments"}, "board": {"existing": "mirrored"}, "pinned": true}),
-            "attach_note",
-        ),
-        (
-            json!({"op": "detach_note", "note": {"existing": "secret-id"}, "board": {"existing": "context"}}),
-            "detach_note",
-        ),
-        (
-            json!({"op": "detach_note", "note": {"existing": "secret-id"}, "board": {"existing": "mirrored"}}),
-            "detach_note",
-        ),
     ];
 
+    assert_refused_by_kind(refused);
+}
+
+/// Checks that each operation of `refused`, after an admitted move, is refused
+/// by its position and kind, naming nothing the operation holds.
+fn assert_refused_by_kind<const N: usize>(refused: [(Value, &'static str); N]) {
     for (refused, kind) in refused {
         let refusal = admit(&[move_existing(), operation(refused.clone())]).unwrap_err();
 
@@ -186,6 +176,36 @@ fn every_other_operation_is_refused_by_its_position_and_kind() {
         );
         assert!(!message.chars().any(char::is_control), "{message}");
     }
+}
+
+#[test]
+fn an_attachment_or_a_detachment_of_another_form_is_refused_by_its_position_and_kind() {
+    assert_refused_by_kind([
+        (
+            json!({"op": "attach_note", "note": {"existing": "secret-id"}, "to": {"existing": "payments"}, "board": {"existing": "context"}}),
+            "attach_note without pinned",
+        ),
+        (
+            json!({"op": "attach_note", "note": {"new": "secret-key"}, "to": {"existing": "payments"}, "board": {"existing": "mirrored"}, "pinned": true}),
+            "attach_note with a new element or board",
+        ),
+        (
+            json!({"op": "attach_note", "note": {"existing": "secret-id"}, "to": {"new": "secret-key"}, "board": {"existing": "context"}, "pinned": true}),
+            "attach_note with a new element or board",
+        ),
+        (
+            json!({"op": "attach_note", "note": {"existing": "secret-id"}, "to": {"existing": "payments"}, "board": {"new": "secret-key"}, "pinned": true}),
+            "attach_note with a new element or board",
+        ),
+        (
+            json!({"op": "detach_note", "note": {"new": "secret-key"}, "board": {"existing": "context"}}),
+            "detach_note with a new element or board",
+        ),
+        (
+            json!({"op": "detach_note", "note": {"existing": "secret-id"}, "board": {"new": "secret-key"}}),
+            "detach_note with a new element or board",
+        ),
+    ]);
 }
 
 #[test]
@@ -309,7 +329,7 @@ fn names_only_the_position_and_the_board_of_a_refused_move() {
 
     assert_eq!(
         refused.to_string(),
-        "operation 2: board mirrored is mirrored, so the canvas may only create a note there, or move one and keep it pinned"
+        "operation 2: board mirrored is mirrored, so the canvas may only create a note there, or move one and keep it pinned, attach, or detach one on which nothing hangs"
     );
 }
 
@@ -595,5 +615,203 @@ fn lets_a_move_of_an_attached_note_pass_on_a_mirrored_board_but_not_of_its_box()
             position: 1,
             board: "mirrored".parse().unwrap(),
         })
+    );
+}
+
+fn an_attachment(note: &str, to: &str, board: &str) -> Operation {
+    operation(json!({
+        "op": "attach_note",
+        "note": {"existing": note},
+        "to": {"existing": to},
+        "board": {"existing": board},
+        "pinned": true
+    }))
+}
+
+fn a_detachment(note: &str, board: &str) -> Operation {
+    operation(json!({
+        "op": "detach_note",
+        "note": {"existing": note},
+        "board": {"existing": board}
+    }))
+}
+
+fn a_note_move(note: &str, board: &str) -> Operation {
+    operation(json!({
+        "op": "move_element",
+        "element": {"existing": note},
+        "board": {"existing": board},
+        "x": 10,
+        "y": 20,
+        "pinned": true
+    }))
+}
+
+#[test]
+fn admits_an_attachment_with_pinned_and_a_detachment_of_existing_elements() {
+    assert_eq!(
+        admit(&[
+            move_existing(),
+            an_attachment("payments", "checkout", "context")
+        ]),
+        Ok(())
+    );
+    assert_eq!(admit(&[a_detachment("payments", "context")]), Ok(()));
+}
+
+#[test]
+fn a_request_that_creates_and_attaches_a_note_is_no_creation_of_a_note() {
+    let mut operations = a_new_note_on("free");
+    operations.push(an_attachment("payments", "checkout", "free"));
+
+    assert_eq!(
+        admit(&operations),
+        Err(Refused::Operation {
+            position: 1,
+            kind: "create_element"
+        })
+    );
+}
+
+#[test]
+fn refuses_attaching_or_detaching_an_element_without_a_note_s_file_on_every_board() {
+    for board in ["plain", "mirrored"] {
+        for note in ["checkout", "nowhere"] {
+            for refused in [
+                an_attachment(note, "checkout", board),
+                a_detachment(note, board),
+            ] {
+                assert_eq!(
+                    check_board_files(
+                        &snapshot_with_an_attached_note(5, 6),
+                        &[a_note_move("payments", "plain"), refused]
+                    ),
+                    Err(Refused::NotANote { position: 2 }),
+                    "{note} on {board}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn lets_a_note_on_which_nothing_hangs_be_attached_and_detached_on_a_mirrored_board() {
+    let snapshot = snapshot_with_an_attached_note(5, 6);
+
+    assert_eq!(
+        check_board_files(
+            &snapshot,
+            &[
+                a_note_move("payments", "mirrored"),
+                an_attachment("payments", "checkout", "mirrored"),
+                a_detachment("payments", "mirrored"),
+            ]
+        ),
+        Ok(())
+    );
+}
+
+/// `snapshot_with_a_note` whose boards `plain` and `mirrored` place the box
+/// `x` named as hanging on the note `payments` by `lines`, with `payments`
+/// placed too.
+fn snapshot_naming_the_note(lines: &str) -> Snapshot {
+    let mut snapshot = snapshot_with_a_note();
+    for board in ["plain", "mirrored"] {
+        let id: BoardId = board.parse().unwrap();
+        let zone = if board == "mirrored" {
+            r#""zone": {"mode": "mirrored", "statement": "current"}, "#
+        } else {
+            ""
+        };
+        let text = format!(
+            r#"{{"format": 1, "id": "{board}", "title": "{board}", {zone}"placements": [{lines}]}}"#
+        );
+        snapshot
+            .boards
+            .insert(id.clone(), Board::from_json(&id, &text).unwrap());
+    }
+    snapshot
+}
+
+/// The three ways a file names the note `payments`: an attachment that holds,
+/// one out of range, and one in a chain.
+fn files_naming_the_note() -> [&'static str; 3] {
+    [
+        r#"{"element": "payments", "x": 0, "y": 0, "width": 180, "height": 90},
+           {"element": "x", "x": 1, "y": 2, "width": 180, "height": 90, "attached_to": "payments"}"#,
+        r#"{"element": "payments", "x": 0, "y": 0, "width": 180, "height": 90},
+           {"element": "x", "x": 2000000, "y": 2, "width": 180, "height": 90, "attached_to": "payments"}"#,
+        r#"{"element": "b", "x": 500, "y": 0, "width": 180, "height": 90},
+           {"element": "payments", "x": 0, "y": 0, "width": 180, "height": 90, "attached_to": "b"},
+           {"element": "x", "x": 1, "y": 2, "width": 180, "height": 90, "attached_to": "payments"}"#,
+    ]
+}
+
+#[test]
+fn refuses_to_move_attach_or_detach_a_note_a_file_names_on_a_mirrored_board_only() {
+    for lines in files_naming_the_note() {
+        let snapshot = snapshot_naming_the_note(lines);
+        let on = |board: &str| {
+            [
+                a_note_move("payments", board),
+                an_attachment("payments", "b", board),
+                a_detachment("payments", board),
+            ]
+        };
+
+        for refused in on("mirrored") {
+            assert_eq!(
+                check_board_files(&snapshot, &[refused]),
+                Err(Refused::Mirrored {
+                    position: 1,
+                    board: "mirrored".parse().unwrap(),
+                }),
+                "{lines}"
+            );
+        }
+        assert_eq!(
+            check_board_files(&snapshot, &on("plain")),
+            Ok(()),
+            "{lines}"
+        );
+    }
+}
+
+#[test]
+fn refuses_to_delete_a_note_a_file_names_on_any_board() {
+    let delete = operation(json!({"op": "delete_element", "element": {"existing": "payments"}}));
+    for lines in files_naming_the_note() {
+        let mut snapshot = snapshot_naming_the_note(lines);
+        // Only the board `plain` names the note.
+        let mirrored: BoardId = "mirrored".parse().unwrap();
+        snapshot
+            .boards
+            .insert(mirrored.clone(), board("mirrored", Some(Mode::Mirrored)));
+
+        assert_eq!(
+            check_board_files(&snapshot, std::slice::from_ref(&delete)),
+            Err(Refused::HungOn {
+                position: 1,
+                board: "plain".parse().unwrap(),
+            }),
+            "{lines}"
+        );
+    }
+    assert_eq!(
+        check_board_files(&snapshot_with_a_note(), &[delete]),
+        Ok(())
+    );
+}
+
+#[test]
+fn names_only_the_position_and_the_board_of_a_refused_deletion() {
+    let refused = Refused::HungOn {
+        position: 3,
+        board: "plain".parse().unwrap(),
+    };
+
+    assert_eq!(
+        refused.to_string(),
+        "operation 3: something on board plain hangs on the note, so the canvas does not delete it"
     );
 }
