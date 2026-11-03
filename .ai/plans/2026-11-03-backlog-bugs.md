@@ -223,18 +223,26 @@ Review path: Reviewer-only
 ### Task 13: A note deleted while it is typed keeps its field
 
 When the AI deletes a note whose text is being typed, the field and the text vanish without a
-message. The field stays open with the text instead, until its input ends.
+message. The field stays open with the text instead, until its input ends. Nothing is written from
+it, since a new element can get the deleted note's ID.
 
 Review path: Security-Hybrid
 
 - [ ] A note whose field is open stays on the board, at its last position on the board, with its
-      field and text when a view leaves it out; it cannot be dragged or moved with the arrow keys
-      while it stays. Vitest shows it.
-- [ ] Ending that field's input with changed text shows the core's refusal and keeps the field
-      and the text open, and Vitest shows it.
-- [ ] Ending that field's input with unchanged or blank text writes nothing, and the note leaves
-      the board at once, and Vitest shows it.
+      field and text when a view leaves it out; it cannot be selected, dragged, moved with the
+      arrow keys, or deleted while it stays. Vitest shows it.
+- [ ] Ending that field's input with changed text sends nothing, shows the canvas's message that
+      the note was deleted and its text not written, and keeps the field and the text open, and
+      Vitest shows it.
+- [ ] A later view that lists the note's ID again, as a note or as another box, leaves the field,
+      its text, and the refusal as they are while the field is open, and the box that view lists
+      under that ID is not shown until the field closes; Vitest shows it.
+- [ ] Ending that field's input with unchanged or blank text writes nothing; the note leaves the
+      board at once when the latest view does not list its ID, and gives way to the box that view
+      lists under its ID when it does. Vitest shows both.
 - [ ] A note whose field is closed still goes when a view leaves it out.
+- [ ] A new note no file holds yet, whose field is open, still writes and is never refused as
+      deleted, and a written new note still goes as Task 11 says; Vitest shows it.
 - [ ] A reader of Canvas can tell what happens to a note deleted while it is typed.
 - [ ] The review before the last commit gives the user the webview checklist with every item the
       tasks name.
@@ -256,14 +264,24 @@ Review path: Security-Hybrid
 - **Task 13:** webview checklist: a double click on a `▸` button, and on a box with an inner
   board, opens one board, and the rest of the double click on the new board opens nothing and
   starts no note (Task 10).
+- **Task 13:** a single view that already carries both the deletion of a note and a new element
+  under its ID never leaves the note out, so the open field carries over onto the new element and
+  its write lands there; this predates the plan and goes to the Security section of
+  `.ai/backlog.md` as a Low entry with Task 13's commit (security engineer, Task 13
+  pre-implementation assessment).
 
 ## Decisions
 
-- **A deleted note's open field stays with its text, and a write then fails:** no typed text is
-  lost, and a deletion the AI made is not undone behind its back. Turning it into a new note, or
+- **A deleted note's open field stays with its text, and a write is then refused:** no typed text
+  is lost, and a deletion the AI made is not undone behind its back. Turning it into a new note, or
   letting it go with a message, were declined. Ending its input without a write lets the note go
-  at once, since nothing typed is lost then; while it stays it offers no move, since the core
-  refuses one.
+  at once, since nothing typed is lost then; while it stays it offers no move, since a move would
+  reach whatever element has its ID by then.
+- **The canvas refuses a deleted note's write itself, and never sends it:** IDs come from names,
+  so a new element can get the deleted note's ID, and the core, which checks the files as they are
+  when the write arrives, would write the text over it. Once a view leaves the note out, its field
+  sends nothing until it closes, whatever later views list under its ID (security engineer, Task 13
+  pre-implementation assessment).
 - **The marks are cut, not stacked:** widths below 180 px come only from hand edits, and cutting
   follows the existing style of the `▸` buttons.
 - **A box whose file is missing loses the drag too:** a box offers only what the admission and the
