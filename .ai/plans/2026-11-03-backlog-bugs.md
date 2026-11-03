@@ -41,7 +41,7 @@ the same code, so that the canvas and the core keep their stated behaviour befor
 - [x] A held-back click ends with its press
 - [x] One press opens one board
 - [x] A new note that is deleted before a view lists it goes
-- [ ] The canvas knows which note's field is open
+- [x] The canvas knows which note's field is open
 - [ ] A note deleted while it is typed keeps its field
 
 ## Tasks
@@ -214,11 +214,11 @@ an open field. Behavior is unchanged.
 
 Review path: Reviewer-only
 
-- [ ] Whether a note's field is open is part of the board's box state, merged through a new view
+- [x] Whether a note's field is open is part of the board's box state, merged through a new view
       like the selection, and has one source.
-- [ ] Every test of `BoardCanvas.test.tsx`, `nodes.test.ts`, and `App.test.tsx` that exists before
+- [x] Every test of `BoardCanvas.test.tsx`, `nodes.test.ts`, and `App.test.tsx` that exists before
       the task passes with its assertions unchanged; only fixtures may gain the new field.
-- [ ] `pnpm --dir crates/abyme-canvas/ui check` and `pnpm --dir crates/abyme-canvas/ui test` pass.
+- [x] `pnpm --dir crates/abyme-canvas/ui check` and `pnpm --dir crates/abyme-canvas/ui test` pass.
 
 ### Task 13: A note deleted while it is typed keeps its field
 

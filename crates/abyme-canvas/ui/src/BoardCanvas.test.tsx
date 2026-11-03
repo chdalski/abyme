@@ -1057,6 +1057,33 @@ describe("a note on the canvas", () => {
       expect(fieldOf().value).toBe("Typing");
     });
 
+    it("has its field closed when it comes back after its file went missing", () => {
+      const writeNote = () => Promise.resolve(true);
+      const { rerender } = opened(writeNote);
+      const reload = (view: BoardView) => {
+        rerender(
+          canvasOf(
+            view,
+            () => Promise.resolve(),
+            () => {},
+            () => {},
+            writeNote,
+          ),
+        );
+      };
+
+      reload(
+        boardView({
+          placements: [placedBox("ask", { shown: { kind: "missing" } })],
+        }),
+      );
+      reload(noteView());
+
+      expect(
+        screen.queryByRole("textbox", { name: "Text of the note" }),
+      ).toBeNull();
+    });
+
     it("writes nothing when a reload comes before any typing, and keeps its text", () => {
       const writeNote = vi.fn(() => Promise.resolve(true));
       const { rerender } = opened(writeNote);

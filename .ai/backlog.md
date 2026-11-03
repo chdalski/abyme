@@ -57,6 +57,7 @@ share a parent line with one sub-item each.
 - "a note that its file is missing" in the doc of `ElementContent` reads ambiguously next to sticky notes, and the line is long: `crates/abyme-canvas/ui/src/ElementBox.tsx` (Reviewer, sticky notes Task 2).
 - Two comparisons with `NOTE_TYPE` could become one `TypeRef::is_note()` that `Element::is_note` delegates to: `crates/abyme-core/src/apply.rs`, `crates/abyme-model/src/element.rs` (Reviewer, sticky notes Task 2).
 - The test name `the_projection_carries_exactly_the_named_fields_and_no_body` holds only for elements that are not notes: `crates/abyme-canvas/src/projection/tests.rs` (Reviewer, sticky notes Task 2).
+- `ElementContent` takes `editing` as optional, defaulting to false, only for the standalone tests in `ElementBox.test.tsx`; making it required keeps the prop with one source: `crates/abyme-canvas/ui/src/ElementBox.tsx` (Reviewer, backlog bugs Task 12).
 
 ## Documentation
 

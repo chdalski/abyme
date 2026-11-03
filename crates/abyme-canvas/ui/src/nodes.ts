@@ -11,7 +11,8 @@ import type { BoardEntry, BoardView, Shown } from "./bindings";
  * What a box shows: its element's ID and what the projection says of it,
  * its position in the board file, where it returns when a move fails, the
  * boards its element owns, whether the board file pins it, the box it hangs on,
- * and, for a new note no file holds yet, the ID the write gave it.
+ * whether its note's text field is open, and, for a new note no file holds yet,
+ * the ID the write gave it.
  */
 export type ElementData = {
   element: string;
@@ -20,6 +21,7 @@ export type ElementData = {
   innerBoards: BoardEntry[];
   pinned: boolean;
   attachedTo: string | null;
+  editing: boolean;
   draft: { createdAs: string | null; writtenAt: number | null } | null;
 };
 
@@ -79,6 +81,7 @@ export function toNodes(view: BoardView): ElementNode[] {
         innerBoards: placement.inner_boards,
         pinned: placement.pinned,
         attachedTo: parent === undefined ? null : parent.element,
+        editing: false,
         draft: null,
       },
       draggable:
@@ -216,9 +219,10 @@ export function finishedMoves(changes: NodeChange<ElementNode>[]): Move[] {
 }
 
 /**
- * `fresh`, with the state of the canvas that a reload must not reset: a
- * box `current` has selected stays selected, so the arrow keys keep moving
- * it, and a box `current` is dragging stays where the drag holds it. A new
+ * `fresh`, with the state of the canvas that a reload must not reset: a box
+ * `current` has selected stays selected, so the arrow keys keep moving it, a
+ * note whose text field `current` has open keeps it open while it shows a
+ * note, and a box `current` is dragging stays where the drag holds it. A new
  * note stays until `fresh` lists it, and a written one also leaves once a view
  * asked for after its write answered (`askedAt`) leaves it out.
  */
@@ -235,9 +239,14 @@ export function keepUiState(
       return node;
     }
     const selected = was.selected === true ? { selected: true } : {};
+    // A box that no longer shows a note has no field to keep open.
+    const merged =
+      was.data.editing && node.data.shown.kind === "note"
+        ? { ...node, ...selected, data: { ...node.data, editing: true } }
+        : { ...node, ...selected };
     return was.dragging === true
-      ? { ...node, ...selected, position: was.position, dragging: true }
-      : { ...node, ...selected };
+      ? { ...merged, position: was.position, dragging: true }
+      : merged;
   });
   // A new note stays until a view lists it, also when that view was asked for
   // before the note's write answered; a view asked for after it that leaves the
@@ -277,6 +286,7 @@ export function draftNote(id: string, position: XYPosition): ElementNode {
       innerBoards: [],
       pinned: true,
       attachedTo: null,
+      editing: true,
       draft: { createdAs: null, writtenAt: null },
     },
     style: { pointerEvents: "all" },
@@ -286,6 +296,17 @@ export function draftNote(id: string, position: XYPosition): ElementNode {
     connectable: false,
     handles: [],
   };
+}
+
+/** `nodes`, with the text field of `element`'s note open or closed. */
+export function withNoteField(
+  nodes: ElementNode[],
+  element: string,
+  editing: boolean,
+): ElementNode[] {
+  return nodes.map((node) =>
+    node.id === element ? { ...node, data: { ...node.data, editing } } : node,
+  );
 }
 
 /** `nodes`, with the boxes of `elements` back at their positions in the board file. */

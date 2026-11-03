@@ -22,7 +22,7 @@ import { useBoardNodes } from "./boardNodes";
 import { toEdges } from "./edges";
 import { ElementBox, OpenBoard, ReleasePin } from "./ElementBox";
 import type { ElementNode, Move } from "./nodes";
-import { NewNotes, WriteNote } from "./NoteContent";
+import { NewNotes, NoteFields, WriteNote } from "./NoteContent";
 import type { NoteParts } from "./notes";
 import { RestOfOpeningPress } from "./press";
 
@@ -84,8 +84,14 @@ function Flow({
   onMoveFailed,
   onOpen,
 }: BoardCanvasProps) {
-  const { nodes, onNodesChange, addDraft, dropDraft, draftWritten } =
-    useBoardNodes(view, askedAt, move, onMoveFailed, deleteNotes);
+  const {
+    nodes,
+    onNodesChange,
+    addDraft,
+    dropDraft,
+    draftWritten,
+    noteFields,
+  } = useBoardNodes(view, askedAt, move, onMoveFailed, deleteNotes);
   const edges = useMemo(() => toEdges(view), [view]);
   const { screenToFlowPosition } = useReactFlow();
   const surface = useRef<HTMLDivElement>(null);
@@ -173,35 +179,37 @@ function Flow({
       <ReleasePin.Provider value={view.mode === "mirrored" ? null : release}>
         <WriteNote.Provider value={writeNote}>
           <NewNotes.Provider value={newNotes}>
-            <div
-              ref={surface}
-              className="board-surface"
-              onMouseMove={(event) => {
-                mouse.current = { x: event.clientX, y: event.clientY };
-              }}
-              onMouseLeave={() => {
-                mouse.current = null;
-              }}
-              onDoubleClick={onDoubleClick}
-            >
-              <ReactFlow
-                nodes={nodes}
-                edges={edges}
-                nodeTypes={NODE_TYPES}
-                onNodesChange={onNodesChange}
-                onNodeDoubleClick={openFirstInnerBoard}
-                nodesConnectable={false}
-                deleteKeyCode={DELETE_KEYS}
-                zoomOnDoubleClick={false}
-                fitView
+            <NoteFields.Provider value={noteFields}>
+              <div
+                ref={surface}
+                className="board-surface"
+                onMouseMove={(event) => {
+                  mouse.current = { x: event.clientX, y: event.clientY };
+                }}
+                onMouseLeave={() => {
+                  mouse.current = null;
+                }}
+                onDoubleClick={onDoubleClick}
               >
-                <Panel position="top-left">
-                  <button type="button" onClick={addAtTheMiddle}>
-                    New note
-                  </button>
-                </Panel>
-              </ReactFlow>
-            </div>
+                <ReactFlow
+                  nodes={nodes}
+                  edges={edges}
+                  nodeTypes={NODE_TYPES}
+                  onNodesChange={onNodesChange}
+                  onNodeDoubleClick={openFirstInnerBoard}
+                  nodesConnectable={false}
+                  deleteKeyCode={DELETE_KEYS}
+                  zoomOnDoubleClick={false}
+                  fitView
+                >
+                  <Panel position="top-left">
+                    <button type="button" onClick={addAtTheMiddle}>
+                      New note
+                    </button>
+                  </Panel>
+                </ReactFlow>
+              </div>
+            </NoteFields.Provider>
           </NewNotes.Provider>
         </WriteNote.Provider>
       </ReleasePin.Provider>

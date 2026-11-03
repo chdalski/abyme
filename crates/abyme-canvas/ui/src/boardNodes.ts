@@ -3,7 +3,7 @@ import {
   type XYPosition,
   applyNodeChanges,
 } from "@xyflow/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { BoardView } from "./bindings";
 import { nextStamp } from "./boards";
@@ -17,19 +17,20 @@ import {
   onTheBoardAndHung,
   returnHome,
   toNodes,
+  withNoteField,
 } from "./nodes";
 
 /**
  * The boxes of `view` as React Flow's controlled state. A new projection
- * replaces them, but keeps what the user selected and is dragging. Every finished move goes
- * to `move` at its position on the board, a note's with the box it now hangs
- * on, all moves of one change in one call; when that fails, their
- * boxes return to their positions in the board file and `onMoveFailed`
- * receives the message. A deleted note goes to `remove` and stays until a view
- * leaves it out. A new note lives among the boxes, as React Flow measures only
- * what this state holds, under an ID no element can have; once written, it
- * goes when a view asked for after the write answered (`askedAt`, a stamp of
- * `nextStamp`) leaves it out.
+ * replaces them, but keeps what the user selected and is dragging and the text
+ * fields that are open. Every finished move goes to `move` at its position on
+ * the board, a note's with the box it now hangs on, all moves of one change in
+ * one call; when that fails, their boxes return to their positions in the board
+ * file and `onMoveFailed` receives the message. A deleted note goes to
+ * `remove` and stays until a view leaves it out. A new note lives among the
+ * boxes, as React Flow measures only what this state holds, under an ID no
+ * element can have; once written, it goes when a view asked for after the
+ * write answered (`askedAt`, a stamp of `nextStamp`) leaves it out.
  */
 export function useBoardNodes(
   view: BoardView,
@@ -107,5 +108,24 @@ export function useBoardNodes(
     );
   }, []);
 
-  return { nodes, onNodesChange, addDraft, dropDraft, draftWritten };
+  const noteFields = useMemo(
+    () => ({
+      open: (element: string) => {
+        setNodes((current) => withNoteField(current, element, true));
+      },
+      close: (element: string) => {
+        setNodes((current) => withNoteField(current, element, false));
+      },
+    }),
+    [],
+  );
+
+  return {
+    nodes,
+    onNodesChange,
+    addDraft,
+    dropDraft,
+    draftWritten,
+    noteFields,
+  };
 }

@@ -24,6 +24,15 @@ export const NewNotes = createContext<{
   drop: (draft: string) => void;
 } | null>(null);
 
+/**
+ * Opens and closes a note's text field, whose state the board's boxes hold, so
+ * that a new view of the board can keep it.
+ */
+export const NoteFields = createContext<{
+  open: (element: string) => void;
+  close: (element: string) => void;
+} | null>(null);
+
 /** The rows a note's text field has at least. */
 const MIN_ROWS = 3;
 
@@ -126,29 +135,32 @@ function NoteField({
 
 /**
  * A sticky note's whole text, as text only, which a double-click opens for
- * editing. A written text stays until the board's next view brings a new one. A
- * new note, at `draftAt`, opens by itself, and once written it writes no more:
- * it only waits for the view that lists it.
+ * editing; whether its field is open, `editing`, comes from the board's boxes.
+ * A written text stays until the board's next view brings a new one. A new
+ * note, at `draftAt`, opens by itself, and once written it writes no more: it
+ * only waits for the view that lists it.
  */
 export function NoteContent({
   element,
   name,
   body,
+  editing,
   draftAt,
 }: {
   element: string;
   name: string;
   body: string;
+  editing: boolean;
   draftAt?: XYPosition | undefined;
 }) {
   const update = useContext(WriteNote);
   const newNotes = useContext(NewNotes);
+  const fields = useContext(NoteFields);
   const write =
     draftAt === undefined
       ? update
       : newNotes &&
         ((id: string, parts: NoteParts) => newNotes.create(id, draftAt, parts));
-  const [editing, setEditing] = useState(draftAt !== undefined);
   const fromFile = noteText(name, body);
   const [seen, setSeen] = useState(fromFile);
   const [written, setWritten] = useState<string | null>(null);
@@ -165,7 +177,7 @@ export function NoteContent({
         text={text}
         write={write}
         onEnd={(ended) => {
-          setEditing(false);
+          fields?.close(element);
           if (ended !== null) {
             setWritten(ended);
           } else if (draftAt !== undefined) {
@@ -178,7 +190,9 @@ export function NoteContent({
   return (
     <div
       className="element element-note"
-      onDoubleClick={draftAt === undefined ? () => setEditing(true) : undefined}
+      onDoubleClick={
+        draftAt === undefined ? () => fields?.open(element) : undefined
+      }
     >
       {text}
     </div>

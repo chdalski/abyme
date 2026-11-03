@@ -110,6 +110,7 @@ describe("toNodes", () => {
         innerBoards: [],
         pinned: false,
         attachedTo: null,
+        editing: false,
         draft: null,
       },
       {
@@ -124,6 +125,7 @@ describe("toNodes", () => {
         innerBoards: [],
         pinned: false,
         attachedTo: null,
+        editing: false,
         draft: null,
       },
     ]);
