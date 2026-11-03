@@ -38,7 +38,7 @@ the same code, so that the canvas and the core keep their stated behaviour befor
 - [x] The marks on a box's top edge share it
 - [x] A window that turns visible asks for flags
 - [x] A note's field grows with wrapped text
-- [ ] A held-back click ends with its press
+- [x] A held-back click ends with its press
 - [ ] One press opens one board
 - [ ] A new note that is deleted before a view lists it goes
 - [ ] The canvas knows which note's field is open
@@ -163,11 +163,11 @@ board does nothing and says nothing.
 
 Review path: Security-Hybrid
 
-- [ ] After a failed write, the clicks of the press that ended the field open no board, and the
+- [x] After a failed write, the clicks of the press that ended the field open no board, and the
       click of a later press opens its board, also when the field ended without a write; Vitest
       shows both with clicks that carry their `detail`.
-- [ ] The existing App tests on leaving a board while a note is written pass unchanged.
-- [ ] `pnpm --dir crates/abyme-canvas/ui check` and `pnpm --dir crates/abyme-canvas/ui test` pass.
+- [x] The existing App tests on leaving a board while a note is written pass unchanged.
+- [x] `pnpm --dir crates/abyme-canvas/ui check` and `pnpm --dir crates/abyme-canvas/ui test` pass.
 
 ### Task 10: One press opens one board
 

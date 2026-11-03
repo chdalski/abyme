@@ -340,6 +340,138 @@ describe("leaving a board while a note's text is being written", () => {
     ).toBeDefined();
   });
 
+  const containers = () => screen.getByRole("button", { name: "Containers" });
+  /** A press of the mouse on `target`: its button goes down, then the click. */
+  const press = (target: HTMLElement) => {
+    fireEvent.mouseDown(target, { detail: 1 });
+    fireEvent.click(target, { detail: 1 });
+  };
+
+  it("holds back the click of the press that ended the field, and lets a later press go", async () => {
+    const client = clientWithBoards();
+    let fail: (message: string) => void = () => {};
+    vi.spyOn(client, "apply").mockImplementationOnce(
+      () =>
+        new Promise<string[]>((_resolve, reject) => {
+          fail = reject;
+        }),
+    );
+    const field = await typing(client);
+
+    fireEvent.mouseDown(containers(), { detail: 1 });
+    fireEvent.blur(field);
+    await settle();
+    fail("the file is broken");
+    await screen.findByRole("alert");
+    fireEvent.click(containers(), { detail: 1 });
+    await settle();
+    expect(screen.getByRole("heading", { name: "Context" })).toBeDefined();
+    expect(screen.getByRole("alert").textContent).toBe("the file is broken");
+    expect(
+      screen.getByRole<HTMLTextAreaElement>("textbox", {
+        name: "Text of the note",
+      }).value,
+    ).toBe("Asked");
+
+    press(containers());
+    expect(
+      await screen.findByRole("heading", { name: "Containers" }),
+    ).toBeDefined();
+  });
+
+  it("holds back the further clicks of a double click that ended the field", async () => {
+    const client = clientWithBoards();
+    let fail: (message: string) => void = () => {};
+    vi.spyOn(client, "apply").mockImplementationOnce(
+      () =>
+        new Promise<string[]>((_resolve, reject) => {
+          fail = reject;
+        }),
+    );
+    const field = await typing(client);
+
+    fireEvent.mouseDown(containers(), { detail: 1 });
+    fireEvent.blur(field);
+    await settle();
+    fail("the file is broken");
+    await screen.findByRole("alert");
+    fireEvent.click(containers(), { detail: 1 });
+    fireEvent.mouseDown(containers(), { detail: 2 });
+    fireEvent.click(containers(), { detail: 2 });
+    fireEvent.doubleClick(containers(), { detail: 2 });
+    await settle();
+
+    expect(screen.getByRole("heading", { name: "Context" })).toBeDefined();
+    press(containers());
+    expect(
+      await screen.findByRole("heading", { name: "Containers" }),
+    ).toBeDefined();
+  });
+
+  it("holds back the further clicks of a double click whose first click waited for the failing write", async () => {
+    const client = clientWithBoards();
+    let fail: (message: string) => void = () => {};
+    vi.spyOn(client, "apply").mockImplementationOnce(
+      () =>
+        new Promise<string[]>((_resolve, reject) => {
+          fail = reject;
+        }),
+    );
+    const field = await typing(client);
+
+    fireEvent.mouseDown(containers(), { detail: 1 });
+    fireEvent.blur(field);
+    fireEvent.click(containers(), { detail: 1 });
+    await settle();
+    fail("the file is broken");
+    await screen.findByRole("alert");
+    fireEvent.mouseDown(containers(), { detail: 2 });
+    fireEvent.click(containers(), { detail: 2 });
+    await settle();
+
+    expect(screen.getByRole("heading", { name: "Context" })).toBeDefined();
+    expect(screen.getByRole("alert").textContent).toBe("the file is broken");
+  });
+
+  it.each([
+    ["unchanged", "Ask"],
+    ["blank", ""],
+  ])(
+    "lets the next press go when the field then ends with %s text and writes nothing",
+    async (_kind, text) => {
+      const client = clientWithBoards();
+      client.applyFailure = "the file is broken";
+      const field = await typing(client);
+      fireEvent.blur(field);
+      await screen.findByRole("alert");
+      client.applyFailure = null;
+
+      fireEvent.change(field, { target: { value: text } });
+      fireEvent.keyDown(field, { key: "Escape" });
+      await waitFor(() => expect(screen.queryByRole("textbox")).toBeNull());
+      press(containers());
+
+      expect(
+        await screen.findByRole("heading", { name: "Containers" }),
+      ).toBeDefined();
+    },
+  );
+
+  it("lets a press of the keyboard go after a failed write", async () => {
+    const client = clientWithBoards();
+    client.applyFailure = "the file is broken";
+    const field = await typing(client);
+    fireEvent.blur(field);
+    await screen.findByRole("alert");
+
+    fireEvent.keyDown(containers(), { key: "Enter" });
+    fireEvent.click(containers(), { detail: 0 });
+
+    expect(
+      await screen.findByRole("heading", { name: "Containers" }),
+    ).toBeDefined();
+  });
+
   describe("with a new note", () => {
     /** The board `context` is open, with a new note being typed. */
     async function typingANewNote(client: FakeClient) {

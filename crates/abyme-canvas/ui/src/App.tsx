@@ -1,6 +1,6 @@
 import "./canvas.css";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { BoardList } from "./BoardList";
 import { BoardPane } from "./BoardPane";
@@ -10,23 +10,61 @@ import { ReviewMarks } from "./ElementBox";
 import { type FlagsState, NO_MARKS, loadFlags, whileVisible } from "./flags";
 import { useLive } from "./live";
 
+/** Listened for on the window before any handler of the page sees the event. */
+const BEFORE_ALL = { capture: true, passive: true } as const;
+
+/**
+ * What a failed note write holds back: nothing, the next click to another
+ * board, or the further clicks of the press that click belonged to.
+ */
+type Hold = "none" | "next" | "press";
+
 /**
  * The way to another board, which waits for a note's write: a click on it ends
  * the note's input first, and a failed write must not take the text away with
  * the board. So it goes only after the write worked. After a write failed, the
- * next click stays too, since it can belong to the same press of the mouse, and
- * the one after that goes on purpose, with the message on the screen.
+ * clicks of the press that ended the input stay too, since its mouse button went
+ * down before the failure; a press that starts after the failure goes on
+ * purpose, with the message on the screen.
  */
 function useOpenAfterNoteWrite(setOpen: (board: string) => void) {
   const pending = useRef<Promise<boolean> | null>(null);
-  const heldBack = useRef(false);
+  const hold = useRef<Hold>("none");
+  // Which click of its press the click being handled is: 2 and more for the
+  // further clicks of a double click, 0 for one from the keyboard.
+  const clickOfPress = useRef(0);
+  useEffect(() => {
+    // A new press ends the hold: a mouse button going down for a first click,
+    // or a key.
+    const pressed = (event: MouseEvent) => {
+      if (event.detail <= 1) {
+        hold.current = "none";
+      }
+    };
+    const keyed = () => {
+      hold.current = "none";
+    };
+    const clicked = (event: MouseEvent) => {
+      clickOfPress.current = event.detail;
+    };
+    window.addEventListener("mousedown", pressed, BEFORE_ALL);
+    window.addEventListener("keydown", keyed, BEFORE_ALL);
+    window.addEventListener("click", clicked, BEFORE_ALL);
+    window.addEventListener("dblclick", clicked, BEFORE_ALL);
+    return () => {
+      window.removeEventListener("mousedown", pressed, BEFORE_ALL);
+      window.removeEventListener("keydown", keyed, BEFORE_ALL);
+      window.removeEventListener("click", clicked, BEFORE_ALL);
+      window.removeEventListener("dblclick", clicked, BEFORE_ALL);
+    };
+  }, []);
   const noteWritten = useCallback((write: Promise<boolean>) => {
     pending.current = write;
     void write.then((written) => {
       if (pending.current === write) {
         pending.current = null;
       }
-      heldBack.current = !written;
+      hold.current = written ? "none" : "next";
     });
   }, []);
   const open = useCallback(
@@ -36,12 +74,15 @@ function useOpenAfterNoteWrite(setOpen: (board: string) => void) {
           if (written) {
             setOpen(board);
           } else {
-            heldBack.current = false;
+            hold.current = "press";
           }
         });
-      } else if (heldBack.current) {
-        heldBack.current = false;
+      } else if (hold.current === "next") {
+        hold.current = "press";
+      } else if (hold.current === "press" && clickOfPress.current >= 2) {
+        // A further click of the press that is held back.
       } else {
+        hold.current = "none";
         setOpen(board);
       }
     },
