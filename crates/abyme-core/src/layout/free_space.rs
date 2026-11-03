@@ -148,7 +148,8 @@ fn cell_rect(cell: usize, size: Size) -> Option<Rect> {
 fn below(lowest_bottom: Option<i64>, size: Size) -> Option<Rect> {
     let y = lowest_bottom.map_or(0, |lowest| lowest + i64::from(GAP));
     let rect = size.at(0, i32::try_from(y).ok()?);
-    (rect.bottom() <= i64::from(i32::MAX)).then_some(rect)
+    let limit = i64::from(i32::MAX);
+    (rect.right() <= limit && rect.bottom() <= limit).then_some(rect)
 }
 
 #[cfg(test)]
@@ -245,6 +246,25 @@ mod tests {
         ]));
 
         assert_eq!(space.place(Size::DEFAULT), None);
+    }
+
+    #[test]
+    fn reports_a_full_board_when_the_box_below_would_pass_the_right_edge() {
+        let too_wide = u32::try_from(i32::MAX).unwrap() + 1;
+
+        assert_eq!(FreeSpace::of(&board(&[])).place(sized(too_wide, 90)), None);
+        let mut walled = FreeSpace::of(&board(&[("wall", rect(-10, -10, 1_000, 9_000))]));
+        assert_eq!(walled.place(sized(u32::MAX, 90)), None);
+    }
+
+    #[test]
+    fn places_a_box_below_whose_right_edge_reaches_the_limit_exactly() {
+        let widest = u32::try_from(i32::MAX).unwrap();
+
+        let placed = FreeSpace::of(&board(&[])).place(sized(widest, 90));
+
+        assert_eq!(placed, Some(rect(0, 0, widest, 90)));
+        assert_eq!(placed.map(|rect| rect.right()), Some(i64::from(i32::MAX)));
     }
 
     fn sized(width: u32, height: u32) -> Size {

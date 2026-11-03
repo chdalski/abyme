@@ -23,7 +23,6 @@ share a parent line with one sub-item each.
 
 ## Bugs
 
-- `below` checks only the bottom edge, not the right, though `place` promises `None` when no position fits in `i32`; not reachable while the width stays 180: `crates/abyme-core/src/layout/free_space.rs` (Reviewer, auto-layout Task 3)
 - A node's `handles` are 1×1 while the DOM handles are 6×6, so an arrow's end may shift 2 to 3 pixels after a measure: `crates/abyme-canvas/ui/src/nodes.ts` (Reviewer, canvas display Task 4)
 - A real double click on `▸` opens the board on the first click, and the rest of it can land on the new view and go one level deeper; nothing is written, and it is untested in a real webview: `crates/abyme-canvas/ui/src/ElementBox.tsx` (Reviewer, canvas display Task 5)
 - A pinned box whose element file is missing shows the release button, and the core refuses the release with `no element has the ID ...`, as it refuses a drag; a plain marker there would promise nothing. `crates/abyme-canvas/ui/src/ElementBox.tsx`, `PinMarker`. From canvas display, Task 7.

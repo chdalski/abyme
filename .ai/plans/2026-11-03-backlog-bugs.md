@@ -1,5 +1,5 @@
 **Repository:** root
-**Status:** NotStarted
+**Status:** InProgress
 **Created:** 2026-11-03
 
 ## Goal
@@ -30,7 +30,7 @@ the same code, so that the canvas and the core keep their stated behaviour befor
 
 ## Steps
 
-- [ ] A box placed below fits on its right edge too
+- [x] A box placed below fits on its right edge too
 - [ ] `Cell` derives nothing it does not use
 - [ ] The free space raises its bottom inline
 - [ ] Arrow ends stay where they are after a measure
@@ -53,9 +53,9 @@ checked only on its bottom edge.
 
 Review path: Security-Hybrid
 
-- [ ] A box of any width whose right edge would pass `i32::MAX` below the content gets no
+- [x] A box of any width whose right edge would pass `i32::MAX` below the content gets no
       position, and a Rust test in `free_space.rs` shows it.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`, and
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`, and
       `cargo fmt --all --check` pass.
 
 ### Task 2: `Cell` derives nothing it does not use
