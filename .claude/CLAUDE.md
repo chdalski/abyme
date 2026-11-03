@@ -235,14 +235,20 @@ When the user asks you to implement:
       Decisions section. When a finding names one instance,
       fix every instance of its kind; the reviewer may have
       reported only those it saw. Apply the Advisory
-      findings you agree with in the same revision.
+      findings you agree with in the same revision. A
+      Blocking finding whose fix needs a trade-off the user
+      weighs (_Ask about trade-offs_) is neither fixed nor
+      declined: collect it for step 6 rather than asking
+      during the cycle, since a question asked mid-cycle
+      concerns a plan the next pass may still change.
    c. **Follow-up pass:** launch one `plan-reviewer` with
       the previous pass's Blocking findings and the output
       of `diff -u <copy> <plan>` — it has no Bash. It
       reviews the revision against the rest of the plan,
       not the unchanged text again. Repeat b–c until a pass
       reports "No blocking issues found" or every remaining
-      Blocking finding is declined.
+      Blocking finding is declined or collected for the
+      user.
    d. **No pass for Advisory findings alone.** A pass
       without Blocking findings ends the cycle, and its
       Advisory findings are dropped — except after the
@@ -251,7 +257,8 @@ When the user asks you to implement:
       findings one round at a time and took a one-task plan
       through six passes.
 6. **Present the plan to the user** via `AskUserQuestion`,
-   naming every declined finding and split suggestion.
+   naming every declined finding, every collected trade-off
+   finding, and every split suggestion.
    Present only plan text the plan-reviewer has reviewed
    in its current form: any edit after a review pass — a
    fix for a Blocking or an Advisory finding, a change the
@@ -259,8 +266,12 @@ When the user asks you to implement:
    goes through a follow-up pass (step 5b–c) first. A
    prior session worked seven Advisory findings into a
    plan and asked for approval without a review pass. On
-   changes, revise and run follow-up passes (step 5b–d). A
-   change of approach goes back to step 2 first.
+   changes, revise and run follow-up passes (step 5b–d),
+   and ask nothing in between until the cycle ends. A
+   change of approach goes back to step 2 first; ask about
+   the new design-advisor report's proposals at once, as
+   step 2 requires, because they decide what the passes
+   review.
 
    Show the complete plan text in your message before you
    ask, not a summary: a quick yes to an outline bypasses
