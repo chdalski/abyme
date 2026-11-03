@@ -11,6 +11,7 @@ import {
 import {
   type MouseEvent,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -23,6 +24,7 @@ import { ElementBox, OpenBoard, ReleasePin } from "./ElementBox";
 import type { ElementNode, Move } from "./nodes";
 import { NewNotes, WriteNote } from "./NoteContent";
 import type { NoteParts } from "./notes";
+import { RestOfOpeningPress } from "./press";
 
 /** The one node type the canvas knows. */
 const NODE_TYPES = { element: ElementBox };
@@ -123,16 +125,19 @@ function Flow({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [addAtTheMiddle, addDraft, screenToFlowPosition]);
 
+  const isRestOfOpeningPress = useContext(RestOfOpeningPress);
   const onDoubleClick = useCallback(
     (event: MouseEvent<HTMLDivElement>) => {
+      // The rest of the press that opened this board starts no note on it.
       if (
         event.target instanceof Element &&
-        event.target.classList.contains("react-flow__pane")
+        event.target.classList.contains("react-flow__pane") &&
+        !isRestOfOpeningPress()
       ) {
         addDraft(screenToFlowPosition({ x: event.clientX, y: event.clientY }));
       }
     },
-    [addDraft, screenToFlowPosition],
+    [addDraft, screenToFlowPosition, isRestOfOpeningPress],
   );
 
   const openFirstInnerBoard = useCallback<NodeMouseHandler<ElementNode>>(

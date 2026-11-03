@@ -1173,6 +1173,24 @@ describe("inner boards on a box", () => {
     expect(move).not.toHaveBeenCalled();
   });
 
+  it("opens a board with its button and with a double click on a mirrored board too", () => {
+    const move = vi.fn(() => Promise.resolve());
+    const onOpen = vi.fn();
+    const { container } = render(
+      canvasOf(
+        { ...boardWithInnerBoards("Containers", "Spare"), mode: "mirrored" },
+        move,
+        onOpen,
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "▸ Spare" }));
+    fireEvent.doubleClick(box(container, "shop"));
+
+    expect(onOpen.mock.calls).toEqual([["inner-1"], ["inner-0"]]);
+    expect(move).not.toHaveBeenCalled();
+  });
+
   it("shows no button on a box without an inner board", () => {
     const { container } = render(
       canvasOf(boardWithInnerBoards("Containers"), () => Promise.resolve()),

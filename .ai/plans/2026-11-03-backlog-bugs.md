@@ -39,7 +39,7 @@ the same code, so that the canvas and the core keep their stated behaviour befor
 - [x] A window that turns visible asks for flags
 - [x] A note's field grows with wrapped text
 - [x] A held-back click ends with its press
-- [ ] One press opens one board
+- [x] One press opens one board
 - [ ] A new note that is deleted before a view lists it goes
 - [ ] The canvas knows which note's field is open
 - [ ] A note deleted while it is typed keeps its field
@@ -177,18 +177,18 @@ note's field.
 
 Review path: Security-Hybrid
 
-- [ ] One press opens at most one board, whether its second click or its double click lands on a
+- [x] One press opens at most one board, whether its second click or its double click lands on a
       `▸` button, a breadcrumb button, or a box with an inner board in the new view; Vitest shows
       each with clicks that carry their `detail`.
-- [ ] The rest of a press that opened a board starts no new note on the new view, and Vitest
+- [x] The rest of a press that opened a board starts no new note on the new view, and Vitest
       shows it.
-- [ ] `Enter` on a focused `▸` button still opens its board, also right after another opening.
-- [ ] Vitest shows the `▸` button and the double click on a mirrored board as well as a free one.
-- [ ] The existing tests of opening boards pass unchanged.
-- [ ] The webview checklist names a double click on a `▸` button and on a box with an inner
+- [x] `Enter` on a focused `▸` button still opens its board, also right after another opening.
+- [x] Vitest shows the `▸` button and the double click on a mirrored board as well as a free one.
+- [x] The existing tests of opening boards pass unchanged.
+- [x] The webview checklist names a double click on a `▸` button and on a box with an inner
       board.
-- [ ] A reader of Canvas can tell that one press opens one board.
-- [ ] `pnpm --dir crates/abyme-canvas/ui check` and `pnpm --dir crates/abyme-canvas/ui test` pass.
+- [x] A reader of Canvas can tell that one press opens one board.
+- [x] `pnpm --dir crates/abyme-canvas/ui check` and `pnpm --dir crates/abyme-canvas/ui test` pass.
 
 ### Task 11: A new note that is deleted before a view lists it goes
 
@@ -253,6 +253,9 @@ Review path: Security-Hybrid
 - **Task 13:** webview checklist: a note whose text has one long line that wraps shows the whole
   line in its open field, with no scroll bar and no empty row below it; the field grows while typing
   and shrinks again when the line is deleted (Task 8).
+- **Task 13:** webview checklist: a double click on a `▸` button, and on a box with an inner
+  board, opens one board, and the rest of the double click on the new board opens nothing and
+  starts no note (Task 10).
 
 ## Decisions
 

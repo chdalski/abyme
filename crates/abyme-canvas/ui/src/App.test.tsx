@@ -1068,6 +1068,165 @@ describe("App", () => {
       expect(client.applied).toEqual([]);
     });
 
+    describe("with one press", () => {
+      /**
+       * `outer`, whose box `shop` owns `inner`; `inner`, a board of `mode`
+       * with the trail back to `outer` and the box `deep`, which owns
+       * `deeper`, at the same place as `shop`; and `deeper`.
+       */
+      function threeLevels(mode: BoardView["mode"]): FakeClient {
+        const client = new FakeClient([
+          { id: "deeper", title: "Deeper" },
+          { id: "inner", title: "Inner" },
+          { id: "outer", title: "Outer" },
+        ]);
+        const owning = (element: string, id: string, title: string) =>
+          placedBox(element, {
+            shown: {
+              kind: "element",
+              type_ref: "t",
+              name: element,
+              summary: null,
+            },
+            inner_boards: [{ id, title }],
+          });
+        client.views = {
+          outer: boardView({
+            id: "outer",
+            title: "Outer",
+            placements: [owning("shop", "inner", "Inner")],
+          }),
+          inner: boardView({
+            id: "inner",
+            title: "Inner",
+            mode,
+            trail: [{ id: "outer", title: "Outer" }],
+            placements: [owning("deep", "deeper", "Deeper")],
+          }),
+          deeper: boardView({ id: "deeper", title: "Deeper" }),
+        };
+        return client;
+      }
+
+      /** Opens `inner` with the first click of a press on `shop`'s button. */
+      async function firstClickOpensInner(mode: BoardView["mode"] = null) {
+        const client = threeLevels(mode);
+        const rendered = render(<App client={client} />);
+        fireEvent.click(await screen.findByRole("button", { name: "Outer" }));
+        const button = await screen.findByRole("button", { name: "▸ Inner" });
+        fireEvent.mouseDown(button, { detail: 1 });
+        fireEvent.click(button, { detail: 1 });
+        await screen.findByRole("heading", { name: "Inner" });
+        return { client, ...rendered };
+      }
+
+      /**
+       * A mouse event of the second click of a press, as a browser sends it:
+       * React Flow's drag reads the window from it.
+       */
+      const secondClick = (type: string) => {
+        const event = new MouseEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          detail: 2,
+        });
+        Object.defineProperty(event, "view", { value: window });
+        return event;
+      };
+      /** The rest of a double click whose first click opened a board, on `target`. */
+      const restOfPress = (target: Element) => {
+        for (const type of ["mousedown", "mouseup", "click", "dblclick"]) {
+          fireEvent(target, secondClick(type));
+        }
+      };
+      const settleAll = () =>
+        act(() => new Promise<void>((done) => setTimeout(done, 0)));
+
+      it.each([null, "mirrored"] as const)(
+        "opens no further board when the rest lands on a ▸ button (%s board)",
+        async (mode) => {
+          await firstClickOpensInner(mode);
+
+          restOfPress(await screen.findByRole("button", { name: "▸ Deeper" }));
+          await settleAll();
+
+          expect(screen.getByRole("heading", { name: "Inner" })).toBeDefined();
+        },
+      );
+
+      it.each([null, "mirrored"] as const)(
+        "opens no further board when the rest lands on a box with an inner board (%s board)",
+        async (mode) => {
+          const { container } = await firstClickOpensInner(mode);
+          const deep = await waitFor(() => {
+            const found = container.querySelector(
+              '.react-flow__node[data-id="deep"]',
+            );
+            if (found === null) {
+              throw new Error("no box");
+            }
+            return found;
+          });
+
+          restOfPress(deep);
+          await settleAll();
+
+          expect(screen.getByRole("heading", { name: "Inner" })).toBeDefined();
+        },
+      );
+
+      it("opens no further board when the rest lands on a breadcrumb", async () => {
+        await firstClickOpensInner();
+
+        restOfPress(
+          within(
+            screen.getByRole("navigation", { name: "Boards above" }),
+          ).getByRole("button", { name: "Outer" }),
+        );
+        await settleAll();
+
+        expect(screen.getByRole("heading", { name: "Inner" })).toBeDefined();
+      });
+
+      it("starts no note when the rest lands on the empty pane", async () => {
+        const { container } = await firstClickOpensInner();
+        const pane = await waitFor(() => {
+          const found = container.querySelector(".react-flow__pane");
+          if (found === null) {
+            throw new Error("no pane");
+          }
+          return found;
+        });
+
+        restOfPress(pane);
+        await settleAll();
+
+        expect(screen.queryByRole("textbox")).toBeNull();
+      });
+
+      it("opens a board with a later press, by the mouse or by Enter", async () => {
+        await firstClickOpensInner();
+        const deeper = await screen.findByRole("button", { name: "▸ Deeper" });
+        restOfPress(deeper);
+        await settleAll();
+
+        fireEvent.keyDown(deeper, { key: "Enter" });
+        fireEvent.click(deeper, { detail: 0 });
+        await screen.findByRole("heading", { name: "Deeper" });
+
+        fireEvent.click(screen.getByRole("button", { name: "Outer" }), {
+          detail: 0,
+        });
+        await screen.findByRole("heading", { name: "Outer" });
+        const shop = await screen.findByRole("button", { name: "▸ Inner" });
+        fireEvent.mouseDown(shop, { detail: 1 });
+        fireEvent.click(shop, { detail: 1 });
+        expect(
+          await screen.findByRole("heading", { name: "Inner" }),
+        ).toBeDefined();
+      });
+    });
+
     it("shows a title in the breadcrumb as text", async () => {
       const title = "<img src=x onerror=alert(1)>";
       render(<App client={nestedClient(title)} />);

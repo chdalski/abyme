@@ -23,8 +23,8 @@ share a parent line with one sub-item each.
 
 ## Bugs
 
+- A board opened by Enter while a note write is pending marks no mouse double click in flight when the write answers, so that double click's rest can act on the new board; `opened()` could set `openedByPress` without the `click >= 1` condition, which drops nothing else: `crates/abyme-canvas/ui/src/App.tsx`, `useOpenAfterNoteWrite` (Reviewer and security engineer, backlog bugs Task 10, Low).
 - After a failed note write, any keydown ends the hold on the press that ended the input, also a key held down or a bare modifier during a double click, so its second click can open the board; clearing only on a keydown without `repeat` that is no bare modifier would close it: `crates/abyme-canvas/ui/src/App.tsx`, `useOpenAfterNoteWrite` (security engineer, backlog bugs Task 9, Low).
-- A real double click on `▸` opens the board on the first click, and the rest of it can land on the new view and go one level deeper; nothing is written, and it is untested in a real webview: `crates/abyme-canvas/ui/src/ElementBox.tsx` (Reviewer, canvas display Task 5)
 - When the AI deletes a note while its text is being typed, the typed text goes without a message: `crates/abyme-canvas/ui/src/NoteContent.tsx` (Reviewer, sticky notes Task 5).
 - A new note whose file another writer deletes before a view lists it stays on the screen until the board is left, and writes nothing more: `crates/abyme-canvas/ui/src/nodes.ts`, `keepUiState` (Reviewer, sticky notes Task 6).
 
@@ -39,7 +39,6 @@ share a parent line with one sub-item each.
 - The doc comment of `a_note_beside_the_element` calls the note pinned, but the request places it unpinned: `crates/abyme-mcp/tests/server.rs` (Reviewer, attach notes Task 3).
 - `place_element`'s `UnknownElement` for a missing element cannot be reached, since `resolve_element` looked it up before, so `place_refuses_an_element_the_request_deleted` covers that lookup and not this branch: `crates/abyme-core/src/apply.rs` (Reviewer, auto-layout Task 5)
 - `the_anchor_of_those_requests_is_invalid_on_its_own` accepts any `InvalidElement`; `ElementProblem::InvalidAnchor { .. }` names its intent: `crates/abyme-core/src/apply/tests.rs` (Reviewer, statement kind Task 2)
-- The `▸` button and the double click are tested only on a free board; a case with `mirrored` would pin them there too: `crates/abyme-canvas/ui/src/BoardCanvas.test.tsx` (Reviewer, canvas display Task 5)
 - A test fails now and then, cause unknown: `crates/abyme-canvas/ui/src/main.test.tsx`, "shows the boards, opens one with its boxes, and moves a box", which presses ArrowRight right after Enter; waiting for the box's `selected` class may fix it, untested (Reviewer, canvas display Task 8).
 - The canvas display has not run in a real WebKitGTK window: arrows, breadcrumb, `▸` buttons, the pin's marker and its click, review marks, and `visibilityState` when minimized are checked only in jsdom and from CSS values; for the user (canvas display).
 
