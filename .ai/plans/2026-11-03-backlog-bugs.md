@@ -36,7 +36,7 @@ the same code, so that the canvas and the core keep their stated behaviour befor
 - [x] Arrow ends stay where they are after a measure
 - [x] A box whose file is missing offers neither a release nor a drag
 - [x] The marks on a box's top edge share it
-- [ ] A window that turns visible asks for flags
+- [x] A window that turns visible asks for flags
 - [ ] A note's field grows with wrapped text
 - [ ] A held-back click ends with its press
 - [ ] One press opens one board
@@ -134,13 +134,13 @@ only at its next tick.
 
 Review path: Security-Hybrid
 
-- [ ] A window that turns visible asks for review flags at once, also without focus, and Vitest
+- [x] A window that turns visible asks for review flags at once, also without focus, and Vitest
       shows it; turning visible and getting focus together asks again only after the run in
       progress ends, never beside it.
-- [ ] A reader of Canvas, and of the canvas row of the root `CLAUDE.md`, can tell when the canvas
+- [x] A reader of Canvas, and of the canvas row of the root `CLAUDE.md`, can tell when the canvas
       asks for review flags.
-- [ ] The webview checklist names a workspace switch back to the canvas's window.
-- [ ] `pnpm --dir crates/abyme-canvas/ui check` and `pnpm --dir crates/abyme-canvas/ui test` pass.
+- [x] The webview checklist names a workspace switch back to the canvas's window.
+- [x] `pnpm --dir crates/abyme-canvas/ui check` and `pnpm --dir crates/abyme-canvas/ui test` pass.
 
 ### Task 8: A note's field grows with wrapped text
 
@@ -247,6 +247,9 @@ Review path: Security-Hybrid
 - **Task 13:** webview checklist: a pinned box of 100 px width with a review mark shows the pin
   marker and the review mark side by side, cut with "…" and not overlapping; a click on the visible
   pin releases it, and a click on the review mark does nothing (Task 6).
+- **Task 13:** webview checklist: after a switch to another workspace and back to the canvas's
+  window without clicking it, the review marks show a flag raised meanwhile without waiting for the
+  30 s tick (Task 7).
 
 ## Decisions
 

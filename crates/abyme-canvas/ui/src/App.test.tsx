@@ -573,6 +573,59 @@ describe("review flags stay current", () => {
     await waitFor(() => expect(client.flagCalls).toBe(before + 1));
   });
 
+  const turnVisible = () =>
+    act(() => void document.dispatchEvent(new Event("visibilitychange")));
+
+  it("asks again when the document turns visible, also without focus", async () => {
+    const client = clientWithBoards();
+    await openWithAnswer(client);
+    await settle();
+    const before = client.flagCalls;
+    const hidden = hideTheDocument();
+    turnVisible();
+    await settle();
+    expect(client.flagCalls).toBe(before);
+
+    hidden.mockRestore();
+    turnVisible();
+
+    await waitFor(() => expect(client.flagCalls).toBe(before + 1));
+  });
+
+  it("starts no second run when the document turns visible and gets focus at once", async () => {
+    const client = clientWithBoards();
+    await openWithAnswer(client);
+    await settle();
+    const before = client.flagCalls;
+    client.hold(FakeClient.FLAGS);
+
+    turnVisible();
+    focus();
+    turnVisible();
+    await settle();
+    expect(client.flagCalls).toBe(before + 1);
+
+    client.release(FakeClient.FLAGS);
+    await waitFor(() => expect(client.flagCalls).toBe(before + 2));
+    await settle();
+    expect(client.flagCalls).toBe(before + 2);
+  });
+
+  it("asks no more once the app is gone", async () => {
+    const client = clientWithBoards();
+    const { unmount } = await openWithAnswer(client);
+    await settle();
+    const before = client.flagCalls;
+
+    unmount();
+    turnVisible();
+    focus();
+    pass(30_000);
+    await settle();
+
+    expect(client.flagCalls).toBe(before);
+  });
+
   it("starts no second run beside one still going, and one more after it", async () => {
     const client = clientWithBoards();
     const { container, rerender } = await openWithAnswer(client);

@@ -17,9 +17,10 @@ export const NO_MARKS: FlagMarks = new Map();
 const INTERVAL_MS = 30_000;
 
 /**
- * Calls `ask` when the window gets focus and every interval, while the document
- * is visible; returns a function that stops. The watcher sees neither commits
- * nor changes under an anchor, which is what raises flags.
+ * Calls `ask` when the window gets focus or the document turns visible, as on a
+ * workspace switch without focus, and every interval, while the document is
+ * visible; returns a function that stops. The watcher sees neither commits nor
+ * changes under an anchor, which is what raises flags.
  */
 export function whileVisible(ask: () => void): () => void {
   const askIfVisible = () => {
@@ -28,9 +29,11 @@ export function whileVisible(ask: () => void): () => void {
     }
   };
   window.addEventListener("focus", askIfVisible);
+  document.addEventListener("visibilitychange", askIfVisible);
   const interval = setInterval(askIfVisible, INTERVAL_MS);
   return () => {
     window.removeEventListener("focus", askIfVisible);
+    document.removeEventListener("visibilitychange", askIfVisible);
     clearInterval(interval);
   };
 }

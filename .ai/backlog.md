@@ -24,7 +24,6 @@ share a parent line with one sub-item each.
 ## Bugs
 
 - A real double click on `▸` opens the board on the first click, and the rest of it can land on the new view and go one level deeper; nothing is written, and it is untested in a real webview: `crates/abyme-canvas/ui/src/ElementBox.tsx` (Reviewer, canvas display Task 5)
-- A window that turns visible without getting focus, as on a workspace switch, asks only at the next tick, so its marks can be older than the "at most one interval behind" of Canvas until then; a `visibilitychange` listener in `whileVisible` would close it: `crates/abyme-canvas/ui/src/flags.ts` (Reviewer, canvas display Task 9).
 - When the AI deletes a note while its text is being typed, the typed text goes without a message: `crates/abyme-canvas/ui/src/NoteContent.tsx` (Reviewer, sticky notes Task 5).
 - `rowsFor` counts only line breaks, so a long wrapped line shows three rows with a scroll bar: `crates/abyme-canvas/ui/src/NoteContent.tsx` (Reviewer, sticky notes Task 5).
 - When a text field ends without a write after a failed write, `heldBack` stays set, and the next click to another board does nothing and says nothing: `crates/abyme-canvas/ui/src/App.tsx` (Reviewer, sticky notes Task 5).
@@ -47,6 +46,7 @@ share a parent line with one sub-item each.
 
 ## Cleanup
 
+- The test "asks no more once the app is gone" repeats the focus and interval steps of the StrictMode test "...and stops when the app closes"; only turning visible is new, and could join that test: `crates/abyme-canvas/ui/src/App.test.tsx` (Reviewer, backlog bugs Task 7).
 - `canvas.css` has two rules for the marks on a box's top edge, `.element-pin, .element-flag` and `.element-mark`; the shared properties could move to `.element-mark`: `crates/abyme-canvas/ui/src/canvas.css` (Reviewer, backlog bugs Task 6).
 - `apply` requests accept `RelationKind` in the object form (`"kind": {"uses": null}`), unlike `Mode` and `StatementKind`; files read only the string and get the normal form, so this is about consistency: `crates/abyme-model/src/relation.rs` (security engineer, plan D Task 1, rated Low; fix with a later change there).
 - Make `RECIPE_VERSION` and maybe `ProjectKey` crate-private if nothing outside needs them: `crates/abyme-index/src/lib.rs` (reviewer, search skeleton).
@@ -62,8 +62,8 @@ share a parent line with one sub-item each.
 
 ## Documentation
 
+- The canvas row of `CLAUDE.md` names "when the files change" for the flags and again "it asks again whenever a file watcher sees the project's files change" at its end, whose "it" is now less clear; say that it asks for the list and the open board there (Reviewer, backlog bugs Task 7).
 - The clause "it authorizes nothing" in the `apply` paragraph of `docs/5 Architecture/Canvas.md` is reasoning no reader acts on, and could go. From canvas display, Task 7, security engineer.
-- The canvas row of `CLAUDE.md` does not name that flags are also asked for on focus and every 30 s while visible (Reviewer, canvas display Task 9).
 
 ## Tooling & CI
 
