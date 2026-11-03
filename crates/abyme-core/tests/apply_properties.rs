@@ -7,10 +7,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU32;
 
-use abyme_core::{Applied, Created, LocalKey, Operation, Ref, Snapshot, Write, apply};
+use abyme_core::{
+    Applied, Created, LocalKey, Operation, PinConfirmed, Ref, Snapshot, Write, apply,
+};
 use abyme_model::{
-    Anchor, Board, BoardId, CommitId, Element, ElementFields, ElementId, Mode, Placement, Rect,
-    RelationKind, Relations, StatementKind, TypeRef, Verification, Verifier, Zone,
+    Anchor, Board, BoardId, CommitId, Element, ElementFields, ElementId, Mode, NOTE_TYPE,
+    Placement, Rect, RelationKind, Relations, StatementKind, TypeRef, Verification, Verifier, Zone,
 };
 use proptest::prelude::*;
 
@@ -298,6 +300,8 @@ fn deleted_existing_elements(operations: &[Operation]) -> BTreeSet<&ElementId> {
             | Operation::PlaceElement { .. }
             | Operation::MoveElement { .. }
             | Operation::LayoutBoard { .. }
+            | Operation::AttachNote { .. }
+            | Operation::DetachNote { .. }
             | Operation::UpdateElement { .. }
             | Operation::DeleteElement { .. }
             | Operation::CreateRelation { .. }
@@ -324,6 +328,10 @@ fn named_existing_elements(operations: &[Operation]) -> BTreeSet<&ElementId> {
             | Operation::UpdateElement {
                 element: Ref::Existing(id),
                 ..
+            }
+            | Operation::AttachNote {
+                note: Ref::Existing(id),
+                ..
             } => Some(id),
             Operation::CreateElement { .. }
             | Operation::CreateBoard { .. }
@@ -331,6 +339,8 @@ fn named_existing_elements(operations: &[Operation]) -> BTreeSet<&ElementId> {
             | Operation::PlaceElement { .. }
             | Operation::MoveElement { .. }
             | Operation::LayoutBoard { .. }
+            | Operation::AttachNote { .. }
+            | Operation::DetachNote { .. }
             | Operation::UpdateElement { .. }
             | Operation::DeleteElement { .. }
             | Operation::CreateRelation { .. }
@@ -354,6 +364,8 @@ fn updated_existing_boards(operations: &[Operation]) -> BTreeSet<&BoardId> {
             | Operation::PlaceElement { .. }
             | Operation::MoveElement { .. }
             | Operation::LayoutBoard { .. }
+            | Operation::AttachNote { .. }
+            | Operation::DetachNote { .. }
             | Operation::UpdateElement { .. }
             | Operation::DeleteElement { .. }
             | Operation::CreateRelation { .. }
@@ -494,6 +506,8 @@ fn deleted_keys(operations: &[Operation]) -> BTreeSet<&LocalKey> {
             | Operation::PlaceElement { .. }
             | Operation::MoveElement { .. }
             | Operation::LayoutBoard { .. }
+            | Operation::AttachNote { .. }
+            | Operation::DetachNote { .. }
             | Operation::UpdateElement { .. }
             | Operation::DeleteElement { .. }
             | Operation::CreateRelation { .. }
@@ -926,11 +940,16 @@ fn attached_snapshot() -> impl Strategy<Value = Snapshot> {
         1..=4,
     )
     .prop_map(|placements| {
+        // `c` and `d` are notes, `a` and `b` boxes.
         let elements = ATTACHED_IDS[..4]
             .iter()
             .filter_map(|id| {
                 let id: ElementId = id.parse().ok()?;
-                Some((id.clone(), element(id, Relations::new())?))
+                let mut fields = element(id.clone(), Relations::new())?.into_fields();
+                if matches!(id.as_str(), "c" | "d") {
+                    fields.type_ref = TypeRef::try_from(NOTE_TYPE.to_owned()).ok()?;
+                }
+                Some((id.clone(), Element::new(id, fields).ok()?))
             })
             .collect();
         let main: BoardId = "main".parse().unwrap_or_else(|_| unreachable!());
@@ -969,10 +988,67 @@ fn attached_operation() -> impl Strategy<Value = Operation> {
                 pinned,
             }),
         1 => Just(Operation::LayoutBoard { board: main() }),
-        1 => id.prop_map(|element| Operation::DeleteElement {
+        1 => id.clone().prop_map(|element| Operation::DeleteElement {
             element: Ref::Existing(element),
         }),
+        2 => (id.clone(), id.clone(), any::<bool>()).prop_map(move |(note, to, pinned)| {
+            Operation::AttachNote {
+                note: Ref::Existing(note),
+                to: Ref::Existing(to),
+                board: main(),
+                pinned: pinned.then_some(PinConfirmed),
+            }
+        }),
+        1 => id.prop_map(move |note| Operation::DetachNote {
+            note: Ref::Existing(note),
+            board: main(),
+        }),
     ]
+}
+
+/// The notes a request attaches or detaches.
+fn notes_named(operations: &[Operation]) -> BTreeSet<ElementId> {
+    operations
+        .iter()
+        .filter_map(|operation| match operation {
+            Operation::AttachNote {
+                note: Ref::Existing(note),
+                ..
+            }
+            | Operation::DetachNote {
+                note: Ref::Existing(note),
+                ..
+            } => Some(note.clone()),
+            Operation::CreateElement { .. }
+            | Operation::CreateBoard { .. }
+            | Operation::UpdateBoard { .. }
+            | Operation::PlaceElement { .. }
+            | Operation::MoveElement { .. }
+            | Operation::AttachNote { .. }
+            | Operation::DetachNote { .. }
+            | Operation::LayoutBoard { .. }
+            | Operation::UpdateElement { .. }
+            | Operation::DeleteElement { .. }
+            | Operation::CreateRelation { .. }
+            | Operation::DeleteRelation { .. } => None,
+        })
+        .collect()
+}
+
+/// The element `id` as `applied` writes it, or as `snapshot` has it.
+fn element_after<'a>(
+    snapshot: &'a Snapshot,
+    applied: &'a Applied,
+    id: &ElementId,
+) -> Option<&'a Element> {
+    applied
+        .writes
+        .iter()
+        .find_map(|write| match write {
+            Write::Element(element) if element.id() == id => Some(element),
+            Write::Element(_) | Write::Board(_) | Write::RemoveElement(_) => None,
+        })
+        .or_else(|| snapshot.elements.get(id))
 }
 
 /// The board `main` as `applied` writes it, or as `snapshot` has it.
@@ -1054,14 +1130,47 @@ proptest! {
             let before = &snapshot.boards.values().next().cloned().unwrap_or_else(|| unreachable!());
             let after = main_after(&snapshot, &applied);
             check_attachments(&after)?;
+            let named = notes_named(&request);
             for (element, host) in holding(before) {
+                if named.contains(&element) {
+                    continue;
+                }
                 if after.placements.contains_key(&element) && after.placements.contains_key(&host) {
                     prop_assert_eq!(after.attachment(&element), Some(&host), "{} came off", element);
                 }
             }
-            if let Operation::MoveElement { element: Ref::Existing(element), x, y, .. } = last {
-                let rect = after.rect_of(&element).unwrap_or_else(|| unreachable!());
-                prop_assert_eq!((rect.x, rect.y), (x, y));
+            let prepared = apply(&snapshot, &request[..request.len() - 1])
+                .map_or_else(|_| unreachable!(), |prepared| main_after(&snapshot, &prepared));
+            match last {
+                Operation::MoveElement { element: Ref::Existing(element), x, y, .. } => {
+                    let rect = after.rect_of(&element).unwrap_or_else(|| unreachable!());
+                    prop_assert_eq!((rect.x, rect.y), (x, y));
+                }
+                Operation::AttachNote { note: Ref::Existing(note), to: Ref::Existing(to), .. } => {
+                    prop_assert_eq!(after.attachment(&note), Some(&to));
+                    prop_assert_eq!(after.rect_of(&note), prepared.rect_of(&note));
+                    prop_assert_eq!(after.hanging_on(&note), Vec::<ElementId>::new());
+                    let relations = element_after(&snapshot, &applied, &note)
+                        .map(|element| element.relations().clone())
+                        .unwrap_or_default();
+                    prop_assert!(relations.contains_key(&(RelationKind::Concerns, to)));
+                }
+                Operation::DetachNote { note: Ref::Existing(note), .. } => {
+                    prop_assert_eq!(after.attachment(&note), None);
+                    prop_assert_eq!(after.rect_of(&note), prepared.rect_of(&note));
+                }
+                Operation::CreateElement { .. }
+                | Operation::CreateBoard { .. }
+                | Operation::UpdateBoard { .. }
+                | Operation::PlaceElement { .. }
+                | Operation::MoveElement { .. }
+                | Operation::AttachNote { .. }
+                | Operation::DetachNote { .. }
+                | Operation::LayoutBoard { .. }
+                | Operation::UpdateElement { .. }
+                | Operation::DeleteElement { .. }
+                | Operation::CreateRelation { .. }
+                | Operation::DeleteRelation { .. } => {}
             }
         }
     }

@@ -128,6 +128,10 @@ pub enum PositionError {
     /// The offset from the box the element hangs on does not fit in `i32`.
     #[error("the offset from the box the element hangs on does not fit")]
     OffsetTooLarge,
+    /// The attachment would not hold: the box hangs on another element, or
+    /// the element would lie beyond [`MAX_COORDINATE`] from it.
+    #[error("the attachment would not hold")]
+    DoesNotHold,
 }
 
 /// A board file that cannot be read.
@@ -337,25 +341,105 @@ impl Board {
         Ok(())
     }
 
+    /// Hangs `element` on `host` where it lies now, so it moves along with
+    /// `host` from then on; an attachment to another box ends.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PositionError::NotPlaced`] when the board does not place the
+    /// element, [`PositionError::OffsetTooLarge`] when its offset from `host`
+    /// does not fit in `i32`, and [`PositionError::DoesNotHold`] when the
+    /// attachment would not hold where the element lies; then nothing
+    /// changes.
+    #[expect(
+        clippy::disallowed_fields,
+        reason = "attaching sets the field, and restores the placement when it fails"
+    )]
+    pub fn attach(&mut self, element: &ElementId, host: &ElementId) -> Result<(), PositionError> {
+        let rect = self.rect_of(element).ok_or(PositionError::NotPlaced)?;
+        let saved = self
+            .placements
+            .get(element)
+            .cloned()
+            .ok_or(PositionError::NotPlaced)?;
+        if let Some(placement) = self.placements.get_mut(element) {
+            placement.attached_to = Some(host.clone());
+        }
+        let outcome = self.set_rect(element, rect).and_then(|()| {
+            let holds =
+                self.attachment(element) == Some(host) && self.rect_of(element) == Some(rect);
+            if holds {
+                Ok(())
+            } else {
+                Err(PositionError::DoesNotHold)
+            }
+        });
+        if outcome.is_err()
+            && let Some(placement) = self.placements.get_mut(element)
+        {
+            *placement = saved;
+        }
+        outcome
+    }
+
+    /// Ends the attachment the file names for `element`, which keeps where it
+    /// lies, now stored as a board position. Returns whether the file named
+    /// one; if not, nothing changes.
+    pub fn detach(&mut self, element: &ElementId) -> bool {
+        self.detach_where(|id, _| id == element)
+    }
+
+    /// Ends the attachment of `element` if the file names `host` for it, as
+    /// [`Board::detach`] does. Returns whether it did.
+    pub fn detach_named(&mut self, element: &ElementId, host: &ElementId) -> bool {
+        self.detach_where(|id, named| id == element && named == host)
+    }
+
     /// Ends every attachment to `element` on this board: each element that
     /// names it keeps where it lies, now stored as a board position.
+    pub fn detach_from(&mut self, element: &ElementId) {
+        self.detach_where(|_, named| named == element);
+    }
+
+    /// Whether the file says that `element` hangs on `host`, whether the
+    /// attachment holds or not.
+    #[must_use]
+    #[expect(
+        clippy::disallowed_fields,
+        reason = "a comparison with a given box, which reveals no other box"
+    )]
+    pub fn names(&self, element: &ElementId, host: &ElementId) -> bool {
+        self.placements
+            .get(element)
+            .is_some_and(|placement| placement.attached_to.as_ref() == Some(host))
+    }
+
+    /// Ends each attachment for which `matches` holds, given the element and
+    /// the box its file names; each keeps where it lies. Returns whether any
+    /// ended.
     #[expect(
         clippy::disallowed_fields,
         reason = "detaching rewrites the stored position and the field together"
     )]
-    pub fn detach_from(&mut self, element: &ElementId) {
+    fn detach_where(&mut self, matches: impl Fn(&ElementId, &ElementId) -> bool) -> bool {
         let detached: Vec<(ElementId, Rect)> = self
             .placements
             .iter()
-            .filter(|(_, placement)| placement.attached_to.as_ref() == Some(element))
+            .filter(|(id, placement)| {
+                placement
+                    .attached_to
+                    .as_ref()
+                    .is_some_and(|named| matches(id, named))
+            })
             .map(|(id, placement)| (id.clone(), self.resolved(id, placement).0))
             .collect();
-        for (id, rect) in detached {
-            if let Some(placement) = self.placements.get_mut(&id) {
-                placement.rect = rect;
+        for (id, rect) in &detached {
+            if let Some(placement) = self.placements.get_mut(id) {
+                placement.rect = *rect;
                 placement.attached_to = None;
             }
         }
+        !detached.is_empty()
     }
 
     /// The box `placement` of `element` names, with the box's stored rect,
@@ -1244,6 +1328,10 @@ mod tests {
         assert_eq!(Board::from_json(&board.id, &json), Ok(board));
     }
 
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "the test checks the field as written"
+    )]
     #[test]
     fn reads_a_null_attachment_as_none_and_writes_nothing_for_it() {
         let board = board_of(&[line("n", 0, 0, r#", "attached_to": null"#)]);
@@ -1354,7 +1442,12 @@ mod tests {
 
         assert_eq!(board.rect_of(&note), Some(expected));
         assert_eq!(board.attachment(&note).is_some(), holds);
-        assert_eq!(board.named_attachment(&note), Some(&element_id("b")));
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "the test checks the field as written"
+        )]
+        let named = board.named_attachment(&note);
+        assert_eq!(named, Some(&element_id("b")));
     }
 
     #[rstest]
@@ -1397,7 +1490,12 @@ mod tests {
 
         assert_eq!(board.rect_of(&note), Some(at(5, 6, 180, 90)));
         assert_eq!(board.attachment(&note), None);
-        assert!(board.named_attachment(&note).is_some());
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "the test checks the field as written"
+        )]
+        let named = board.named_attachment(&note);
+        assert!(named.is_some());
         for (id, _, rect) in board.placed() {
             assert_eq!(board.rect_of(id), Some(rect), "{id}");
         }
@@ -1442,6 +1540,10 @@ mod tests {
         assert_eq!(board.placements[&note].rect, at(-120, 100, 50, 60));
     }
 
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "the test checks the field as written"
+    )]
     #[test]
     fn set_rect_stores_a_board_position_as_it_is_without_a_free_box() {
         let mut board = board_of(&[line("n", 5, 6, r#", "attached_to": "gone""#)]);
@@ -1472,6 +1574,10 @@ mod tests {
         assert_eq!(far, before);
     }
 
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "the test checks the field as written"
+    )]
     #[test]
     fn detaching_keeps_where_each_note_lies_and_drops_the_field() {
         let mut board = board_of(&[
@@ -1502,5 +1608,111 @@ mod tests {
             board.placements[&element_id("n")].rect,
             at(105, 206, 180, 90)
         );
+    }
+
+    #[test]
+    fn attaching_keeps_where_the_note_lies_and_stores_its_offset() {
+        let mut board = board_of(&[line("b", 100, 200, ""), line("n", 30, 40, "")]);
+        let (note, host) = (element_id("n"), element_id("b"));
+
+        board.attach(&note, &host).unwrap();
+
+        assert_eq!(board.rect_of(&note), Some(at(30, 40, 180, 90)));
+        assert_eq!(board.attachment(&note), Some(&host));
+        assert_eq!(board.placements[&note].rect, at(-70, -160, 180, 90));
+    }
+
+    #[test]
+    fn attaching_to_another_box_moves_the_attachment_and_keeps_the_position() {
+        let mut board = note_on_box(5, 6);
+        board
+            .placements
+            .insert(element_id("c"), placed(-50, 0, false));
+        let note = element_id("n");
+
+        board.attach(&note, &element_id("c")).unwrap();
+
+        assert_eq!(board.rect_of(&note), Some(at(105, 206, 180, 90)));
+        assert_eq!(board.attachment(&note), Some(&element_id("c")));
+    }
+
+    fn placed(x: i32, y: i32, pinned: bool) -> Placement {
+        Placement {
+            rect: at(x, y, 180, 90),
+            pinned,
+            attached_to: None,
+        }
+    }
+
+    #[rstest]
+    #[case::a_box_that_hangs_on_another(vec![
+        line("a", 0, 0, ""),
+        line("b", 100, 200, r#", "attached_to": "a""#),
+        line("n", 5, 6, ""),
+    ], "b", PositionError::DoesNotHold)]
+    #[case::a_box_the_board_does_not_place(vec![line("n", 5, 6, "")], "b", PositionError::DoesNotHold)]
+    #[case::itself(vec![line("n", 5, 6, "")], "n", PositionError::DoesNotHold)]
+    #[case::a_note_beyond_the_range(vec![
+        line("b", 0, 0, ""),
+        line("n", 2_000_000, 6, ""),
+    ], "b", PositionError::DoesNotHold)]
+    #[case::an_offset_beyond_i32(vec![
+        line("b", i32::MIN, 0, ""),
+        line("n", i32::MAX, 0, ""),
+    ], "b", PositionError::OffsetTooLarge)]
+    fn a_failed_attachment_changes_nothing(
+        #[case] lines: Vec<String>,
+        #[case] host: &str,
+        #[case] expected: PositionError,
+    ) {
+        let mut board = board_of(&lines);
+        let before = board.clone();
+
+        assert_eq!(
+            board.attach(&element_id("n"), &element_id(host)),
+            Err(expected)
+        );
+        assert_eq!(board, before);
+        assert_eq!(
+            board.attach(&element_id("x"), &element_id(host)),
+            Err(PositionError::NotPlaced)
+        );
+        assert_eq!(board, before);
+    }
+
+    #[test]
+    fn detaching_keeps_the_position_and_reports_whether_the_file_named_a_box() {
+        let mut board = note_on_box(5, 6);
+        board
+            .placements
+            .insert(element_id("loose"), placed(1, 2, false));
+        let note = element_id("n");
+
+        assert!(board.detach(&note));
+        assert_eq!(board.rect_of(&note), Some(at(105, 206, 180, 90)));
+        assert!(!board.names(&note, &element_id("b")));
+        let before = board.clone();
+        assert!(!board.detach(&note));
+        assert!(!board.detach(&element_id("loose")));
+        assert!(!board.detach(&element_id("nowhere")));
+        assert_eq!(board, before);
+    }
+
+    #[test]
+    fn detaching_from_a_named_box_ends_only_that_attachment_also_when_it_does_not_hold() {
+        let mut board = board_of(&[
+            line("b", 100, 200, ""),
+            line("m", 7, 8, r#", "attached_to": "b""#),
+            line("n", 5, 6, r#", "attached_to": "gone""#),
+        ]);
+        let before = board.clone();
+
+        assert!(!board.detach_named(&element_id("n"), &element_id("b")));
+        assert_eq!(board, before);
+        assert!(board.names(&element_id("n"), &element_id("gone")));
+        assert!(board.detach_named(&element_id("n"), &element_id("gone")));
+        assert_eq!(board.rect_of(&element_id("n")), Some(at(5, 6, 180, 90)));
+        assert!(!board.names(&element_id("n"), &element_id("gone")));
+        assert_eq!(board.attachment(&element_id("m")), Some(&element_id("b")));
     }
 }

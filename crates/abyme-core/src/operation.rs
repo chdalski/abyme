@@ -140,6 +140,35 @@ pub enum Operation {
         #[cfg_attr(feature = "json-schema", schemars(with = "bool"))]
         pinned: Option<bool>,
     },
+    /// Hangs a note on an element that is no note, both on the board, where
+    /// the note lies now, so it moves along with that element on the board.
+    /// The note gets the relation `concerns` to the element if it has none.
+    AttachNote {
+        /// The note to hang on the element.
+        note: Ref<ElementId>,
+        /// The element that is no note, on which the note hangs.
+        to: Ref<ElementId>,
+        /// The board on which the note hangs on the element.
+        board: Ref<BoardId>,
+        /// `true` once the person has said that their pinned note may hang
+        /// on the element; without it a pinned note is refused. The pin
+        /// stays as it is.
+        #[serde(
+            default,
+            deserialize_with = "present",
+            skip_serializing_if = "Option::is_none"
+        )]
+        #[cfg_attr(feature = "json-schema", schemars(with = "PinConfirmed"))]
+        pinned: Option<PinConfirmed>,
+    },
+    /// Ends the attachment of a note on a board where it lies now; the
+    /// relation stays.
+    DetachNote {
+        /// The note.
+        note: Ref<ElementId>,
+        /// The board on which it hangs.
+        board: Ref<BoardId>,
+    },
     /// Arranges a board as a layered diagram from its elements and relations:
     /// every unpinned box gets the size of its text and a new position, and a
     /// pinned box stays as it is.
@@ -234,6 +263,49 @@ pub enum Operation {
         /// The element the relation points to, also one whose file is gone.
         to: Ref<ElementId>,
     },
+}
+
+/// The word `true` for `pinned` in `attach_note`: the person has said that
+/// their pinned note may hang on an element. `false` is no such word and is
+/// rejected, since attaching never changes a pin.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PinConfirmed;
+
+impl Serialize for PinConfirmed {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_bool(true)
+    }
+}
+
+impl<'de> Deserialize<'de> for PinConfirmed {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        if bool::deserialize(deserializer)? {
+            Ok(Self)
+        } else {
+            Err(serde::de::Error::custom(
+                "pinned takes only true; attaching never releases a pin",
+            ))
+        }
+    }
+}
+
+#[cfg(feature = "json-schema")]
+impl schemars::JsonSchema for PinConfirmed {
+    fn inline_schema() -> bool {
+        true
+    }
+
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed("pin_confirmed")
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "boolean",
+            "const": true,
+            "description": "Only true: the person has said their pinned note may hang on the element",
+        })
+    }
 }
 
 /// A reference to an element or a board.
@@ -935,7 +1007,7 @@ mod tests {
             .flatten()
             .filter(|variant| variant.pointer("/type") == Some(&serde_json::json!("object")))
             .collect();
-        assert_eq!(variants.len(), 10 + 2 + 2, "{schema}");
+        assert_eq!(variants.len(), 12 + 2 + 2, "{schema}");
         for variant in variants {
             assert_eq!(
                 variant.pointer("/additionalProperties"),
@@ -1216,5 +1288,101 @@ mod tests {
                 "{property}"
             );
         }
+    }
+
+    fn an_attachment(rest: &str) -> String {
+        format!(
+            r#"[{{"op": "attach_note", "note": {{"existing": "n"}}, "to": {{"existing": "b"}}, "board": {{"existing": "main"}}{rest}}}]"#
+        )
+    }
+
+    #[test]
+    fn reads_an_attachment_and_a_detachment_with_and_without_the_pin_word() {
+        let existing = |id: &str| Ref::Existing(id.parse::<ElementId>().unwrap());
+        let main = || Ref::Existing("main".parse::<BoardId>().unwrap());
+        let attachment = |pinned| Operation::AttachNote {
+            note: existing("n"),
+            to: existing("b"),
+            board: main(),
+            pinned,
+        };
+
+        assert_eq!(read(&an_attachment("")).unwrap(), [attachment(None)]);
+        assert_eq!(
+            read(&an_attachment(r#", "pinned": true"#)).unwrap(),
+            [attachment(Some(PinConfirmed))]
+        );
+        assert_eq!(
+            read(r#"[{"op": "detach_note", "note": {"existing": "n"}, "board": {"existing": "main"}}]"#)
+                .unwrap(),
+            [Operation::DetachNote {
+                note: existing("n"),
+                board: main(),
+            }]
+        );
+    }
+
+    #[rstest]
+    #[case::false_(r#", "pinned": false"#)]
+    #[case::null(r#", "pinned": null"#)]
+    #[case::string(r#", "pinned": "true""#)]
+    #[case::number(r#", "pinned": 1"#)]
+    #[case::object(r#", "pinned": {}"#)]
+    #[case::a_position(r#", "x": 1"#)]
+    #[case::a_label(r#", "label": "why""#)]
+    fn rejects_any_other_field_or_pin_word_on_an_attachment(#[case] rest: &str) {
+        assert!(read(&an_attachment(rest)).is_err(), "{rest}");
+    }
+
+    #[rstest]
+    #[case::a_pin(r#", "pinned": true"#)]
+    #[case::a_box(r#", "to": {"existing": "b"}"#)]
+    #[case::a_position(r#", "x": 1"#)]
+    fn rejects_any_other_field_on_a_detachment(#[case] rest: &str) {
+        let json = format!(
+            r#"[{{"op": "detach_note", "note": {{"existing": "n"}}, "board": {{"existing": "main"}}{rest}}}]"#
+        );
+
+        assert!(read(&json).is_err(), "{rest}");
+    }
+
+    #[test]
+    fn writes_the_pin_word_as_true() {
+        assert_eq!(
+            serde_json::to_value(PinConfirmed).unwrap(),
+            serde_json::json!(true)
+        );
+    }
+
+    #[cfg(feature = "json-schema")]
+    #[test]
+    fn schema_takes_only_true_as_the_pin_word_of_an_attachment() {
+        let schema = serde_json::to_value(schemars::schema_for!(Operations)).unwrap();
+
+        let attachment = schema
+            .pointer("/$defs/Operation/oneOf")
+            .and_then(serde_json::Value::as_array)
+            .unwrap()
+            .iter()
+            .find(|variant| {
+                variant.pointer("/properties/op/const") == Some(&serde_json::json!("attach_note"))
+            })
+            .unwrap();
+
+        let pinned = attachment.pointer("/properties/pinned").unwrap();
+        assert_eq!(
+            pinned.pointer("/const"),
+            Some(&serde_json::json!(true)),
+            "{pinned}"
+        );
+        assert_eq!(
+            pinned.pointer("/type"),
+            Some(&serde_json::json!("boolean")),
+            "{pinned}"
+        );
+        assert_eq!(
+            attachment.pointer("/required"),
+            Some(&serde_json::json!(["op", "note", "to", "board"]))
+        );
     }
 }

@@ -191,6 +191,8 @@ fn refused_by_board_file(
         | Operation::UpdateBoard { .. }
         | Operation::PlaceElement { .. }
         | Operation::LayoutBoard { .. }
+        | Operation::AttachNote { .. }
+        | Operation::DetachNote { .. }
         | Operation::CreateRelation { .. }
         | Operation::DeleteRelation { .. } => None,
     }
@@ -305,6 +307,15 @@ fn refused_kind(operation: &Operation) -> Option<&'static str> {
             }
         },
         Operation::LayoutBoard { .. } => Some("layout_board"),
+        // Not yet sent by the canvas; naming every field makes admitting it a
+        // decision about each, the confirmation of a pin among them.
+        Operation::AttachNote {
+            note: _,
+            to: _,
+            board: _,
+            pinned: _,
+        } => Some("attach_note"),
+        Operation::DetachNote { note: _, board: _ } => Some("detach_note"),
         // `None` here means a field the request leaves alone; `Some(None)` would
         // remove it.
         Operation::UpdateElement {

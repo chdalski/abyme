@@ -17,7 +17,7 @@ use crate::board_tree::BoardTree;
 use crate::layout::box_size::box_size;
 use crate::layout::free_space::FreeSpace;
 use crate::layout::layered::{LayoutWork, Problem as LayoutProblem, layered};
-use crate::operation::{LocalKey, MAX_COORDINATE, Operation, Ref};
+use crate::operation::{LocalKey, MAX_COORDINATE, Operation, PinConfirmed, Ref};
 use crate::slug::free_slug;
 
 /// How many sources of relations a rejected deletion names at most.
@@ -170,6 +170,48 @@ pub enum OperationProblem {
     PositionNotStored {
         /// The element.
         element: ElementId,
+        /// The board.
+        board: BoardId,
+    },
+    /// An attachment names an element that is no note as the note.
+    #[error("element {0} is no note")]
+    NotANote(ElementId),
+    /// An attachment names the note as the element it hangs on.
+    #[error("element {0} cannot be attached to itself")]
+    AttachToItself(ElementId),
+    /// An attachment names a note as the element the note hangs on.
+    #[error("element {0} is a note; a note hangs only on an element that is no note")]
+    AttachToNote(ElementId),
+    /// The note cannot hang on the element where it lies.
+    #[error(
+        "note {note} cannot hang on {element} on board {board}: {element} hangs on another \
+         element, something hangs on {note}, or {note} would lie outside -{MAX_COORDINATE} to \
+         {MAX_COORDINATE}"
+    )]
+    CannotAttach {
+        /// The note.
+        note: ElementId,
+        /// The element it was to hang on.
+        element: ElementId,
+        /// The board.
+        board: BoardId,
+    },
+    /// An attachment of a pinned note does not say that the person agreed.
+    #[error(
+        "note {note} is pinned on board {board}: a person placed it there. Attach it only after \
+         the person has said so, with pinned: true"
+    )]
+    PinnedAttach {
+        /// The note.
+        note: ElementId,
+        /// The board.
+        board: BoardId,
+    },
+    /// A detachment names a note that the board file hangs on nothing.
+    #[error("note {note} hangs on nothing on board {board}")]
+    NotAttached {
+        /// The note.
+        note: ElementId,
         /// The board.
         board: BoardId,
     },
@@ -412,6 +454,13 @@ impl<'snapshot> Draft<'snapshot> {
                 pinned,
             } => self.move_element(element, board, *x, *y, *pinned),
             Operation::LayoutBoard { board } => self.layout_board(board),
+            Operation::AttachNote {
+                note,
+                to,
+                board,
+                pinned,
+            } => self.attach_note(note, to, board, *pinned),
+            Operation::DetachNote { note, board } => self.detach_note(note, board),
             Operation::UpdateElement {
                 element,
                 name,
@@ -804,7 +853,119 @@ impl<'snapshot> Draft<'snapshot> {
                     to: to.clone(),
                 })
             }
-        })
+        })?;
+        if kind == RelationKind::Concerns {
+            // An attached note always has the relation, so it comes off every
+            // board whose file hangs it on `to`; no other board is written.
+            let named: Vec<BoardId> = self
+                .current_boards()
+                .filter(|(_, board)| board.names(&from, &to))
+                .map(|(board, _)| board.clone())
+                .collect();
+            for board in named {
+                let (draft_board, _) = self.draft_board(&board)?;
+                draft_board.detach_named(&from, &to);
+            }
+        }
+        Ok(())
+    }
+
+    /// Hangs `note` on `to` on `board` where the note lies now, after the
+    /// checks of what may hang on what, and adds the relation `concerns` if
+    /// the note lacks it. Every refusal comes before any change, and a
+    /// refusal later in the request writes nothing either.
+    fn attach_note(
+        &mut self,
+        note: &Ref<ElementId>,
+        to: &Ref<ElementId>,
+        board: &Ref<BoardId>,
+        pinned: Option<PinConfirmed>,
+    ) -> Result<(), OperationProblem> {
+        let note = self.resolve_element(note)?;
+        let to = self.resolve_element(to)?;
+        let board = self.resolve_board(board)?;
+        self.require_note(&note)?;
+        if to == note {
+            return Err(OperationProblem::AttachToItself(note));
+        }
+        if self.element(&to).is_some_and(Element::is_note) {
+            return Err(OperationProblem::AttachToNote(to));
+        }
+        let cannot_attach = || OperationProblem::CannotAttach {
+            note: note.clone(),
+            element: to.clone(),
+            board: board.clone(),
+        };
+        let (draft_board, _) = self.draft_board(&board)?;
+        let note_pinned = placed_on(draft_board, &board, &note)?.pinned;
+        placed_on(draft_board, &board, &to)?;
+        if note_pinned && pinned.is_none() {
+            return Err(OperationProblem::PinnedAttach { note, board });
+        }
+        if !draft_board.hanging_on(&note).is_empty() {
+            return Err(cannot_attach());
+        }
+        let has_relation = self.element(&note).is_some_and(|element| {
+            element
+                .relations()
+                .contains_key(&(RelationKind::Concerns, to.clone()))
+        });
+        if !has_relation {
+            self.change_element(&note, |fields| {
+                fields
+                    .relations
+                    .insert((RelationKind::Concerns, to.clone()), None);
+                Ok(())
+            })?;
+        }
+        let (draft_board, _) = self.draft_board(&board)?;
+        let before = draft_board.rect_of(&note);
+        draft_board
+            .attach(&note, &to)
+            .map_err(|error| match error {
+                PositionError::NotPlaced => OperationProblem::NotOnBoard {
+                    element: note.clone(),
+                    board: board.clone(),
+                },
+                PositionError::OffsetTooLarge => OperationProblem::PositionNotStored {
+                    element: note.clone(),
+                    board: board.clone(),
+                },
+                PositionError::DoesNotHold => cannot_attach(),
+            })?;
+        if draft_board.attachment(&note) == Some(&to) && draft_board.rect_of(&note) == before {
+            Ok(())
+        } else {
+            Err(cannot_attach())
+        }
+    }
+
+    /// Ends the attachment the file of `board` names for `note`; the note
+    /// stays where it lies, and the relation stays.
+    fn detach_note(
+        &mut self,
+        note: &Ref<ElementId>,
+        board: &Ref<BoardId>,
+    ) -> Result<(), OperationProblem> {
+        let note = self.resolve_element(note)?;
+        let board = self.resolve_board(board)?;
+        self.require_note(&note)?;
+        let (draft_board, _) = self.draft_board(&board)?;
+        placed_on(draft_board, &board, &note)?;
+        if draft_board.detach(&note) {
+            Ok(())
+        } else {
+            Err(OperationProblem::NotAttached { note, board })
+        }
+    }
+
+    /// Checks that `element` is a note as the request has it.
+    fn require_note(&self, element: &ElementId) -> Result<(), OperationProblem> {
+        if self.element(element).is_some_and(Element::is_note) {
+            Ok(())
+        } else {
+            Err(OperationProblem::NotANote(element.clone()))
+        }
     }
 
     /// Deletes an element: its file, its placement on every board, and its
@@ -1131,13 +1292,28 @@ fn put(
             element: element.clone(),
             board: board_id.clone(),
         },
-        PositionError::OffsetTooLarge => not_stored(),
+        PositionError::OffsetTooLarge | PositionError::DoesNotHold => not_stored(),
     })?;
     if board.rect_of(element) == Some(rect) {
         Ok(())
     } else {
         Err(not_stored())
     }
+}
+
+/// The placement of `element` on `board`.
+fn placed_on<'board>(
+    board: &'board Board,
+    board_id: &BoardId,
+    element: &ElementId,
+) -> Result<&'board Placement, OperationProblem> {
+    board
+        .placements
+        .get(element)
+        .ok_or_else(|| OperationProblem::NotOnBoard {
+            element: element.clone(),
+            board: board_id.clone(),
+        })
 }
 
 /// Each element of `board` that hangs on a box, with the box.

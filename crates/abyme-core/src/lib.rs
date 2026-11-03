@@ -31,7 +31,7 @@ pub use apply::{
     RelationSources, Snapshot, Write, apply,
 };
 pub use operation::{
-    LocalKey, LocalKeyError, MAX_COORDINATE, MAX_KEY_LEN, Operation, Operations, Ref,
+    LocalKey, LocalKeyError, MAX_COORDINATE, MAX_KEY_LEN, Operation, Operations, PinConfirmed, Ref,
 };
 pub use outline::{
     Geometry, ShownRelation, UnknownBoard, UnknownElement, element_detail, element_list, outline,

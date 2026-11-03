@@ -149,6 +149,22 @@ fn every_other_operation_is_refused_by_its_position_and_kind() {
             json!({"op": "delete_relation", "from": {"existing": "secret-id"}, "kind": "uses", "to": {"existing": "payments"}}),
             "delete_relation",
         ),
+        (
+            json!({"op": "attach_note", "note": {"existing": "secret-id"}, "to": {"existing": "payments"}, "board": {"existing": "context"}}),
+            "attach_note",
+        ),
+        (
+            json!({"op": "attach_note", "note": {"new": "secret-key"}, "to": {"existing": "payments"}, "board": {"existing": "mirrored"}, "pinned": true}),
+            "attach_note",
+        ),
+        (
+            json!({"op": "detach_note", "note": {"existing": "secret-id"}, "board": {"existing": "context"}}),
+            "detach_note",
+        ),
+        (
+            json!({"op": "detach_note", "note": {"existing": "secret-id"}, "board": {"existing": "mirrored"}}),
+            "detach_note",
+        ),
     ];
 
     for (refused, kind) in refused {

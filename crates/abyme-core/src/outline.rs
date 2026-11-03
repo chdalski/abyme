@@ -603,6 +603,10 @@ fn lines(rows: &[Vec<String>]) -> String {
 /// the board file's numbers only, then the box it hangs on: `on <box>` while
 /// the attachment holds, and `not on <box> (attachment does not hold)` for a
 /// box the file names in vain.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the marker says so when the box the file names does not hold"
+)]
 fn position(board: &Board, element: &ElementId, rect: Rect, pinned: bool) -> String {
     let pin = if pinned { " pinned" } else { "" };
     let attached = match (board.attachment(element), board.named_attachment(element)) {

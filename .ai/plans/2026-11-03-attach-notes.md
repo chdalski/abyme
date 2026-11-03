@@ -31,7 +31,7 @@ it is detached.
 
 - [x] One way to read a position
 - [x] Attached notes in the board file
-- [ ] Attaching and detaching a note
+- [x] Attaching and detaching a note
 - [ ] Attaching on the canvas
 
 ## Tasks
@@ -102,27 +102,27 @@ attaching writes both, all or none.
 
 Review path: Security-Hybrid
 
-- [ ] `attach_note` takes a note, a board, and an element that is no note, both on that board. It adds
+- [x] `attach_note` takes a note, a board, and an element that is no note, both on that board. It adds
       the relation `concerns` from the note to the element if the note has none yet, keeping an
       existing one with its label, and attaches the note there where it lies now, so it does not
       move. Attaching an attached note to another element moves the attachment; the old relation
       stays.
-- [ ] `detach_note` takes a note and a board. It ends the attachment where the note lies now; the
+- [x] `detach_note` takes a note and a board. It ends the attachment where the note lies now; the
       relation stays.
-- [ ] Neither changes a pin. `attach_note` removes the note's verification stamp when it adds the
+- [x] Neither changes a pin. `attach_note` removes the note's verification stamp when it adds the
       relation, as `create_relation` does, and keeps it when the relation exists; `detach_note` changes
       no element file. Each refuses, writing nothing, an element that is no note, an element no board
       places, and attaching to a note or to itself.
-- [ ] Deleting the relation `concerns` from a note to an element also detaches the note from that
+- [x] Deleting the relation `concerns` from a note to an element also detaches the note from that
       element on every board, so an attached note always has the relation.
-- [ ] The MCP tool `apply` describes both operations and the effect of deleting the relation, and its
+- [x] The MCP tool `apply` describes both operations and the effect of deleting the relation, and its
       schema takes them. The canvas's admission refuses both, naming no other text.
-- [ ] Rust tests cover each rule through `apply` in the core and through the MCP server's `apply`.
-- [ ] A reader of Data Model, Presentation, and the Glossary's entry on attaching can tell how a note
+- [x] Rust tests cover each rule through `apply` in the core and through the MCP server's `apply`.
+- [x] A reader of Data Model, Presentation, and the Glossary's entry on attaching can tell how a note
       is attached and detached, and that only a note hangs on an element that is no note. No sentence
       of Data Model's Operations or of `crates/abyme-mcp/README.md` lists the operations without the
       two, or says that `delete_relation` rewrites only the element file.
-- [ ] `cargo test --workspace`, `cargo clippy --workspace --all-targets`, and
+- [x] `cargo test --workspace`, `cargo clippy --workspace --all-targets`, and
       `cargo fmt --all --check` pass.
 
 ### Task 4: Attaching on the canvas
@@ -172,9 +172,15 @@ Review path: Security-Hybrid
   `clippy.toml`, with one `#[expect]` in the outline's `position`; that change goes through the
   task's security gate (security engineer, Task 2's post-gate).
 - Task 4: the hold rule ignores element types, so a hand-written file can hang a box that is no note
-  on a note; on a mirrored board an admitted move or deletion of that note then carries the box
-  along. When attaching is admitted there, decide from the element files whether such a move or
-  deletion is refused (security engineer, Task 2's pre-gate).
+  on a note, and since Task 3 `update_element` reaches such states too, by changing the type of an
+  attached note or of its box; on a mirrored board an admitted move or deletion of that note then
+  carries the box along. When attaching is admitted there, decide from the element files whether
+  such a move or deletion is refused (security engineer, Task 2's pre-gate and Task 3's).
+- Task 4: `Board::attach` succeeds while other placements hang on the element, which then stop
+  holding; `attach_note` refuses that case, so call `attach` only through `apply`, or make it
+  return `DoesNotHold` there (security engineer, Task 3's post-gate, Low).
+- Task 4: `attach_note` refuses a pinned note without `"pinned": true`, so the canvas sends it on the
+  attachment that follows its own pinned move, and the admission requires it there.
 
 ## Decisions
 
@@ -219,6 +225,19 @@ Review path: Security-Hybrid
   to hold; a note whose attachment does not hold only because of the range can start to hold when its
   box moves; and a stale `attached_to` holds once its element is placed. The core never writes these
   states, and the result stays in range. Accepted by the security engineer.
+- **`attach_note` takes `"pinned": true` as the person's word for a pinned note:** without it, the
+  AI could hang a person's pinned note on a box and then move or lay out the box, which carries the
+  note along. Only `true` is accepted, so attaching never changes a pin, and releasing one stays the
+  job of `move_element`. The user chose this over a `pinned` that also releases, and over accepting
+  the risk (security engineer, Task 3's pre-gate).
+- **Gate demands on Task 3 (security engineer):** `Board::named_attachment` is a disallowed method
+  outside `abyme-model` but for the outline; deleting `concerns` rewrites only the boards whose file
+  names the attachment, and clears it there also when it does not hold; `Board::attach` restores the
+  placement on any failure; error texts name only IDs.
+- **The hold rule still ignores element types:** a state with a box that is no note hanging on a note,
+  reached by hand or by `update_element`, reads and moves as any attachment; a stale `attached_to` on
+  another element that names an attached note keeps reading as a board position. Accepted by the
+  security engineer.
 - **All tasks are Security-Hybrid:** the board file and the operations take new input, and the canvas
   decides what it may attach, also on mirrored boards.
 

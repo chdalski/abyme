@@ -211,7 +211,15 @@ impl AbymeServer {
             first) or while it owns a board (give that board another owner or none first); it also clears the placements of an element whose file is missing; \
             create_relation takes from, kind, to, and optionally a label, and adds a relation from one \
             element to another; delete_relation takes from, kind, and to, and removes that relation, also \
-            when the target is gone. A kind is one of concerns, depends_on, describes (from a document to \
+            when the target is gone; deleting concerns from a note to an element also ends the note's \
+            attachment to that element on every board. attach_note takes note, to, and board, with both on \
+            that board, and hangs the note on to where it lies now, so it moves along with to there: note \
+            must be a note (type_ref note) and to an element that is no note; it adds the relation concerns \
+            from the note to to if there is none, which removes the note's verification stamp, keeps an \
+            existing one with its label, and moves an attachment the note has to another element. A pinned \
+            note needs pinned: true, which you send only after the person has said so; attaching never \
+            changes a pin. detach_note takes note and board and ends the note's attachment there, the note \
+            staying where it lies and the relation staying. A kind is one of concerns, depends_on, describes (from a document to \
             what it describes), see_also, and uses; an element has at most one relation of a kind to a \
             target. A reference is \
             {\"new\": \"<key>\"} for something an earlier operation of the same request creates, or \
