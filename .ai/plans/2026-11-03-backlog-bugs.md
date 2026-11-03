@@ -35,7 +35,7 @@ the same code, so that the canvas and the core keep their stated behaviour befor
 - [x] The free space raises its bottom inline
 - [x] Arrow ends stay where they are after a measure
 - [x] A box whose file is missing offers neither a release nor a drag
-- [ ] The marks on a box's top edge share it
+- [x] The marks on a box's top edge share it
 - [ ] A window that turns visible asks for flags
 - [ ] A note's field grows with wrapped text
 - [ ] A held-back click ends with its press
@@ -121,11 +121,11 @@ most half of the top edge and is cut with "…" when it does not fit.
 
 Review path: Security-Hybrid
 
-- [ ] The review mark and the pin marker each take at most half of the box's top edge and end in
+- [x] The review mark and the pin marker each take at most half of the box's top edge and end in
       "…" where their text is cut, following the style of the `▸` buttons; Vitest shows that both
       carry the class that cuts them.
-- [ ] The webview checklist names a box of 100 px width with both marks.
-- [ ] `pnpm --dir crates/abyme-canvas/ui check` and `pnpm --dir crates/abyme-canvas/ui test` pass.
+- [x] The webview checklist names a box of 100 px width with both marks.
+- [x] `pnpm --dir crates/abyme-canvas/ui check` and `pnpm --dir crates/abyme-canvas/ui test` pass.
 
 ### Task 7: A window that turns visible asks for flags
 
@@ -244,6 +244,9 @@ Review path: Security-Hybrid
 
 - **Task 13:** webview checklist: an arrow between two boxes, looked at after the boxes are measured,
   ends at the exact middle of the source's bottom edge and of the target's top edge (Task 4).
+- **Task 13:** webview checklist: a pinned box of 100 px width with a review mark shows the pin
+  marker and the review mark side by side, cut with "…" and not overlapping; a click on the visible
+  pin releases it, and a click on the review mark does nothing (Task 6).
 
 ## Decisions
 

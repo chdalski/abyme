@@ -34,9 +34,9 @@ function FlagMark({ element }: { element: string }) {
     case undefined:
       return null;
     case "task":
-      return <span className="element-flag">⚠ task</span>;
+      return <span className="element-flag element-mark">⚠ task</span>;
     case "hint":
-      return <span className="element-flag">⚠ hint</span>;
+      return <span className="element-flag element-mark">⚠ hint</span>;
   }
 }
 
@@ -80,12 +80,12 @@ function PinMarker({
 }) {
   const release = useContext(ReleasePin);
   if (release === null || shown.kind !== "element") {
-    return <span className="element-pin">pinned</span>;
+    return <span className="element-pin element-mark">pinned</span>;
   }
   return (
     <button
       type="button"
-      className="element-pin nodrag nopan nokey"
+      className="element-pin element-mark nodrag nopan nokey"
       aria-label="Release pin"
       title="Release pin"
       onClick={() => release(element, position)}

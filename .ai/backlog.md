@@ -24,7 +24,6 @@ share a parent line with one sub-item each.
 ## Bugs
 
 - A real double click on `▸` opens the board on the first click, and the rest of it can land on the new view and go one level deeper; nothing is written, and it is untested in a real webview: `crates/abyme-canvas/ui/src/ElementBox.tsx` (Reviewer, canvas display Task 5)
-- On a box narrower than about 110 px (estimated from the CSS), the review mark paints over part of the pin's marker: `crates/abyme-canvas/ui/src/canvas.css` (Reviewer, canvas display Task 8).
 - A window that turns visible without getting focus, as on a workspace switch, asks only at the next tick, so its marks can be older than the "at most one interval behind" of Canvas until then; a `visibilitychange` listener in `whileVisible` would close it: `crates/abyme-canvas/ui/src/flags.ts` (Reviewer, canvas display Task 9).
 - When the AI deletes a note while its text is being typed, the typed text goes without a message: `crates/abyme-canvas/ui/src/NoteContent.tsx` (Reviewer, sticky notes Task 5).
 - `rowsFor` counts only line breaks, so a long wrapped line shows three rows with a scroll bar: `crates/abyme-canvas/ui/src/NoteContent.tsx` (Reviewer, sticky notes Task 5).
@@ -48,6 +47,7 @@ share a parent line with one sub-item each.
 
 ## Cleanup
 
+- `canvas.css` has two rules for the marks on a box's top edge, `.element-pin, .element-flag` and `.element-mark`; the shared properties could move to `.element-mark`: `crates/abyme-canvas/ui/src/canvas.css` (Reviewer, backlog bugs Task 6).
 - `apply` requests accept `RelationKind` in the object form (`"kind": {"uses": null}`), unlike `Mode` and `StatementKind`; files read only the string and get the normal form, so this is about consistency: `crates/abyme-model/src/relation.rs` (security engineer, plan D Task 1, rated Low; fix with a later change there).
 - Make `RECIPE_VERSION` and maybe `ProjectKey` crate-private if nothing outside needs them: `crates/abyme-index/src/lib.rs` (reviewer, search skeleton).
 - The doc comment of `draft_board` is wrapped unevenly: `crates/abyme-core/src/apply.rs` (Reviewer, auto-layout Task 3)

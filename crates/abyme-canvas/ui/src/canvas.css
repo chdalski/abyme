@@ -84,6 +84,17 @@ main > nav button[aria-current="page"] {
   pointer-events: none;
 }
 
+/* Each mark takes at most half of the top edge and is cut with "…", as the
+   buttons of inner boards are, so neither paints over the other on a narrow
+   box. */
+.element-mark {
+  box-sizing: border-box;
+  max-width: calc(50% - 6px);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .element-pin {
   left: 4px;
 }

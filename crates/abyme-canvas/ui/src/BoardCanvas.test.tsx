@@ -12,6 +12,7 @@ import type { XYPosition } from "@xyflow/react";
 
 import type { BoardView } from "./bindings";
 import { BoardCanvas } from "./BoardCanvas";
+import { ReviewMarks } from "./ElementBox";
 import type { Move } from "./nodes";
 import type { NoteParts } from "./notes";
 import { boardView, placedBox, placedElement } from "./testBoards";
@@ -1458,5 +1459,43 @@ describe("a box whose file is missing", () => {
       expect(gone.classList.contains("draggable")).toBe(false);
       unmount();
     }
+  });
+});
+
+describe("the marks on a box's top edge", () => {
+  it("are both cut to half of the edge, and the release keeps its name", () => {
+    const { container } = render(
+      <ReviewMarks.Provider
+        value={
+          new Map([
+            ["kept", "task"],
+            ["gone", "hint"],
+          ])
+        }
+      >
+        {canvasOf(
+          boardView({
+            placements: [
+              placedElement("kept", { width: 100, pinned: true }),
+              placedBox("gone", { x: 200, width: 100, pinned: true }),
+            ],
+          }),
+          () => Promise.resolve(),
+        )}
+      </ReviewMarks.Provider>,
+    );
+
+    for (const element of ["kept", "gone"]) {
+      const marks = box(container, element).querySelectorAll(
+        ".element-pin, .element-flag",
+      );
+      expect(marks).toHaveLength(2);
+      for (const mark of marks) {
+        expect(mark.classList.contains("element-mark")).toBe(true);
+      }
+    }
+    expect(
+      screen.getByRole("button", { name: "Release pin" }).classList,
+    ).toContain("element-mark");
   });
 });
