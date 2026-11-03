@@ -191,6 +191,9 @@ button.element-pin {
   border: none;
   background: transparent;
   font: inherit;
+  /* Its height follows its text (NoteContent.tsx, fitToText), so a scroll bar
+     would only narrow it while it is measured. */
+  overflow: hidden;
   resize: none;
 }
 

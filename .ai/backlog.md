@@ -25,7 +25,6 @@ share a parent line with one sub-item each.
 
 - A real double click on `▸` opens the board on the first click, and the rest of it can land on the new view and go one level deeper; nothing is written, and it is untested in a real webview: `crates/abyme-canvas/ui/src/ElementBox.tsx` (Reviewer, canvas display Task 5)
 - When the AI deletes a note while its text is being typed, the typed text goes without a message: `crates/abyme-canvas/ui/src/NoteContent.tsx` (Reviewer, sticky notes Task 5).
-- `rowsFor` counts only line breaks, so a long wrapped line shows three rows with a scroll bar: `crates/abyme-canvas/ui/src/NoteContent.tsx` (Reviewer, sticky notes Task 5).
 - When a text field ends without a write after a failed write, `heldBack` stays set, and the next click to another board does nothing and says nothing: `crates/abyme-canvas/ui/src/App.tsx` (Reviewer, sticky notes Task 5).
 - A new note whose file another writer deletes before a view lists it stays on the screen until the board is left, and writes nothing more: `crates/abyme-canvas/ui/src/nodes.ts`, `keepUiState` (Reviewer, sticky notes Task 6).
 

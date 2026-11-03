@@ -24,17 +24,25 @@ export const NewNotes = createContext<{
   drop: (draft: string) => void;
 } | null>(null);
 
-/** The rows a text field needs for `text`, at least three. */
-function rowsFor(text: string): number {
-  return Math.max(3, text.split("\n").length);
+/** The rows a note's text field has at least. */
+const MIN_ROWS = 3;
+
+/**
+ * Makes `field` as high as its text, wrapped lines included: its rows set the
+ * least height, and the browser's measure of the text the rest.
+ */
+function fitToText(field: HTMLTextAreaElement) {
+  field.style.height = "auto";
+  field.style.height = `${String(field.scrollHeight)}px`;
 }
 
 /**
  * The text field of a note, which holds what is typed itself, so that a reload
  * of the board leaves it alone. `Esc` and a click next to it end the input, but
  * switching to another window does not. It stays open while the write is on its
- * way, read only, and when that fails. It neither starts a drag nor moves the
- * box with the arrow keys, and the mouse wheel scrolls it, not the canvas.
+ * way, read only, and when that fails. It grows with its text, wrapped lines
+ * included. It neither starts a drag nor moves the box with the arrow keys,
+ * and the mouse wheel over it does not move the canvas.
  */
 function NoteField({
   element,
@@ -58,6 +66,7 @@ function NoteField({
     if (field.current !== null) {
       // The field's own value, since a text area normalizes line breaks.
       opened.current = splitNoteText(field.current.value);
+      fitToText(field.current);
       field.current.focus();
     }
   }, []);
@@ -95,9 +104,9 @@ function NoteField({
         aria-label="Text of the note"
         defaultValue={opening}
         readOnly={readOnly}
-        rows={rowsFor(opening)}
+        rows={MIN_ROWS}
         onInput={(event) => {
-          event.currentTarget.rows = rowsFor(event.currentTarget.value);
+          fitToText(event.currentTarget);
         }}
         onKeyDown={(event) => {
           if (event.key === "Escape") {

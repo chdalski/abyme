@@ -912,6 +912,28 @@ describe("a note on the canvas", () => {
       expect(writeNote).not.toHaveBeenCalled();
     });
 
+    it("is as high as its text when it opens and after every input, wrapped lines included", () => {
+      let measured = 120;
+      vi.spyOn(
+        HTMLTextAreaElement.prototype,
+        "scrollHeight",
+        "get",
+      ).mockImplementation(() => measured);
+      const { field } = opened(vi.fn(() => Promise.resolve(true)));
+
+      expect(field.style.height).toBe("120px");
+      expect(field.rows).toBe(3);
+      expect(field.value).toBe("Ask\nWhy");
+
+      measured = 260;
+      fireEvent.input(field, {
+        target: { value: `Ask\n${"long ".repeat(80)}` },
+      });
+
+      expect(field.style.height).toBe("260px");
+      expect(field.rows).toBe(3);
+    });
+
     it("leaves the button of the note's inner board working", () => {
       const onOpen = vi.fn();
       render(canvasOf(noteView(), () => Promise.resolve(), onOpen));

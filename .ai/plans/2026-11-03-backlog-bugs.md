@@ -37,7 +37,7 @@ the same code, so that the canvas and the core keep their stated behaviour befor
 - [x] A box whose file is missing offers neither a release nor a drag
 - [x] The marks on a box's top edge share it
 - [x] A window that turns visible asks for flags
-- [ ] A note's field grows with wrapped text
+- [x] A note's field grows with wrapped text
 - [ ] A held-back click ends with its press
 - [ ] One press opens one board
 - [ ] A new note that is deleted before a view lists it goes
@@ -149,11 +149,11 @@ scroll bar. It takes the height its text needs, at least three rows.
 
 Review path: Security-Hybrid
 
-- [ ] A note's text field is as high as its text, wrapped lines included, and never lower than
+- [x] A note's text field is as high as its text, wrapped lines included, and never lower than
       three rows; Vitest shows that its height follows the text's scroll height when it opens and
       on every input.
-- [ ] The webview checklist names a note with one long wrapped line.
-- [ ] `pnpm --dir crates/abyme-canvas/ui check` and `pnpm --dir crates/abyme-canvas/ui test` pass.
+- [x] The webview checklist names a note with one long wrapped line.
+- [x] `pnpm --dir crates/abyme-canvas/ui check` and `pnpm --dir crates/abyme-canvas/ui test` pass.
 
 ### Task 9: A held-back click ends with its press
 
@@ -250,6 +250,9 @@ Review path: Security-Hybrid
 - **Task 13:** webview checklist: after a switch to another workspace and back to the canvas's
   window without clicking it, the review marks show a flag raised meanwhile without waiting for the
   30 s tick (Task 7).
+- **Task 13:** webview checklist: a note whose text has one long line that wraps shows the whole
+  line in its open field, with no scroll bar and no empty row below it; the field grows while typing
+  and shrinks again when the line is deleted (Task 8).
 
 ## Decisions
 
