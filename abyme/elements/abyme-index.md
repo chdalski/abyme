@@ -4,7 +4,7 @@ type: "c4/container"
 name: "abyme-index"
 summary: "The search index: ranks a project's elements by full text and vectors and downloads the embedding model"
 anchor: "crates/abyme-index"
-verified: "139a2cb2de465a30cc907ee26fc2d3993101a97b"
+verified: "d337032047c2cfd28e72381ccc23f34640db38b2"
 verified_by: "ai"
 relations:
   - {kind: "uses", to: "abyme-core"}

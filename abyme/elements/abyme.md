@@ -4,7 +4,7 @@ type: "c4/system"
 name: "Abyme"
 summary: "A tool for developers to work visually with an AI on linked canvas boards stored in the project's own Git repository"
 anchor: "Cargo.toml"
-verified: "139a2cb2de465a30cc907ee26fc2d3993101a97b"
+verified: "d337032047c2cfd28e72381ccc23f34640db38b2"
 verified_by: "ai"
 relations:
   - {kind: "uses", to: "hugging-face-hub"}
