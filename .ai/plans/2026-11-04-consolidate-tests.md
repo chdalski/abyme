@@ -30,7 +30,7 @@ the way.
 - [x] The apply tests share their setup
 - [x] The apply tests are split by topic
 - [x] The outline tests are split by topic
-- [ ] The server tests share their session steps
+- [x] The server tests share their session steps
 - [ ] The server tests are split by topic
 
 ## Tasks
@@ -120,10 +120,10 @@ Each test starts a server process, so they share helpers rather than become para
 
 Review path: Reviewer-only
 
-- [ ] Helpers open a project with a session, end a session with the protocol check, and make a
+- [x] Helpers open a project with a session, end a session with the protocol check, and make a
       call that must succeed or must be refused; no test repeats these steps inline.
-- [ ] Every setup call checks that it succeeded.
-- [ ] Every test of the file keeps its name and its other assertions.
+- [x] Every setup call checks that it succeeded.
+- [x] Every test of the file keeps its name and its other assertions.
 
 ### Task 7: The server tests are split by topic
 

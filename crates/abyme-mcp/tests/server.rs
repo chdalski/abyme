@@ -191,6 +191,38 @@ async fn call_within(
     Ok(tokio::time::timeout(timeout, session.client.call_tool(request)).await?)
 }
 
+/// A temporary Abyme project with a session started in it.
+async fn started_project() -> TestResult<(tempfile::TempDir, Session)> {
+    let directory = project()?;
+    let session = start(directory.path()).await?;
+    Ok((directory, session))
+}
+
+/// Closes the session and checks that the server wrote only protocol
+/// messages to standard output.
+async fn closed(session: Session) -> TestResult {
+    assert_only_protocol_messages(&finish(session).await?);
+    Ok(())
+}
+
+/// Calls a tool that must succeed, and returns the text of its result.
+async fn call_ok(session: &Session, tool: &'static str, arguments: Value) -> TestResult<String> {
+    let result = call(session, tool, arguments).await??;
+    assert_eq!(result.is_error, Some(false), "{result:?}");
+    Ok(text(&result))
+}
+
+/// Calls a tool that must refuse, and returns the text of its refusal.
+async fn call_refused(
+    session: &Session,
+    tool: &'static str,
+    arguments: Value,
+) -> TestResult<String> {
+    let result = call(session, tool, arguments).await??;
+    assert_eq!(result.is_error, Some(true), "{result:?}");
+    Ok(text(&result))
+}
+
 /// A proxy URL for `listener`, which accepts connections and never answers.
 fn proxy_url(listener: &TcpListener) -> io::Result<String> {
     Ok(format!("http://{}", listener.local_addr()?))
@@ -282,8 +314,7 @@ fn refuses_any_other_command_line_without_writing() -> TestResult {
 
 #[tokio::test]
 async fn applies_operations_and_reads_the_board_back() -> TestResult {
-    let directory = project()?;
-    let session = start(directory.path()).await?;
+    let (directory, session) = started_project().await?;
 
     let tools = tokio::time::timeout(TIMEOUT, session.client.list_all_tools()).await??;
     let mut names: Vec<&str> = tools.iter().map(|tool| tool.name.as_ref()).collect();
@@ -301,17 +332,15 @@ async fn applies_operations_and_reads_the_board_back() -> TestResult {
         ]
     );
 
-    let applied = call(&session, "apply", create_board_with_element()).await??;
-    assert_eq!(applied.is_error, Some(false), "{applied:?}");
+    let applied = call_ok(&session, "apply", create_board_with_element()).await?;
     assert_eq!(
-        text(&applied),
+        applied,
         "b: board container-level\npay: element payment-service\n"
     );
 
-    let read = call(&session, "read_board", json!({"board": "container-level"})).await??;
-    assert_eq!(read.is_error, Some(false), "{read:?}");
+    let read = call_ok(&session, "read_board", json!({"board": "container-level"})).await?;
     assert_eq!(
-        text(&read),
+        read,
         "Review flags unavailable: the project lies in no Git repository\n\
          Board: container-level · Container Level\n\
          \n\
@@ -330,14 +359,12 @@ async fn applies_operations_and_reads_the_board_back() -> TestResult {
             .is_file()
     );
 
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 #[tokio::test]
 async fn answers_arguments_that_do_not_fit_with_tool_errors_and_keeps_serving() -> TestResult {
-    let directory = project()?;
-    let session = start(directory.path()).await?;
+    let (directory, session) = started_project().await?;
     let before = files(directory.path())?;
     let not_fitting = [
         ("apply", json!({})),
@@ -363,35 +390,26 @@ async fn answers_arguments_that_do_not_fit_with_tool_errors_and_keeps_serving() 
     ];
 
     for (tool, arguments) in not_fitting {
-        let result = call(&session, tool, arguments.clone()).await??;
+        let result = call_refused(&session, tool, arguments.clone()).await?;
 
-        assert_eq!(
-            result.is_error,
-            Some(true),
-            "{tool} {arguments}: {result:?}"
-        );
         assert!(
-            text(&result).starts_with("invalid arguments: "),
-            "{result:?}"
+            result.starts_with("invalid arguments: "),
+            "{tool} {arguments}: {result:?}"
         );
     }
 
-    let unknown_board = call(&session, "read_board", json!({"board": "nowhere"})).await??;
-    assert_eq!(unknown_board.is_error, Some(true));
-    assert_eq!(text(&unknown_board), "no board has the ID nowhere");
+    let unknown_board = call_refused(&session, "read_board", json!({"board": "nowhere"})).await?;
+    assert_eq!(unknown_board, "no board has the ID nowhere");
     assert_eq!(files(directory.path())?, before);
 
-    let applied = call(&session, "apply", create_board_with_element()).await??;
-    assert_eq!(applied.is_error, Some(false), "{applied:?}");
+    call_ok(&session, "apply", create_board_with_element()).await?;
 
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 #[tokio::test]
 async fn escapes_and_shortens_what_it_quotes_from_rejected_arguments() -> TestResult {
-    let directory = project()?;
-    let session = start(directory.path()).await?;
+    let (_directory, session) = started_project().await?;
 
     let hostile = call(
         &session,
@@ -420,18 +438,16 @@ async fn escapes_and_shortens_what_it_quotes_from_rejected_arguments() -> TestRe
         long.chars().count()
     );
 
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 #[tokio::test]
 async fn a_rejected_apply_is_a_tool_error_and_changes_no_file() -> TestResult {
-    let directory = project()?;
-    let session = start(directory.path()).await?;
-    call(&session, "apply", create_board_with_element()).await??;
+    let (directory, session) = started_project().await?;
+    call_ok(&session, "apply", create_board_with_element()).await?;
     let before = files(directory.path())?;
 
-    let rejected = call(
+    let rejected = call_refused(
         &session,
         "apply",
         json!({"operations": [
@@ -439,22 +455,19 @@ async fn a_rejected_apply_is_a_tool_error_and_changes_no_file() -> TestResult {
             {"op": "place_element", "element": {"new": "e"}, "board": {"existing": "nope"}}
         ]}),
     )
-    .await??;
+    .await?;
 
-    assert_eq!(rejected.is_error, Some(true), "{rejected:?}");
-    assert_eq!(text(&rejected), "operation 2: no board has the ID nope");
+    assert_eq!(rejected, "operation 2: no board has the ID nope");
     assert_eq!(files(directory.path())?, before);
 
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 #[tokio::test]
 async fn apply_builds_an_element_s_inner_board_and_refuses_a_board_inside_itself() -> TestResult {
-    let directory = project()?;
-    let session = start(directory.path()).await?;
+    let (directory, session) = started_project().await?;
 
-    let applied = call(
+    call_ok(
         &session,
         "apply",
         json!({"operations": [
@@ -467,17 +480,16 @@ async fn apply_builds_an_element_s_inner_board_and_refuses_a_board_inside_itself
             {"op": "place_element", "element": {"new": "pay"}, "board": {"new": "inside"}}
         ]}),
     )
-    .await??;
-    assert_eq!(applied.is_error, Some(false), "{applied:?}");
+    .await?;
     let before = files(directory.path())?;
-    let rejected = call(
+    let rejected = call_refused(
         &session,
         "apply",
         json!({"operations": [
             {"op": "update_board", "board": {"existing": "context"}, "owner": {"existing": "payments"}}
         ]}),
     )
-    .await??;
+    .await?;
 
     assert_eq!(
         fs::read_to_string(
@@ -493,20 +505,17 @@ async fn apply_builds_an_element_s_inner_board_and_refuses_a_board_inside_itself
         !fs::read_to_string(directory.path().join("abyme/boards/context.board.json"))?
             .contains("owner")
     );
-    assert_eq!(rejected.is_error, Some(true), "{rejected:?}");
     assert_eq!(
-        text(&rejected),
+        rejected,
         "operation 1: board context would lie inside itself"
     );
     assert_eq!(files(directory.path())?, before);
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 #[tokio::test]
 async fn apply_sets_changes_and_removes_a_board_s_zone_and_refuses_another_one() -> TestResult {
-    let directory = project()?;
-    let session = start(directory.path()).await?;
+    let (directory, session) = started_project().await?;
     let file = directory.path().join("abyme/boards/ideas.board.json");
     let board_file = |zone: &str| {
         format!(
@@ -523,18 +532,17 @@ async fn apply_sets_changes_and_removes_a_board_s_zone_and_refuses_another_one()
                "zone": {"mode": "mirrored", "statement": "current"}}),
         json!({"op": "update_board", "board": {"existing": "ideas"}, "zone": null}),
     ] {
-        let applied = call(&session, "apply", json!({"operations": [operation]})).await??;
-        assert_eq!(applied.is_error, Some(false), "{applied:?}");
+        call_ok(&session, "apply", json!({"operations": [operation]})).await?;
         written.push(fs::read_to_string(&file)?);
     }
     let before = files(directory.path())?;
-    let refused = call(
+    let refused = call_refused(
         &session,
         "apply",
         json!({"operations": [{"op": "update_board", "board": {"existing": "ideas"},
                "zone": {"mode": {"mirrored": null}, "statement": "historic\n\u{1b}[31m"}}]}),
     )
-    .await??;
+    .await?;
 
     assert_eq!(
         written,
@@ -544,22 +552,16 @@ async fn apply_sets_changes_and_removes_a_board_s_zone_and_refuses_another_one()
             board_file(""),
         ]
     );
-    assert_eq!(refused.is_error, Some(true), "{refused:?}");
-    assert!(
-        text(&refused).starts_with("invalid arguments: "),
-        "{refused:?}"
-    );
-    assert!(!text(&refused).chars().any(char::is_control), "{refused:?}");
+    assert!(refused.starts_with("invalid arguments: "), "{refused:?}");
+    assert!(!refused.chars().any(char::is_control), "{refused:?}");
     assert_eq!(files(directory.path())?, before);
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 #[tokio::test]
 async fn the_read_tools_show_each_element_s_kind_from_its_home_board_s_zone() -> TestResult {
-    let directory = project()?;
-    let session = start(directory.path()).await?;
-    let applied = call(
+    let (directory, session) = started_project().await?;
+    call_ok(
         &session,
         "apply",
         json!({"operations": [
@@ -573,8 +575,7 @@ async fn the_read_tools_show_each_element_s_kind_from_its_home_board_s_zone() ->
             {"op": "place_element", "element": {"new": "spark"}, "board": {"new": "z"}}
         ]}),
     )
-    .await??;
-    assert_eq!(applied.is_error, Some(false), "{applied:?}");
+    .await?;
     // A hand edit places the shop on the idea board too; its home stays the
     // context, the board with the lower ID.
     fs::write(
@@ -617,15 +618,13 @@ async fn the_read_tools_show_each_element_s_kind_from_its_home_board_s_zone() ->
         "{}",
         text(&shop)
     );
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 #[tokio::test]
 async fn read_board_and_read_element_show_inner_boards_also_from_hand_edited_files() -> TestResult {
-    let directory = project()?;
-    let session = start(directory.path()).await?;
-    let applied = call(
+    let (directory, session) = started_project().await?;
+    call_ok(
         &session,
         "apply",
         json!({"operations": [
@@ -638,8 +637,7 @@ async fn read_board_and_read_element_show_inner_boards_also_from_hand_edited_fil
             {"op": "place_element", "element": {"new": "pay"}, "board": {"new": "inside"}}
         ]}),
     )
-    .await??;
-    assert_eq!(applied.is_error, Some(false), "{applied:?}");
+    .await?;
     let boards = directory.path().join("abyme/boards");
     // A hand edit closes a cycle: the context is the inside of payments,
     // which lies inside the shop on the context.
@@ -657,7 +655,7 @@ async fn read_board_and_read_element_show_inner_boards_also_from_hand_edited_fil
     let context = call(&session, "read_board", json!({"board": "context"})).await??;
     let inside = call(&session, "read_board", json!({"board": "shop-containers"})).await??;
     let orphan = call(&session, "read_board", json!({"board": "orphan"})).await??;
-    let payments = call(&session, "read_element", json!({"element": "payments"})).await??;
+    let payments = call_ok(&session, "read_element", json!({"element": "payments"})).await?;
 
     assert_eq!(
         text(&context),
@@ -682,24 +680,20 @@ async fn read_board_and_read_element_show_inner_boards_also_from_hand_edited_fil
         text(&orphan),
         format!("{unavailable}Board: orphan · Orphan\nInside of: gone ⚠ missing\n\n")
     );
-    assert_eq!(payments.is_error, Some(false), "{payments:?}");
     assert!(
-        text(&payments).contains("\nBoards: shop-containers\nInner board: context\n"),
-        "{}",
-        text(&payments)
+        payments.contains("\nBoards: shop-containers\nInner board: context\n"),
+        "{payments}"
     );
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 #[tokio::test]
 async fn apply_creates_and_deletes_relations_in_the_element_files() -> TestResult {
-    let directory = project()?;
-    let session = start(directory.path()).await?;
-    call(&session, "apply", create_board_with_element()).await??;
+    let (directory, session) = started_project().await?;
+    call_ok(&session, "apply", create_board_with_element()).await?;
     let element_file = directory.path().join("abyme/elements/payment-service.md");
 
-    let created = call(
+    call_ok(
         &session,
         "apply",
         json!({"operations": [
@@ -710,8 +704,7 @@ async fn apply_creates_and_deletes_relations_in_the_element_files() -> TestResul
              "to": {"new": "db"}}
         ]}),
     )
-    .await??;
-    assert_eq!(created.is_error, Some(false), "{created:?}");
+    .await?;
     assert_eq!(
         fs::read_to_string(&element_file)?,
         "---\n\
@@ -725,7 +718,7 @@ async fn apply_creates_and_deletes_relations_in_the_element_files() -> TestResul
          ---\n"
     );
 
-    let deleted = call(
+    call_ok(
         &session,
         "apply",
         json!({"operations": [
@@ -733,22 +726,19 @@ async fn apply_creates_and_deletes_relations_in_the_element_files() -> TestResul
              "to": {"existing": "orders-db"}}
         ]}),
     )
-    .await??;
-    assert_eq!(deleted.is_error, Some(false), "{deleted:?}");
+    .await?;
     let text_after = fs::read_to_string(&element_file)?;
     assert!(!text_after.contains("depends_on"), "{text_after}");
     assert!(text_after.contains("{kind: \"uses\", to: \"orders-db\", label: \"SQL\"}"));
 
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 #[tokio::test]
 async fn read_board_shows_relations_with_their_labels_escaped_onto_one_line() -> TestResult {
-    let directory = project()?;
-    let session = start(directory.path()).await?;
-    call(&session, "apply", create_board_with_element()).await??;
-    let applied = call(
+    let (_directory, session) = started_project().await?;
+    call_ok(&session, "apply", create_board_with_element()).await?;
+    call_ok(
         &session,
         "apply",
         json!({"operations": [
@@ -758,14 +748,12 @@ async fn read_board_shows_relations_with_their_labels_escaped_onto_one_line() ->
              "to": {"new": "db"}, "label": "SQL\nBoard: forged \u{202e}x"}
         ]}),
     )
-    .await??;
-    assert_eq!(applied.is_error, Some(false), "{applied:?}");
+    .await?;
 
-    let read = call(&session, "read_board", json!({"board": "container-level"})).await??;
+    let read = call_ok(&session, "read_board", json!({"board": "container-level"})).await?;
 
-    assert_eq!(read.is_error, Some(false), "{read:?}");
     assert_eq!(
-        text(&read),
+        read,
         "Review flags unavailable: the project lies in no Git repository\n\
          Board: container-level · Container Level\n\
          \n\
@@ -775,15 +763,13 @@ async fn read_board_shows_relations_with_their_labels_escaped_onto_one_line() ->
          payment-service → orders-db  uses  SQL\\nBoard: forged \\u{202e}x\n"
     );
 
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 #[tokio::test]
 async fn read_element_shows_an_element_with_its_relations_and_description() -> TestResult {
-    let directory = project()?;
-    let session = start(directory.path()).await?;
-    let applied = call(
+    let (_directory, session) = started_project().await?;
+    call_ok(
         &session,
         "apply",
         json!({"operations": [
@@ -799,19 +785,17 @@ async fn read_element_shows_an_element_with_its_relations_and_description() -> T
              "label": "REST"}
         ]}),
     )
-    .await??;
-    assert_eq!(applied.is_error, Some(false), "{applied:?}");
+    .await?;
 
-    let read = call(
+    let read = call_ok(
         &session,
         "read_element",
         json!({"element": "payment-service"}),
     )
-    .await??;
+    .await?;
 
-    assert_eq!(read.is_error, Some(false), "{read:?}");
     assert_eq!(
-        text(&read),
+        read,
         "Review flags unavailable: the project lies in no Git repository\n\
          Element: payment-service · Payment Service\n\
          Type: c4/container\n\
@@ -833,17 +817,15 @@ async fn read_element_shows_an_element_with_its_relations_and_description() -> T
          Refunds\\u{202e} run later.\n"
     );
 
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 #[tokio::test]
 async fn apply_updates_an_element_and_read_element_shows_it() -> TestResult {
-    let directory = project()?;
-    let session = start(directory.path()).await?;
-    call(&session, "apply", create_board_with_element()).await??;
+    let (_directory, session) = started_project().await?;
+    call_ok(&session, "apply", create_board_with_element()).await?;
 
-    let updated = call(
+    call_ok(
         &session,
         "apply",
         json!({"operations": [
@@ -851,8 +833,7 @@ async fn apply_updates_an_element_and_read_element_shows_it() -> TestResult {
              "summary": null, "body": "Handles payments.\n"}
         ]}),
     )
-    .await??;
-    assert_eq!(updated.is_error, Some(false), "{updated:?}");
+    .await?;
 
     let read = call(
         &session,
@@ -881,18 +862,16 @@ async fn apply_updates_an_element_and_read_element_shows_it() -> TestResult {
          Handles payments.\n"
     );
 
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 #[tokio::test]
 async fn a_rejected_update_is_a_tool_error_and_changes_no_file() -> TestResult {
-    let directory = project()?;
-    let session = start(directory.path()).await?;
-    call(&session, "apply", create_board_with_element()).await??;
+    let (directory, session) = started_project().await?;
+    call_ok(&session, "apply", create_board_with_element()).await?;
     let before = files(directory.path())?;
 
-    let rejected = call(
+    let rejected = call_refused(
         &session,
         "apply",
         json!({"operations": [
@@ -900,17 +879,12 @@ async fn a_rejected_update_is_a_tool_error_and_changes_no_file() -> TestResult {
             {"op": "update_element", "element": {"existing": "nowhere"}, "name": "x"}
         ]}),
     )
-    .await??;
+    .await?;
 
-    assert_eq!(rejected.is_error, Some(true), "{rejected:?}");
-    assert_eq!(
-        text(&rejected),
-        "operation 2: no element has the ID nowhere"
-    );
+    assert_eq!(rejected, "operation 2: no element has the ID nowhere");
     assert_eq!(files(directory.path())?, before);
 
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 /// A hand-written element file with an anchor and a stamp by a person.
@@ -931,7 +905,8 @@ async fn apply_sets_and_changes_anchors_and_a_changed_anchor_removes_the_stamp()
     let directory = project_with_a_stamped_element()?;
     let session = start(directory.path()).await?;
 
-    let created = call(
+    // A colon is refused.
+    call_refused(
         &session,
         "apply",
         json!({"operations": [
@@ -939,13 +914,8 @@ async fn apply_sets_and_changes_anchors_and_a_changed_anchor_removes_the_stamp()
              "anchor": "docs/a \"b\" #c: d"}
         ]}),
     )
-    .await??;
-    assert_eq!(
-        created.is_error,
-        Some(true),
-        "a colon is refused: {created:?}"
-    );
-    let created = call(
+    .await?;
+    call_ok(
         &session,
         "apply",
         json!({"operations": [
@@ -953,8 +923,7 @@ async fn apply_sets_and_changes_anchors_and_a_changed_anchor_removes_the_stamp()
              "anchor": "docs/a \"b\" #c"}
         ]}),
     )
-    .await??;
-    assert_eq!(created.is_error, Some(false), "{created:?}");
+    .await?;
     let read = call(&session, "read_element", json!({"element": "docs-page"})).await??;
     assert!(
         text(&read).starts_with(
@@ -979,15 +948,14 @@ async fn apply_sets_and_changes_anchors_and_a_changed_anchor_removes_the_stamp()
         text(&read)
     );
 
-    let changed = call(
+    call_ok(
         &session,
         "apply",
         json!({"operations": [
             {"op": "update_element", "element": {"existing": "stamped"}, "anchor": "crates/other"}
         ]}),
     )
-    .await??;
-    assert_eq!(changed.is_error, Some(false), "{changed:?}");
+    .await?;
     let read = call(&session, "read_element", json!({"element": "stamped"})).await??;
     assert!(
         text(&read).contains("\nAnchor: crates/other\nVerified: none\n"),
@@ -1004,8 +972,7 @@ async fn apply_sets_and_changes_anchors_and_a_changed_anchor_removes_the_stamp()
          ---\n"
     );
 
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 #[tokio::test]
@@ -1013,15 +980,14 @@ async fn apply_removes_the_stamp_when_the_content_of_an_element_changes() -> Tes
     let directory = project_with_a_stamped_element()?;
     let session = start(directory.path()).await?;
 
-    let renamed = call(
+    call_ok(
         &session,
         "apply",
         json!({"operations": [
             {"op": "update_element", "element": {"existing": "stamped"}, "name": "Renamed"}
         ]}),
     )
-    .await??;
-    assert_eq!(renamed.is_error, Some(false), "{renamed:?}");
+    .await?;
 
     let read = call(&session, "read_element", json!({"element": "stamped"})).await??;
     assert!(
@@ -1032,8 +998,7 @@ async fn apply_removes_the_stamp_when_the_content_of_an_element_changes() -> Tes
     let file = fs::read_to_string(directory.path().join("abyme/elements/stamped.md"))?;
     assert!(!file.contains("verified"), "{file}");
 
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 /// A project at the top of a Git repository whose element `x` is anchored
@@ -1072,21 +1037,11 @@ async fn read_element_shows_the_review_flags_git_reports() -> TestResult {
     )
     .await?;
 
-    let read = call(&session, "read_element", json!({"element": "x"})).await??;
+    let read = call_ok(&session, "read_element", json!({"element": "x"})).await?;
 
-    assert_eq!(read.is_error, Some(false), "{read:?}");
-    assert!(
-        text(&read).starts_with("Element: x · X\n"),
-        "{}",
-        text(&read)
-    );
-    assert!(
-        text(&read).contains(CHANGED_ANCHOR_REVIEW),
-        "{}",
-        text(&read)
-    );
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    assert!(read.starts_with("Element: x · X\n"), "{read}");
+    assert!(read.contains(CHANGED_ANCHOR_REVIEW), "{read}");
+    closed(session).await
 }
 
 /// Writes the element `id` with the given anchor and stamp into the
@@ -1153,17 +1108,14 @@ async fn read_element_shows_each_kind_of_review_flag() -> TestResult {
     ];
 
     for (id, review) in cases {
-        let read = call(&session, "read_element", json!({"element": id})).await??;
+        let read = call_ok(&session, "read_element", json!({"element": id})).await?;
 
-        assert_eq!(read.is_error, Some(false), "{read:?}");
         assert!(
-            text(&read).contains(&format!("\n{review}Boards: none\n")),
-            "{id}: {}",
-            text(&read)
+            read.contains(&format!("\n{review}Boards: none\n")),
+            "{id}: {read}"
         );
     }
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 #[tokio::test]
@@ -1213,8 +1165,7 @@ async fn read_element_shows_flags_passed_on_along_relations() -> TestResult {
         assert!(!line.contains("schema.sql"), "{line}");
         assert!(!line.contains("secret"), "{line}");
     }
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 /// A project in a Git repository with the elements `changed`, anchored on
@@ -1293,8 +1244,7 @@ async fn read_board_marks_the_elements_to_review() -> TestResult {
         "{}",
         text(&detail)
     );
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 #[tokio::test]
@@ -1308,18 +1258,16 @@ async fn verify_stamps_a_checked_element_and_clears_its_flag() -> TestResult {
     )
     .await?;
 
-    let verified = call(&session, "verify", json!({"element": "x"})).await??;
+    let verified = call_ok(&session, "verify", json!({"element": "x"})).await?;
     let read = call(&session, "read_element", json!({"element": "x"})).await??;
 
-    assert_eq!(verified.is_error, Some(false), "{verified:?}");
-    assert_eq!(text(&verified), format!("Verified x against {head} by ai."));
+    assert_eq!(verified, format!("Verified x against {head} by ai."));
     assert!(
         text(&read).contains(&format!("\nVerified: {head} by ai\nReview: none\n")),
         "{}",
         text(&read)
     );
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 #[tokio::test]
@@ -1346,25 +1294,20 @@ async fn verify_refuses_and_writes_nothing() -> TestResult {
     ];
 
     for (arguments, expected) in cases {
-        let refused = call(&session, "verify", arguments).await??;
+        let refused = call_refused(&session, "verify", arguments).await?;
 
-        assert_eq!(refused.is_error, Some(true), "{refused:?}");
-        assert_eq!(text(&refused), expected);
+        assert_eq!(refused, expected);
     }
     for arguments in [
         json!({"element": "x", "commit": "0123456789abcdef0123456789abcdef01234567", "by": "person"}),
         json!({"element": "../x"}),
     ] {
-        let refused = call(&session, "verify", arguments).await??;
+        let refused = call_refused(&session, "verify", arguments).await?;
 
-        assert_eq!(refused.is_error, Some(true), "{refused:?}");
-        assert!(
-            text(&refused).starts_with("invalid arguments: "),
-            "{refused:?}"
-        );
+        assert!(refused.starts_with("invalid arguments: "), "{refused:?}");
     }
     assert_eq!(files(&abyme)?, before);
-    assert_only_protocol_messages(&finish(session).await?);
+    closed(session).await?;
 
     let session = start_with(directory.path(), &[("PATH", empty_path.path().as_os_str())]).await?;
     let refused = call(&session, "verify", json!({"element": "x"})).await??;
@@ -1373,8 +1316,7 @@ async fn verify_refuses_and_writes_nothing() -> TestResult {
         "element x cannot be verified: git could not be run"
     );
     assert_eq!(files(&abyme)?, before);
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 #[tokio::test]
@@ -1391,16 +1333,14 @@ async fn verify_refuses_in_a_repository_without_a_commit() -> TestResult {
     )
     .await?;
 
-    let refused = call(&session, "verify", json!({"element": "x"})).await??;
+    let refused = call_refused(&session, "verify", json!({"element": "x"})).await?;
 
-    assert_eq!(refused.is_error, Some(true), "{refused:?}");
     assert_eq!(
-        text(&refused),
+        refused,
         "element x cannot be verified: the repository has no commit yet"
     );
     assert_eq!(files(&abyme)?, before);
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 #[tokio::test]
@@ -1413,47 +1353,40 @@ async fn status_lists_the_elements_to_review_without_file_names() -> TestResult 
     )
     .await?;
 
-    let status = call(&session, "status", json!({})).await??;
+    let status = call_ok(&session, "status", json!({})).await?;
 
-    assert_eq!(status.is_error, Some(false), "{status:?}");
     assert_eq!(
-        text(&status),
+        status,
         "Elements to review: 1 with a task, 1 with only a hint.\n\
          changed  t  N    ⚠ task\n\
          hinted   t  N    ⚠ hint\n"
     );
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 #[tokio::test]
 async fn status_names_why_review_flags_are_unavailable_and_takes_no_argument() -> TestResult {
-    let directory = project()?;
-    let session = start(directory.path()).await?;
+    let (_directory, session) = started_project().await?;
 
-    let unavailable = call(&session, "status", json!({})).await??;
-    let with_argument = call(&session, "status", json!({"x": 1})).await??;
+    let unavailable = call_refused(&session, "status", json!({})).await?;
+    let with_argument = call_refused(&session, "status", json!({"x": 1})).await?;
 
-    assert_eq!(unavailable.is_error, Some(true), "{unavailable:?}");
     assert_eq!(
-        text(&unavailable),
+        unavailable,
         "Review flags unavailable: the project lies in no Git repository"
     );
-    assert_eq!(with_argument.is_error, Some(true), "{with_argument:?}");
     assert!(
-        text(&with_argument).starts_with("invalid arguments: "),
+        with_argument.starts_with("invalid arguments: "),
         "{with_argument:?}"
     );
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 #[tokio::test]
 async fn overview_lists_the_boards_as_a_tree_also_from_hand_edited_files() -> TestResult {
-    let directory = project()?;
+    let (directory, session) = started_project().await?;
     let root = directory.path();
-    let session = start(root).await?;
-    let applied = call(
+    call_ok(
         &session,
         "apply",
         json!({"operations": [
@@ -1467,8 +1400,7 @@ async fn overview_lists_the_boards_as_a_tree_also_from_hand_edited_files() -> Te
             {"op": "create_board", "key": "parts", "title": "Payment Parts", "owner": {"new": "pay"}}
         ]}),
     )
-    .await??;
-    assert_eq!(applied.is_error, Some(false), "{applied:?}");
+    .await?;
     // Hand edits make `loop-a` and `loop-b` lie inside each other, with a
     // title that tries to clear the screen and break the line.
     write_element(root, "ia", None, None)?;
@@ -1487,12 +1419,11 @@ async fn overview_lists_the_boards_as_a_tree_also_from_hand_edited_files() -> Te
         )?;
     }
 
-    let overview = call(&session, "overview", json!({})).await??;
-    let with_argument = call(&session, "overview", json!({"x": 1})).await??;
+    let overview = call_ok(&session, "overview", json!({})).await?;
+    let with_argument = call_refused(&session, "overview", json!({"x": 1})).await?;
 
-    assert_eq!(overview.is_error, Some(false), "{overview:?}");
     assert_eq!(
-        text(&overview),
+        overview,
         [
             "Review flags unavailable: the project lies in no Git repository".to_owned(),
             format!(
@@ -1523,13 +1454,11 @@ async fn overview_lists_the_boards_as_a_tree_also_from_hand_edited_files() -> Te
         ]
         .join("\n")
     );
-    assert_eq!(with_argument.is_error, Some(true), "{with_argument:?}");
     assert!(
-        text(&with_argument).starts_with("invalid arguments: "),
+        with_argument.starts_with("invalid arguments: "),
         "{with_argument:?}"
     );
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 #[tokio::test]
@@ -1546,8 +1475,7 @@ async fn overview_counts_the_flags_of_each_board_s_own_elements() -> TestResult 
 
     // `ghost` has no file, so four elements count.
     assert_eq!(text(&overview), "b  B    4 elements  ⚠ 1 task, 1 hint\n");
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 #[tokio::test]
@@ -1573,8 +1501,7 @@ async fn overview_lists_at_most_fifty_boards() -> TestResult {
     assert_eq!(lines.get(1), Some(&"b00  T    0 elements"));
     assert_eq!(lines.get(50), Some(&"b49  T    0 elements"));
     assert_eq!(lines.last(), Some(&"… and 3 more boards"));
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 #[tokio::test]
@@ -1593,19 +1520,17 @@ async fn overview_answers_whatever_the_size_of_a_title() -> TestResult {
     )?;
     let session = start(directory.path()).await?;
 
-    let overview = call(&session, "overview", json!({})).await??;
+    let overview = call_ok(&session, "overview", json!({})).await?;
 
-    assert_eq!(overview.is_error, Some(false), "{overview:?}");
     assert_eq!(
-        text(&overview),
+        overview,
         format!(
             "Review flags unavailable: the project lies in no Git repository\n\
              big  {}…    0 elements\n",
             "\\u{202e}".repeat(80)
         )
     );
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 #[tokio::test]
@@ -1632,8 +1557,7 @@ async fn read_element_asks_the_project_repository_whatever_git_variables_say() -
         "{}",
         text(&read)
     );
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 #[tokio::test]
@@ -1671,7 +1595,7 @@ async fn read_element_names_why_review_flags_are_unavailable() -> TestResult {
         assert!(!reply.contains("fatal"), "{reply}");
         assert!(!reply.contains("error:"), "{reply}");
         assert!(!reply.contains(&directory.display().to_string()), "{reply}");
-        assert_only_protocol_messages(&finish(session).await?);
+        closed(session).await?;
     }
     Ok(())
 }
@@ -1690,30 +1614,26 @@ async fn apply_refuses_to_set_a_stamp_and_changes_no_file() -> TestResult {
         let mut update =
             json!({"op": "update_element", "element": {"existing": "stamped"}, "name": "X"});
         update[field] = json!(value);
-        let refused = call(&session, "apply", json!({"operations": [update]})).await??;
+        let refused = call_refused(&session, "apply", json!({"operations": [update]})).await?;
 
-        assert_eq!(refused.is_error, Some(true), "{refused:?}");
-        assert!(text(&refused).contains(field), "{}", text(&refused));
+        assert!(refused.contains(field), "{refused}");
         assert_eq!(files(directory.path())?, before);
     }
 
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 #[tokio::test]
 async fn apply_deletes_an_element_and_read_board_no_longer_shows_it() -> TestResult {
-    let directory = project()?;
-    let session = start(directory.path()).await?;
-    call(&session, "apply", create_board_with_element()).await??;
+    let (directory, session) = started_project().await?;
+    call_ok(&session, "apply", create_board_with_element()).await?;
 
-    let deleted = call(
+    call_ok(
         &session,
         "apply",
         json!({"operations": [{"op": "delete_element", "element": {"existing": "payment-service"}}]}),
     )
-    .await??;
-    assert_eq!(deleted.is_error, Some(false), "{deleted:?}");
+    .await?;
 
     let read = call(&session, "read_board", json!({"board": "container-level"})).await??;
     assert_eq!(
@@ -1727,16 +1647,14 @@ async fn apply_deletes_an_element_and_read_board_no_longer_shows_it() -> TestRes
             .exists()
     );
 
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 #[tokio::test]
 async fn apply_refuses_to_delete_an_element_that_others_relate_to() -> TestResult {
-    let directory = project()?;
-    let session = start(directory.path()).await?;
-    call(&session, "apply", create_board_with_element()).await??;
-    call(
+    let (directory, session) = started_project().await?;
+    call_ok(&session, "apply", create_board_with_element()).await?;
+    call_ok(
         &session,
         "apply",
         json!({"operations": [
@@ -1745,82 +1663,72 @@ async fn apply_refuses_to_delete_an_element_that_others_relate_to() -> TestResul
              "to": {"existing": "payment-service"}, "label": "SECRET-LABEL"}
         ]}),
     )
-    .await??;
+    .await?;
     let before = files(directory.path())?;
 
-    let refused = call(
+    let refused = call_refused(
         &session,
         "apply",
         json!({"operations": [{"op": "delete_element", "element": {"existing": "payment-service"}}]}),
     )
-    .await??;
+    .await?;
 
-    assert_eq!(refused.is_error, Some(true), "{refused:?}");
     assert_eq!(
-        text(&refused),
+        refused,
         "operation 1: element payment-service is still the target of relations from \
          web-shop (uses); delete those first"
     );
     assert_eq!(files(directory.path())?, before);
 
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 #[tokio::test]
 async fn read_element_names_an_element_without_a_file() -> TestResult {
-    let directory = project()?;
-    let session = start(directory.path()).await?;
-    call(&session, "apply", create_board_with_element()).await??;
+    let (directory, session) = started_project().await?;
+    call_ok(&session, "apply", create_board_with_element()).await?;
     fs::remove_file(directory.path().join("abyme/elements/payment-service.md"))?;
 
     for id in ["nowhere", "payment-service"] {
-        let read = call(&session, "read_element", json!({"element": id})).await??;
+        let read = call_refused(&session, "read_element", json!({"element": id})).await?;
 
-        assert_eq!(read.is_error, Some(true), "{read:?}");
-        assert_eq!(text(&read), format!("no element has the ID {id}"));
+        assert_eq!(read, format!("no element has the ID {id}"));
     }
 
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 #[tokio::test]
 async fn read_element_answers_with_an_error_rather_than_a_cut_detail() -> TestResult {
-    let directory = project()?;
-    let session = start(directory.path()).await?;
+    let (_directory, session) = started_project().await?;
     let body = "\u{202e}".repeat(300_000);
-    let applied = call(
+    call_ok(
         &session,
         "apply",
         json!({"operations": [
             {"op": "create_element", "key": "big", "type_ref": "t", "name": "Big", "body": body}
         ]}),
     )
-    .await??;
-    assert_eq!(applied.is_error, Some(false), "{applied:?}");
+    .await?;
 
-    let read = call(&session, "read_element", json!({"element": "big"})).await??;
+    let read = call_refused(&session, "read_element", json!({"element": "big"})).await?;
 
-    assert_eq!(read.is_error, Some(true), "{read:?}");
     assert!(
-        text(&read).starts_with("the detail of element big has "),
+        read.starts_with("the detail of element big has "),
         "{read:?}"
     );
-    assert!(!text(&read).contains('\u{202e}'), "{read:?}");
+    assert!(!read.contains('\u{202e}'), "{read:?}");
 
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 #[tokio::test]
 async fn apply_refuses_an_unknown_relation_kind_and_changes_no_file() -> TestResult {
-    let directory = project()?;
-    let session = start(directory.path()).await?;
-    call(&session, "apply", create_board_with_element()).await??;
+    let (directory, session) = started_project().await?;
+    call_ok(&session, "apply", create_board_with_element()).await?;
     let before = files(directory.path())?;
 
-    let rejected = call(
+    let rejected = call_refused(
         &session,
         "apply",
         json!({"operations": [
@@ -1828,22 +1736,19 @@ async fn apply_refuses_an_unknown_relation_kind_and_changes_no_file() -> TestRes
              "to": {"existing": "payment-service"}, "label": "SECRET-LABEL"}
         ]}),
     )
-    .await??;
+    .await?;
 
-    assert_eq!(rejected.is_error, Some(true), "{rejected:?}");
-    assert!(text(&rejected).contains("contains"), "{rejected:?}");
-    assert!(!text(&rejected).contains("SECRET"), "{rejected:?}");
+    assert!(rejected.contains("contains"), "{rejected:?}");
+    assert!(!rejected.contains("SECRET"), "{rejected:?}");
     assert_eq!(files(directory.path())?, before);
 
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 #[tokio::test]
 async fn apply_moves_an_element_and_refuses_a_position_out_of_range() -> TestResult {
-    let directory = project()?;
-    let session = start(directory.path()).await?;
-    call(&session, "apply", create_board_with_element()).await??;
+    let (directory, session) = started_project().await?;
+    call_ok(&session, "apply", create_board_with_element()).await?;
     let board_file = directory
         .path()
         .join("abyme/boards/container-level.board.json");
@@ -1852,10 +1757,9 @@ async fn apply_moves_an_element_and_refuses_a_position_out_of_range() -> TestRes
                                "board": {"existing": "container-level"}, "x": x, "y": y}]})
     };
 
-    let moved = call(&session, "apply", move_to(400, 200)).await??;
+    let moved = call_ok(&session, "apply", move_to(400, 200)).await?;
 
-    assert_eq!(moved.is_error, Some(false), "{moved:?}");
-    assert_eq!(text(&moved), "The request created nothing.");
+    assert_eq!(moved, "The request created nothing.");
     let board = fs::read_to_string(&board_file)?;
     assert!(
         board.contains(
@@ -1865,24 +1769,21 @@ async fn apply_moves_an_element_and_refuses_a_position_out_of_range() -> TestRes
     );
 
     let before = fs::read(&board_file)?;
-    let refused = call(&session, "apply", move_to(1_000_001, 0)).await??;
+    let refused = call_refused(&session, "apply", move_to(1_000_001, 0)).await?;
 
-    assert_eq!(refused.is_error, Some(true), "{refused:?}");
     assert_eq!(
-        text(&refused),
+        refused,
         "operation 1: the position x 1000001, y 0 lies outside -1000000 to 1000000"
     );
     assert_eq!(fs::read(&board_file)?, before);
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 #[tokio::test]
 async fn apply_moves_a_pinned_element_only_when_the_request_says_what_becomes_of_the_pin()
 -> TestResult {
-    let directory = project()?;
-    let session = start(directory.path()).await?;
-    call(&session, "apply", create_board_with_element()).await??;
+    let (directory, session) = started_project().await?;
+    call_ok(&session, "apply", create_board_with_element()).await?;
     let board_file = directory
         .path()
         .join("abyme/boards/container-level.board.json");
@@ -1900,18 +1801,16 @@ async fn apply_moves_a_pinned_element_only_when_the_request_says_what_becomes_of
         )
     };
 
-    let pinned = call(&session, "apply", move_with(json!(true))).await??;
+    call_ok(&session, "apply", move_with(json!(true))).await?;
 
-    assert_eq!(pinned.is_error, Some(false), "{pinned:?}");
     let board = fs::read_to_string(&board_file)?;
     assert!(board.contains(&line(r#", "pinned": true"#)), "{board}");
 
     let before = fs::read(&board_file)?;
-    let refused = call(&session, "apply", move_with(Value::Null)).await??;
+    let refused = call_refused(&session, "apply", move_with(Value::Null)).await?;
 
-    assert_eq!(refused.is_error, Some(true), "{refused:?}");
     assert!(
-        text(&refused).contains("is pinned on board container-level"),
+        refused.contains("is pinned on board container-level"),
         "{refused:?}"
     );
     assert_eq!(fs::read(&board_file)?, before);
@@ -1927,22 +1826,19 @@ async fn apply_moves_a_pinned_element_only_when_the_request_says_what_becomes_of
         "{coordinates:?}"
     );
 
-    let released = call(&session, "apply", move_with(json!(false))).await??;
+    call_ok(&session, "apply", move_with(json!(false))).await?;
 
-    assert_eq!(released.is_error, Some(false), "{released:?}");
     let board = fs::read_to_string(&board_file)?;
     assert!(board.contains(&line("")), "{board}");
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 #[tokio::test]
 async fn apply_lays_out_a_board_by_its_relations_and_keeps_a_pin() -> TestResult {
-    let directory = project()?;
-    let session = start(directory.path()).await?;
+    let (directory, session) = started_project().await?;
     let board_file = directory.path().join("abyme/boards/b.board.json");
 
-    let built = call(
+    call_ok(
         &session,
         "apply",
         json!({"operations": [
@@ -1955,9 +1851,8 @@ async fn apply_lays_out_a_board_by_its_relations_and_keeps_a_pin() -> TestResult
             {"op": "layout_board", "board": {"new": "b"}}
         ]}),
     )
-    .await??;
+    .await?;
 
-    assert_eq!(built.is_error, Some(false), "{built:?}");
     let board = fs::read_to_string(&board_file)?;
     assert!(
         board.contains(r#"{"element": "upper", "x": 0, "y": 0, "width": 180, "height": 90}"#),
@@ -1968,7 +1863,7 @@ async fn apply_lays_out_a_board_by_its_relations_and_keeps_a_pin() -> TestResult
         "{board}"
     );
 
-    let pinned = call(
+    call_ok(
         &session,
         "apply",
         json!({"operations": [
@@ -1977,9 +1872,8 @@ async fn apply_lays_out_a_board_by_its_relations_and_keeps_a_pin() -> TestResult
             {"op": "layout_board", "board": {"existing": "b"}}
         ]}),
     )
-    .await??;
+    .await?;
 
-    assert_eq!(pinned.is_error, Some(false), "{pinned:?}");
     let board = fs::read_to_string(&board_file)?;
     assert!(
         board.contains(
@@ -1991,14 +1885,12 @@ async fn apply_lays_out_a_board_by_its_relations_and_keeps_a_pin() -> TestResult
         board.contains(r#"{"element": "upper", "x": 0, "y": 0, "width": 180, "height": 90}"#),
         "{board}"
     );
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 #[tokio::test]
 async fn apply_gives_an_element_a_statement_kind_of_its_own() -> TestResult {
-    let directory = project()?;
-    let session = start(directory.path()).await?;
+    let (directory, session) = started_project().await?;
     let file = directory.path().join("abyme/elements/note.md");
     let applied = |operation: Value| json!({"operations": [operation]});
     let update = |statement: Value| {
@@ -2007,7 +1899,7 @@ async fn apply_gives_an_element_a_statement_kind_of_its_own() -> TestResult {
         )
     };
 
-    let created = call(
+    call_ok(
         &session,
         "apply",
         applied(
@@ -2015,35 +1907,29 @@ async fn apply_gives_an_element_a_statement_kind_of_its_own() -> TestResult {
                        "statement": "question"}),
         ),
     )
-    .await??;
+    .await?;
 
-    assert_eq!(created.is_error, Some(false), "{created:?}");
     assert!(fs::read_to_string(&file)?.contains("statement: \"question\"\n"));
 
-    let changed = call(&session, "apply", update(json!("decision"))).await??;
+    call_ok(&session, "apply", update(json!("decision"))).await?;
 
-    assert_eq!(changed.is_error, Some(false), "{changed:?}");
     assert!(fs::read_to_string(&file)?.contains("statement: \"decision\"\n"));
 
     let before = fs::read(&file)?;
-    let refused = call(&session, "apply", update(json!("historic"))).await??;
+    call_refused(&session, "apply", update(json!("historic"))).await?;
 
-    assert_eq!(refused.is_error, Some(true), "{refused:?}");
     assert_eq!(fs::read(&file)?, before);
 
-    let removed = call(&session, "apply", update(Value::Null)).await??;
+    call_ok(&session, "apply", update(Value::Null)).await?;
 
-    assert_eq!(removed.is_error, Some(false), "{removed:?}");
     assert!(!fs::read_to_string(&file)?.contains("statement"));
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 #[tokio::test]
 async fn an_own_kind_wins_over_the_zone_in_the_read_tools() -> TestResult {
-    let directory = project()?;
-    let session = start(directory.path()).await?;
-    let built = call(
+    let (_directory, session) = started_project().await?;
+    call_ok(
         &session,
         "apply",
         json!({"operations": [
@@ -2056,8 +1942,7 @@ async fn an_own_kind_wins_over_the_zone_in_the_read_tools() -> TestResult {
             {"op": "place_element", "element": {"new": "f"}, "board": {"new": "b"}}
         ]}),
     )
-    .await??;
-    assert_eq!(built.is_error, Some(false), "{built:?}");
+    .await?;
 
     let board = call(&session, "read_board", json!({"board": "b"})).await??;
     let detail = call(&session, "read_element", json!({"element": "open-point"})).await??;
@@ -2086,14 +1971,13 @@ async fn an_own_kind_wins_over_the_zone_in_the_read_tools() -> TestResult {
         "{plain:?}"
     );
 
-    let changed = call(
+    call_ok(
         &session,
         "apply",
         json!({"operations": [{"op": "update_element", "element": {"existing": "open-point"},
                                "statement": "decision"}]}),
     )
-    .await??;
-    assert_eq!(changed.is_error, Some(false), "{changed:?}");
+    .await?;
     let detail = call(&session, "read_element", json!({"element": "open-point"})).await??;
 
     assert!(
@@ -2101,35 +1985,31 @@ async fn an_own_kind_wins_over_the_zone_in_the_read_tools() -> TestResult {
         "{detail:?}"
     );
     assert!(text(&detail).contains("\nVerified: none\n"), "{detail:?}");
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 #[tokio::test]
 async fn read_board_shows_coordinates_only_on_request() -> TestResult {
-    let directory = project()?;
-    let session = start(directory.path()).await?;
-    call(&session, "apply", create_board_with_element()).await??;
-    let moved = call(
+    let (_directory, session) = started_project().await?;
+    call_ok(&session, "apply", create_board_with_element()).await?;
+    call_ok(
         &session,
         "apply",
         json!({"operations": [{"op": "move_element", "element": {"existing": "payment-service"},
                                "board": {"existing": "container-level"}, "x": 400, "y": 200}]}),
     )
-    .await??;
-    assert_eq!(moved.is_error, Some(false), "{moved:?}");
+    .await?;
 
-    let with = call(
+    let with = call_ok(
         &session,
         "read_board",
         json!({"board": "container-level", "coordinates": true}),
     )
-    .await??;
+    .await?;
     let without = call(&session, "read_board", json!({"board": "container-level"})).await??;
 
-    assert_eq!(with.is_error, Some(false), "{with:?}");
     assert_eq!(
-        text(&with),
+        with,
         "Review flags unavailable: the project lies in no Git repository\n\
          Board: container-level · Container Level\n\
          \n\
@@ -2142,14 +2022,12 @@ async fn read_board_shows_coordinates_only_on_request() -> TestResult {
          \n\
          payment-service  c4/container  Payment Service  Payments through Stripe\n"
     );
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 #[tokio::test]
 async fn read_board_takes_coordinates_only_as_an_optional_boolean() -> TestResult {
-    let directory = project()?;
-    let session = start(directory.path()).await?;
+    let (_directory, session) = started_project().await?;
 
     let tools = tokio::time::timeout(TIMEOUT, session.client.list_all_tools()).await??;
     let read_board = tools
@@ -2182,22 +2060,19 @@ async fn read_board_takes_coordinates_only_as_an_optional_boolean() -> TestResul
         json!({"board": "main", "coordinates": null}),
         json!({"coordinates": true}),
     ] {
-        let result = call(&session, "read_board", arguments.clone()).await??;
+        let result = call_refused(&session, "read_board", arguments.clone()).await?;
 
-        assert_eq!(result.is_error, Some(true), "{arguments}: {result:?}");
         assert!(
-            text(&result).starts_with("invalid arguments: "),
-            "{result:?}"
+            result.starts_with("invalid arguments: "),
+            "{arguments}: {result:?}"
         );
     }
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 #[tokio::test]
 async fn an_unknown_tool_is_a_protocol_error_and_the_server_keeps_serving() -> TestResult {
-    let directory = project()?;
-    let session = start(directory.path()).await?;
+    let (_directory, session) = started_project().await?;
 
     let unknown = call(&session, "delete_everything", json!({})).await?;
 
@@ -2205,11 +2080,9 @@ async fn an_unknown_tool_is_a_protocol_error_and_the_server_keeps_serving() -> T
         Err(ServiceError::McpError(error)) => assert_eq!(error.code, ErrorCode::INVALID_PARAMS),
         other => panic!("expected a protocol error, got {other:?}"),
     }
-    let applied = call(&session, "apply", create_board_with_element()).await??;
-    assert_eq!(applied.is_error, Some(false), "{applied:?}");
+    call_ok(&session, "apply", create_board_with_element()).await?;
 
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 /// The server has a cache and a way out to the network here, so the test
@@ -2230,16 +2103,15 @@ async fn without_a_project_every_tool_asks_for_init_and_writes_nothing() -> Test
     )
     .await?;
 
-    let applied = call(&session, "apply", create_board_with_element()).await??;
-    let read = call(&session, "read_board", json!({"board": "main"})).await??;
-    let searched = call(&session, "search", json!({"query": "payments"})).await??;
-    let status = call(&session, "status", json!({})).await??;
+    let applied = call_refused(&session, "apply", create_board_with_element()).await?;
+    let read = call_refused(&session, "read_board", json!({"board": "main"})).await?;
+    let searched = call_refused(&session, "search", json!({"query": "payments"})).await?;
+    let status = call_refused(&session, "status", json!({})).await?;
 
     for result in [applied, read, searched, status] {
-        assert_eq!(result.is_error, Some(true), "{result:?}");
-        assert!(text(&result).contains("abyme-mcp init"), "{result:?}");
+        assert!(result.contains("abyme-mcp init"), "{result:?}");
     }
-    assert_only_protocol_messages(&finish(session).await?);
+    closed(session).await?;
     assert!(fs::read_dir(directory.path())?.next().is_none());
     assert!(fs::read_dir(cache.path())?.next().is_none());
     assert_eq!(
@@ -2252,22 +2124,17 @@ async fn without_a_project_every_tool_asks_for_init_and_writes_nothing() -> Test
 
 #[tokio::test]
 async fn without_a_cache_search_fails_and_the_other_tools_keep_working() -> TestResult {
-    let directory = project()?;
-    let session = start(directory.path()).await?;
+    let (_directory, session) = started_project().await?;
 
-    let searched = call(&session, "search", json!({"query": "payments"})).await??;
-    let applied = call(&session, "apply", create_board_with_element()).await??;
-    let read = call(&session, "read_board", json!({"board": "container-level"})).await??;
+    let searched = call_refused(&session, "search", json!({"query": "payments"})).await?;
+    call_ok(&session, "apply", create_board_with_element()).await?;
+    call_ok(&session, "read_board", json!({"board": "container-level"})).await?;
 
-    assert_eq!(searched.is_error, Some(true), "{searched:?}");
     assert!(
-        text(&searched).contains("search needs a cache directory"),
+        searched.contains("search needs a cache directory"),
         "{searched:?}"
     );
-    assert_eq!(applied.is_error, Some(false), "{applied:?}");
-    assert_eq!(read.is_error, Some(false), "{read:?}");
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 /// The download goes through a proxy that accepts the connection and never
@@ -2304,9 +2171,8 @@ async fn exits_when_standard_input_closes_while_the_model_download_hangs() -> Te
 
 #[tokio::test]
 async fn applies_two_requests_at_once_without_losing_either() -> TestResult {
-    let directory = project()?;
-    let session = start(directory.path()).await?;
-    call(&session, "apply", create_board_with_element()).await??;
+    let (_directory, session) = started_project().await?;
+    call_ok(&session, "apply", create_board_with_element()).await?;
     let place = |name: &str| {
         json!({"operations": [
             {"op": "create_element", "key": "e", "type_ref": "t", "name": name},
@@ -2315,29 +2181,25 @@ async fn applies_two_requests_at_once_without_losing_either() -> TestResult {
     };
 
     let (left, right) = tokio::join!(
-        call(&session, "apply", place("Left")),
-        call(&session, "apply", place("Right"))
+        call_ok(&session, "apply", place("Left")),
+        call_ok(&session, "apply", place("Right"))
     );
-
-    for result in [left??, right??] {
-        assert_eq!(result.is_error, Some(false), "{result:?}");
-    }
+    left?;
+    right?;
     let read = call(&session, "read_board", json!({"board": "container-level"})).await??;
     let outline = text(&read);
     assert!(outline.contains("\nleft  "), "{outline}");
     assert!(outline.contains("\nright  "), "{outline}");
     assert!(outline.contains("\npayment-service  "), "{outline}");
 
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 /// Not a parameter of any tool: the client cannot steer where the server
 /// looks for the project.
 #[tokio::test]
 async fn no_tool_takes_a_path() -> TestResult {
-    let directory = project()?;
-    let session = start(directory.path()).await?;
+    let (_directory, session) = started_project().await?;
 
     let tools = tokio::time::timeout(TIMEOUT, session.client.list_all_tools()).await??;
 
@@ -2366,8 +2228,7 @@ async fn no_tool_takes_a_path() -> TestResult {
             tool.name
         );
     }
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 #[tokio::test]
@@ -2380,7 +2241,7 @@ async fn search_finds_elements_by_word_and_by_meaning_with_the_real_model() -> T
         &[("XDG_CACHE_HOME", cache.path().as_os_str())],
     )
     .await?;
-    let applied = call(
+    call_ok(
         &session,
         "apply",
         json!({"operations": [
@@ -2392,8 +2253,7 @@ async fn search_finds_elements_by_word_and_by_meaning_with_the_real_model() -> T
              "name": "Inventory", "summary": "Tracks how many items the warehouse holds"}
         ]}),
     )
-    .await??;
-    assert_eq!(applied.is_error, Some(false), "{applied:?}");
+    .await?;
 
     let by_word = call_within(
         &session,
@@ -2422,8 +2282,7 @@ async fn search_finds_elements_by_word_and_by_meaning_with_the_real_model() -> T
         text(&by_meaning).starts_with(&format!("{NO_REPOSITORY}mailer  ")),
         "{by_meaning:?}"
     );
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 /// Search marks its lines like a board outline, with the real model.
@@ -2462,8 +2321,7 @@ async fn search_marks_the_elements_to_review_with_the_real_model() -> TestResult
     assert!(line("changed").ends_with("⚠ task"), "{reply}");
     assert!(line("hinted").ends_with("⚠ hint"), "{reply}");
     assert!(!line("calm").contains('⚠'), "{reply}");
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 /// Also embeds an element far longer than the 512 tokens the model reads,
@@ -2484,7 +2342,7 @@ async fn search_finds_an_english_element_through_a_german_query_with_the_multili
     )
     .await?;
     let long_body = "The archive keeps every report of the year. ".repeat(200);
-    let applied = call(
+    call_ok(
         &session,
         "apply",
         json!({"operations": [
@@ -2498,8 +2356,7 @@ async fn search_finds_an_english_element_through_a_german_query_with_the_multili
              "name": "Archive", "summary": "Keeps old reports", "body": long_body}
         ]}),
     )
-    .await??;
-    assert_eq!(applied.is_error, Some(false), "{applied:?}");
+    .await?;
 
     let found = call_within(
         &session,
@@ -2519,8 +2376,7 @@ async fn search_finds_an_english_element_through_a_german_query_with_the_multili
         .map(|entry| entry.map(|entry| entry.file_name().to_string_lossy().into_owned()))
         .collect::<Result<_, _>>()?;
     assert_eq!(models, ["paraphrase-multilingual-minilm-l12-v2"]);
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 /// A request that adds the note `ask` with a marked label and body, and
@@ -2542,18 +2398,16 @@ fn board_text(directory: &Path) -> io::Result<String> {
 #[tokio::test]
 async fn apply_attaches_and_detaches_a_note_and_deleting_concerns_ends_the_attachment() -> TestResult
 {
-    let directory = project()?;
-    let session = start(directory.path()).await?;
-    call(&session, "apply", create_board_with_element()).await??;
-    call(&session, "apply", a_note_beside_the_element()).await??;
+    let (directory, session) = started_project().await?;
+    call_ok(&session, "apply", create_board_with_element()).await?;
+    call_ok(&session, "apply", a_note_beside_the_element()).await?;
     let note_file = directory.path().join("abyme/elements/ask.md");
     let attach = json!({"operations": [
         {"op": "attach_note", "note": {"existing": "ask"}, "to": {"existing": "payment-service"},
          "board": {"existing": "container-level"}}
     ]});
 
-    let attached = call(&session, "apply", attach.clone()).await??;
-    assert_eq!(attached.is_error, Some(false), "{attached:?}");
+    call_ok(&session, "apply", attach.clone()).await?;
     assert!(
         board_text(directory.path())?.contains(r#""attached_to": "payment-service""#),
         "{}",
@@ -2574,22 +2428,21 @@ async fn apply_attaches_and_detaches_a_note_and_deleting_concerns_ends_the_attac
         text(&read)
     );
 
-    let detached = call(
+    call_ok(
         &session,
         "apply",
         json!({"operations": [
             {"op": "detach_note", "note": {"existing": "ask"}, "board": {"existing": "container-level"}}
         ]}),
     )
-    .await??;
-    assert_eq!(detached.is_error, Some(false), "{detached:?}");
+    .await?;
     assert!(!board_text(directory.path())?.contains("attached_to"));
     assert!(
         fs::read_to_string(&note_file)?.contains(r#"{kind: "concerns", to: "payment-service"}"#)
     );
 
-    call(&session, "apply", attach).await??;
-    let deleted = call(
+    call_ok(&session, "apply", attach).await?;
+    call_ok(
         &session,
         "apply",
         json!({"operations": [
@@ -2597,21 +2450,18 @@ async fn apply_attaches_and_detaches_a_note_and_deleting_concerns_ends_the_attac
              "to": {"existing": "payment-service"}}
         ]}),
     )
-    .await??;
-    assert_eq!(deleted.is_error, Some(false), "{deleted:?}");
+    .await?;
     assert!(!board_text(directory.path())?.contains("attached_to"));
 
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
 
 #[tokio::test]
 async fn apply_refuses_a_wrong_attachment_naming_only_ids_and_changes_no_file() -> TestResult {
-    let directory = project()?;
-    let session = start(directory.path()).await?;
-    call(&session, "apply", create_board_with_element()).await??;
-    call(&session, "apply", a_note_beside_the_element()).await??;
-    call(
+    let (directory, session) = started_project().await?;
+    call_ok(&session, "apply", create_board_with_element()).await?;
+    call_ok(&session, "apply", a_note_beside_the_element()).await?;
+    call_ok(
         &session,
         "apply",
         json!({"operations": [
@@ -2619,7 +2469,7 @@ async fn apply_refuses_a_wrong_attachment_naming_only_ids_and_changes_no_file() 
              "x": 500, "y": 500, "pinned": true}
         ]}),
     )
-    .await??;
+    .await?;
     let before = files(directory.path())?;
     let operation = |note: &str, to: &str| {
         json!({"operations": [
@@ -2650,11 +2500,10 @@ async fn apply_refuses_a_wrong_attachment_naming_only_ids_and_changes_no_file() 
     ];
 
     for (arguments, expected) in refused {
-        let result = call(&session, "apply", arguments.clone()).await??;
+        let result = call_refused(&session, "apply", arguments.clone()).await?;
 
-        assert_eq!(result.is_error, Some(true), "{arguments}: {result:?}");
-        assert_eq!(text(&result), expected);
-        assert!(!text(&result).contains("SECRET"), "{result:?}");
+        assert_eq!(result, expected, "{arguments}");
+        assert!(!result.contains("SECRET"), "{result:?}");
     }
     for rest in [
         json!({"pinned": false}),
@@ -2668,17 +2517,16 @@ async fn apply_refuses_a_wrong_attachment_naming_only_ids_and_changes_no_file() 
             .ok_or("no operation")?;
         attach.extend(rest.as_object().cloned().unwrap_or_default());
 
-        let result = call(&session, "apply", arguments.clone()).await??;
+        let result = call_refused(&session, "apply", arguments.clone()).await?;
 
-        assert_eq!(result.is_error, Some(true), "{arguments}: {result:?}");
         assert!(
-            text(&result).starts_with("invalid arguments: "),
-            "{result:?}"
+            result.starts_with("invalid arguments: "),
+            "{arguments}: {result:?}"
         );
     }
     assert_eq!(files(directory.path())?, before);
 
-    let confirmed = call(
+    call_ok(
         &session,
         "apply",
         json!({"operations": [
@@ -2686,8 +2534,7 @@ async fn apply_refuses_a_wrong_attachment_naming_only_ids_and_changes_no_file() 
              "board": {"existing": "container-level"}, "pinned": true}
         ]}),
     )
-    .await??;
-    assert_eq!(confirmed.is_error, Some(false), "{confirmed:?}");
+    .await?;
     assert!(
         board_text(directory.path())?
             .contains(r#""pinned": true, "attached_to": "payment-service""#),
@@ -2695,6 +2542,5 @@ async fn apply_refuses_a_wrong_attachment_naming_only_ids_and_changes_no_file() 
         board_text(directory.path())?
     );
 
-    assert_only_protocol_messages(&finish(session).await?);
-    Ok(())
+    closed(session).await
 }
