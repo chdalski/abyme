@@ -2523,8 +2523,8 @@ async fn search_finds_an_english_element_through_a_german_query_with_the_multili
     Ok(())
 }
 
-/// A request that adds a pinned note `ask` with a marked label and body, and
-/// places it on the board `container-level`.
+/// A request that adds the note `ask` with a marked label and body, and
+/// places it on the board `container-level`, unpinned.
 fn a_note_beside_the_element() -> Value {
     json!({"operations": [
         {"op": "create_element", "key": "n", "type_ref": "note", "name": "Ask",

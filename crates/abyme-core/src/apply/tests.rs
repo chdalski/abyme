@@ -2687,7 +2687,7 @@ fn a_request_with_several_invalid_values_gets_the_first_error_in_a_fixed_order(
 fn the_anchor_of_those_requests_is_invalid_on_its_own(#[case] json: &str) {
     assert!(matches!(
         problem(&snapshot(), json),
-        OperationProblem::InvalidElement(_)
+        OperationProblem::InvalidElement(ElementProblem::InvalidAnchor { .. })
     ));
 }
 
@@ -3500,9 +3500,17 @@ fn detaching_keeps_where_the_note_lies_and_the_relation_and_writes_no_element() 
         element_id("n"),
         stamped_note("n", &[(RelationKind::Concerns, "b", None)]),
     );
+    before
+        .boards
+        .get_mut(&board_id("main"))
+        .unwrap()
+        .placements
+        .get_mut(&element_id("n"))
+        .unwrap()
+        .pinned = true;
     let json = format!(
         "[{}, {}, {}]",
-        attach("n", "b", ""),
+        attach("n", "b", r#", "pinned": true"#),
         a_move("b", 0, 0),
         detach("n")
     );
@@ -3518,6 +3526,7 @@ fn detaching_keeps_where_the_note_lies_and_the_relation_and_writes_no_element() 
     assert_eq!(board.rect_of(&element_id("n")), Some(rect_at(-70, -160)));
     assert_eq!(board.attachment(&element_id("n")), None);
     assert!(!line_of(board, "n").contains("attached_to"));
+    assert!(board.placements[&element_id("n")].pinned);
 }
 
 #[test]

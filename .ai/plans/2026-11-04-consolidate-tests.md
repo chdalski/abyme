@@ -26,7 +26,7 @@ the way.
 ## Steps
 
 - [x] Tests build elements with a builder
-- [ ] The backlog's assertions on these files are tightened
+- [x] The backlog's assertions on these files are tightened
 - [ ] The apply tests share their setup
 - [ ] The apply tests are split by topic
 - [ ] The outline tests are split by topic
@@ -60,13 +60,13 @@ unpinned note pinned.
 
 Review path: Reviewer-only
 
-- [ ] `detaching_keeps_where_the_note_lies_and_the_relation_and_writes_no_element` detaches a
+- [x] `detaching_keeps_where_the_note_lies_and_the_relation_and_writes_no_element` detaches a
       pinned note and shows that the pin stays.
-- [ ] `the_anchor_of_those_requests_is_invalid_on_its_own` accepts only an invalid anchor.
-- [ ] The doc comment of `a_note_beside_the_element` says how the request places the note.
-- [ ] For each tightened assertion, the handoff names a change of production code that the new
+- [x] `the_anchor_of_those_requests_is_invalid_on_its_own` accepts only an invalid anchor.
+- [x] The doc comment of `a_note_beside_the_element` says how the request places the note.
+- [x] For each tightened assertion, the handoff names a change of production code that the new
       assertion catches and the old one did not, applied and reverted.
-- [ ] The three entries leave `.ai/backlog.md`.
+- [x] The three entries leave `.ai/backlog.md`.
 
 ### Task 3: The apply tests share their setup
 
