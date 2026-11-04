@@ -27,7 +27,7 @@ the way.
 
 - [x] Tests build elements with a builder
 - [x] The backlog's assertions on these files are tightened
-- [ ] The apply tests share their setup
+- [x] The apply tests share their setup
 - [ ] The apply tests are split by topic
 - [ ] The outline tests are split by topic
 - [ ] The server tests share their session steps
@@ -76,13 +76,13 @@ test repeats a case of another with the same input and assertion.
 
 Review path: Reviewer-only
 
-- [ ] One helper finds a written element and one reaches a board's placements; no test of the file
+- [x] One helper finds a written element and one reaches a board's placements; no test of the file
       repeats either inline.
-- [ ] A hand-built board that the board helper builds identically comes from the helper.
-- [ ] `place_refuses_an_element_the_request_deleted` is gone, and the handoff maps it to the case
+- [x] A hand-built board that the board helper builds identically comes from the helper.
+- [x] `place_refuses_an_element_the_request_deleted` is gone, and the handoff maps it to the case
       of `knows_a_deleted_element_no_longer` with the same input and assertion; the backlog entry on
       the unreachable `UnknownElement` of `place_element` names that case instead.
-- [ ] Every other test of the file keeps its name and its assertions.
+- [x] Every other test of the file keeps its name and its assertions.
 
 ### Task 4: The apply tests are split by topic
 

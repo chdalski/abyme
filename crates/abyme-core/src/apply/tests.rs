@@ -56,6 +56,18 @@ fn snapshot() -> Snapshot {
     }
 }
 
+/// The placements of the board `board` in `snapshot`, for a test to change.
+fn placements_on<'a>(
+    snapshot: &'a mut Snapshot,
+    board: &str,
+) -> &'a mut BTreeMap<ElementId, Placement> {
+    &mut snapshot
+        .boards
+        .get_mut(&board_id(board))
+        .unwrap()
+        .placements
+}
+
 fn operations(json: &str) -> Vec<Operation> {
     serde_json::from_str::<Operations>(json).unwrap().into_vec()
 }
@@ -194,12 +206,7 @@ fn places_two_elements_of_one_request_without_overlap() {
 /// on which `loose` lies.
 fn snapshot_with_two_boards() -> Snapshot {
     let mut snapshot = snapshot();
-    snapshot
-        .boards
-        .get_mut(&board_id("main"))
-        .unwrap()
-        .placements
-        .insert(element_id("orders-db"), sized(0, 0, 300, 50));
+    placements_on(&mut snapshot, "main").insert(element_id("orders-db"), sized(0, 0, 300, 50));
     snapshot.boards.insert(
         board_id("side"),
         Board {
@@ -319,12 +326,7 @@ fn places_no_element_on_a_free_cell_that_a_move_took() {
 fn places_no_element_where_a_move_went_below_the_content() {
     let mut walled = snapshot();
     let wall = sized(0, 0, 4 * 220, 64 * 130);
-    walled
-        .boards
-        .get_mut(&board_id("main"))
-        .unwrap()
-        .placements
-        .insert(element_id("wall"), wall);
+    placements_on(&mut walled, "main").insert(element_id("wall"), wall);
     // Without the move, the next placement would go to y 8320 + 40.
     let json = r#"[
         {"op": "move_element", "element": {"existing": "orders-db"}, "board": {"existing": "main"}, "x": 0, "y": 8360},
@@ -346,11 +348,7 @@ fn places_no_element_where_a_move_went_below_the_content() {
 #[test]
 fn reports_a_full_board_after_moving_an_element_of_the_largest_size() {
     let mut large = snapshot();
-    large
-        .boards
-        .get_mut(&board_id("main"))
-        .unwrap()
-        .placements
+    placements_on(&mut large, "main")
         .insert(element_id("orders-db"), sized(0, 0, u32::MAX, u32::MAX));
     let json = r#"[
         {"op": "move_element", "element": {"existing": "orders-db"}, "board": {"existing": "main"}, "x": 1000000, "y": 1000000},
@@ -713,18 +711,14 @@ fn reports_a_full_board() {
         width: NonZeroU32::MAX,
         height: NonZeroU32::MAX,
     };
-    full.boards
-        .get_mut(&board_id("main"))
-        .unwrap()
-        .placements
-        .insert(
-            element_id("huge"),
-            Placement {
-                rect: huge,
-                pinned: false,
-                attached_to: None,
-            },
-        );
+    placements_on(&mut full, "main").insert(
+        element_id("huge"),
+        Placement {
+            rect: huge,
+            pinned: false,
+            attached_to: None,
+        },
+    );
     let json = r#"[{"op": "place_element", "element": {"existing": "loose"}, "board": {"existing": "main"}}]"#;
 
     assert_eq!(
@@ -743,6 +737,13 @@ fn written_elements(applied: &Applied) -> Vec<&Element> {
             Write::Board(_) | Write::RemoveElement(_) => None,
         })
         .collect()
+}
+
+/// The element `id` as the request wrote it, if it wrote one.
+fn written_element<'a>(applied: &'a Applied, id: &str) -> Option<&'a Element> {
+    written_elements(applied)
+        .into_iter()
+        .find(|element| element.id().as_str() == id)
 }
 
 fn relations_of(element: &Element) -> Vec<(RelationKind, &str, Option<&str>)> {
@@ -1513,21 +1514,13 @@ fn stamped_snapshot() -> Snapshot {
     snapshot
 }
 
-/// The element `id` as the request wrote it.
-fn written<'a>(applied: &'a Applied, id: &str) -> &'a Element {
-    written_elements(applied)
-        .into_iter()
-        .find(|element| element.id().as_str() == id)
-        .unwrap()
-}
-
 #[test]
 fn creates_an_element_with_an_anchor_and_no_stamp() {
     let json = r#"[{"op": "create_element", "key": "e", "type_ref": "t", "name": "Fresh", "anchor": "crates/fresh"}]"#;
 
     let applied = apply(&snapshot(), &operations(json)).unwrap();
 
-    let fresh = written(&applied, "fresh");
+    let fresh = written_element(&applied, "fresh").unwrap();
     assert_eq!(fresh.anchor().map(Anchor::as_str), Some("crates/fresh"));
     assert_eq!(fresh.verified(), None);
 }
@@ -1549,7 +1542,7 @@ fn removes_the_stamp_on_every_update(#[case] fields: &str, #[case] anchor: Optio
 
     let applied = apply(&stamped_snapshot(), &operations(&json)).unwrap();
 
-    let updated = written(&applied, "anchored");
+    let updated = written_element(&applied, "anchored").unwrap();
     assert_eq!(updated.anchor().map(Anchor::as_str), anchor, "{fields}");
     assert_eq!(updated.verified(), None, "{fields}");
 }
@@ -1563,7 +1556,11 @@ fn removes_the_stamp_of_an_element_without_an_anchor(#[case] fields: &str) {
 
     let applied = apply(&stamped_snapshot(), &operations(&json)).unwrap();
 
-    assert_eq!(written(&applied, "native").verified(), None, "{fields}");
+    assert_eq!(
+        written_element(&applied, "native").unwrap().verified(),
+        None,
+        "{fields}"
+    );
 }
 
 #[rstest]
@@ -1625,7 +1622,7 @@ fn drops_the_stamp_of_an_anchor_changed_and_changed_back_in_one_request() {
 
     let applied = apply(&stamped_snapshot(), &operations(json)).unwrap();
 
-    let updated = written(&applied, "anchored");
+    let updated = written_element(&applied, "anchored").unwrap();
     assert_eq!(
         updated.anchor().map(Anchor::as_str),
         Some("crates/anchored")
@@ -2112,11 +2109,7 @@ fn shows_neither_title_nor_summary_when_it_rejects_a_board_operation(#[case] jso
 /// `snapshot()` with `orders-db` pinned on `main`.
 fn with_a_pin() -> Snapshot {
     let mut snapshot = snapshot();
-    snapshot
-        .boards
-        .get_mut(&board_id("main"))
-        .unwrap()
-        .placements
+    placements_on(&mut snapshot, "main")
         .get_mut(&element_id("orders-db"))
         .unwrap()
         .pinned = true;
@@ -2214,11 +2207,7 @@ fn a_refused_move_of_a_pinned_element_writes_nothing_of_the_request() {
 #[test]
 fn a_pin_holds_for_one_board_only() {
     let mut before = snapshot_for_deletion();
-    before
-        .boards
-        .get_mut(&board_id("main"))
-        .unwrap()
-        .placements
+    placements_on(&mut before, "main")
         .get_mut(&element_id("orders-db"))
         .unwrap()
         .pinned = true;
@@ -2323,19 +2312,6 @@ fn place_measures_the_text_as_the_request_stands() {
     assert!(placement_of(&applied, "e").rect.height.get() > 90);
 }
 
-#[test]
-fn place_refuses_an_element_the_request_deleted() {
-    let json = r#"[
-        {"op": "delete_element", "element": {"existing": "loose"}},
-        {"op": "place_element", "element": {"existing": "loose"}, "board": {"existing": "main"}}
-    ]"#;
-
-    assert_eq!(
-        problem(&snapshot(), json),
-        OperationProblem::UnknownElement(element_id("loose"))
-    );
-}
-
 #[rstest]
 #[case::move_(r#"{"op": "move_element", "element": {"existing": "tall"}, "board": {"existing": "main"}, "x": 5, "y": 6}"#)]
 #[case::update(r#"{"op": "update_element", "element": {"existing": "tall"}, "summary": "short"}"#)]
@@ -2346,12 +2322,7 @@ fn a_move_or_an_update_leaves_a_placement_its_size(#[case] operation: &str) {
         .name("Tall")
         .build();
     before.elements.insert(element_id("tall"), tall);
-    before
-        .boards
-        .get_mut(&board_id("main"))
-        .unwrap()
-        .placements
-        .insert(element_id("tall"), sized(1000, 0, 240, 170));
+    placements_on(&mut before, "main").insert(element_id("tall"), sized(1000, 0, 240, 170));
 
     let applied = apply(&before, &operations(&format!("[{operation}]"))).unwrap();
 
@@ -2549,11 +2520,7 @@ fn a_placement_after_a_layout_overlaps_no_box_the_layout_produced() {
 #[test]
 fn a_placement_after_a_layout_overlaps_a_pin_outside_the_grid_nowhere() {
     let mut before = with_a_pin();
-    before
-        .boards
-        .get_mut(&board_id("main"))
-        .unwrap()
-        .placements
+    placements_on(&mut before, "main")
         .get_mut(&element_id("orders-db"))
         .unwrap()
         .rect = sized(0, 9_000, 1_000, 1_000).rect;
@@ -2589,11 +2556,7 @@ fn a_later_failure_writes_nothing_of_a_layout() {
 #[test]
 fn layout_board_refuses_a_board_no_position_fits() {
     let mut before = with_a_pin();
-    before
-        .boards
-        .get_mut(&board_id("main"))
-        .unwrap()
-        .placements
+    placements_on(&mut before, "main")
         .get_mut(&element_id("orders-db"))
         .unwrap()
         .rect = sized(i32::MIN, i32::MIN, u32::MAX, u32::MAX).rect;
@@ -2620,8 +2583,7 @@ fn the_layouts_of_a_request_share_their_work() {
     // 100 boxes of text that cost 902 units each, and so 90,200 per layout.
     let text = " ".repeat(64 * 900);
     let mut before = snapshot();
-    let main = before.boards.get_mut(&board_id("main")).unwrap();
-    main.placements.clear();
+    placements_on(&mut before, "main").clear();
     for index in 0..100 {
         let id = element_id(&format!("e{index}"));
         before.elements.insert(
@@ -2631,12 +2593,7 @@ fn the_layouts_of_a_request_share_their_work() {
                 .summary(Some(&text))
                 .build(),
         );
-        before
-            .boards
-            .get_mut(&board_id("main"))
-            .unwrap()
-            .placements
-            .insert(id, placed(index * 220, 0));
+        placements_on(&mut before, "main").insert(id, placed(index * 220, 0));
     }
     let layouts = |count: usize| {
         let one = r#"{"op": "layout_board", "board": {"existing": "main"}}"#;
@@ -2701,13 +2658,9 @@ fn creates_an_element_with_a_statement_or_without_one_on_null() {
 
     let applied = apply(&snapshot(), &operations(json)).unwrap();
 
-    let kinds: Vec<Option<StatementKind>> = applied
-        .writes
+    let kinds: Vec<Option<StatementKind>> = written_elements(&applied)
         .iter()
-        .filter_map(|write| match write {
-            Write::Element(element) => Some(element.statement()),
-            Write::Board(_) | Write::RemoveElement(_) => None,
-        })
+        .map(|element| element.statement())
         .collect();
     assert_eq!(kinds, [Some(StatementKind::Question), None, None]);
 }
@@ -2722,16 +2675,7 @@ fn updated_kind(fields: &str) -> Element {
     ]"#
     );
     let applied = apply(&snapshot(), &operations(&json)).unwrap();
-    applied
-        .writes
-        .iter()
-        .find_map(|write| match write {
-            Write::Element(element) if element.id() == &element_id("loose") => {
-                Some(element.clone())
-            }
-            Write::Element(_) | Write::Board(_) | Write::RemoveElement(_) => None,
-        })
-        .unwrap()
+    written_element(&applied, "loose").unwrap().clone()
 }
 
 #[rstest]
@@ -2755,11 +2699,8 @@ fn a_relation_keeps_the_statement() {
 
     let applied = apply(&snapshot(), &operations(json)).unwrap();
 
-    let kept = applied.writes.iter().any(|write| {
-        matches!(write, Write::Element(element)
-            if element.id() == &element_id("loose")
-                && element.statement() == Some(StatementKind::Idea))
-    });
+    let kept = written_element(&applied, "loose")
+        .is_some_and(|element| element.statement() == Some(StatementKind::Idea));
     assert!(kept, "{:?}", applied.writes);
 }
 
@@ -2780,10 +2721,7 @@ fn an_update_of_only_the_statement_is_an_update_and_removes_the_stamp(#[case] fi
 
     let applied = apply(&before, &operations(&json)).unwrap();
 
-    let written = applied.writes.iter().find_map(|write| match write {
-        Write::Element(element) if element.id() == &stamped => Some(element),
-        Write::Element(_) | Write::Board(_) | Write::RemoveElement(_) => None,
-    });
+    let written = written_element(&applied, stamped.as_str());
     assert_eq!(written.unwrap().verified(), None);
 }
 
@@ -3220,13 +3158,6 @@ fn detach(note: &str) -> String {
     )
 }
 
-fn written_element<'a>(applied: &'a Applied, id: &str) -> Option<&'a Element> {
-    applied.writes.iter().find_map(|write| match write {
-        Write::Element(element) if element.id().as_str() == id => Some(element),
-        Write::Element(_) | Write::Board(_) | Write::RemoveElement(_) => None,
-    })
-}
-
 #[test]
 fn attaching_hangs_the_note_where_it_lies_and_adds_concerns_without_the_stamp() {
     let before = notes_on_main(&[]);
@@ -3435,11 +3366,7 @@ fn a_pinned_note_hangs_on_a_box_only_with_pinned_true_and_keeps_every_pin() {
     let pinned_note = notes_on_main(&[]);
     let mut pinned_note = pinned_note;
     for id in ["n", "b"] {
-        pinned_note
-            .boards
-            .get_mut(&board_id("main"))
-            .unwrap()
-            .placements
+        placements_on(&mut pinned_note, "main")
             .get_mut(&element_id(id))
             .unwrap()
             .pinned = true;
@@ -3500,11 +3427,7 @@ fn detaching_keeps_where_the_note_lies_and_the_relation_and_writes_no_element() 
         element_id("n"),
         stamped_note("n", &[(RelationKind::Concerns, "b", None)]),
     );
-    before
-        .boards
-        .get_mut(&board_id("main"))
-        .unwrap()
-        .placements
+    placements_on(&mut before, "main")
         .get_mut(&element_id("n"))
         .unwrap()
         .pinned = true;
