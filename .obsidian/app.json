@@ -5,6 +5,6 @@
   "newLinkFormat": "shortest",
   "useMarkdownLinks": false,
   "alwaysUpdateLinks": true,
-  "userIgnoreFilters": [],
+  "userIgnoreFilters": ["abyme/"],
   "readableLineLength": false
 }

@@ -37,7 +37,7 @@ commit it with the code, and set the rule by which later code changes keep the m
 
 ## Steps
 
-- [ ] The repository is an Abyme project whose server Claude Code starts
+- [x] The repository is an Abyme project whose server Claude Code starts
 - [ ] The context and the containers are on boards
 - [ ] The components of abyme-core are on a board
 - [ ] The components of the canvas are on a board
@@ -52,14 +52,14 @@ session in it start the server from the debug build.
 
 Review path: Security-Hybrid
 
-- [ ] `/workspace` holds `abyme/abyme.toml`, made by `abyme-mcp init`, and `git status` shows no
+- [x] `/workspace` holds `abyme/abyme.toml`, made by `abyme-mcp init`, and `git status` shows no
       other new file of the project.
-- [ ] A committed `.mcp.json` at the repository root starts `./target/debug/abyme-mcp` in the
+- [x] A committed `.mcp.json` at the repository root starts `./target/debug/abyme-mcp` in the
       format Claude Code's documentation gives; no setting pre-approves the server.
-- [ ] The Conventions of the root `CLAUDE.md` tell a reader what the server needs before it starts
+- [x] The Conventions of the root `CLAUDE.md` tell a reader what the server needs before it starts
       and when a rebuilt binary takes effect.
-- [ ] No sentence of the root `CLAUDE.md` says that a crate's directory lies in no project.
-- [ ] Obsidian leaves the files under `abyme/` out of the vault.
+- [x] No sentence of the root `CLAUDE.md` says that a crate's directory lies in no project.
+- [x] Obsidian leaves the files under `abyme/` out of the vault.
 
 ### Task 2: The context and the containers are on boards
 

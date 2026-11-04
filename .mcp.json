@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "abyme": {
+      "type": "stdio",
+      "command": "./target/debug/abyme-mcp",
+      "args": []
+    }
+  }
+}
