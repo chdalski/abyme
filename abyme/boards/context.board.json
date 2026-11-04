@@ -1,0 +1,14 @@
+{
+  "format": 1,
+  "id": "context",
+  "title": "Context",
+  "summary": "Abyme as one system, the people who use it, and the systems it works with",
+  "zone": {"mode": "mirrored", "statement": "current"},
+  "placements": [
+    {"element": "abyme", "x": 110, "y": 335, "width": 180, "height": 150},
+    {"element": "ai-agent", "x": 110, "y": 160, "width": 180, "height": 135},
+    {"element": "developer", "x": 110, "y": 0, "width": 180, "height": 120},
+    {"element": "hugging-face-hub", "x": 0, "y": 525, "width": 180, "height": 105},
+    {"element": "project-repository", "x": 220, "y": 525, "width": 180, "height": 135}
+  ]
+}

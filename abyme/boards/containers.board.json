@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "id": "containers",
+  "title": "Containers",
+  "owner": "abyme",
+  "summary": "The crates and data stores inside Abyme and how they use each other",
+  "zone": {"mode": "mirrored", "statement": "current"},
+  "placements": [
+    {"element": "abyme-canvas", "x": 220, "y": 0, "width": 180, "height": 135},
+    {"element": "abyme-core", "x": 220, "y": 350, "width": 180, "height": 135},
+    {"element": "abyme-index", "x": 110, "y": 175, "width": 180, "height": 135},
+    {"element": "abyme-mcp", "x": 0, "y": 0, "width": 180, "height": 135},
+    {"element": "abyme-model", "x": 0, "y": 525, "width": 180, "height": 120},
+    {"element": "project-files", "x": 220, "y": 525, "width": 180, "height": 150},
+    {"element": "search-cache", "x": 0, "y": 350, "width": 180, "height": 135}
+  ]
+}

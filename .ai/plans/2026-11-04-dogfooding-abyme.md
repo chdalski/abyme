@@ -38,7 +38,7 @@ commit it with the code, and set the rule by which later code changes keep the m
 ## Steps
 
 - [x] The repository is an Abyme project whose server Claude Code starts
-- [ ] The context and the containers are on boards
+- [x] The context and the containers are on boards
 - [ ] The components of abyme-core are on a board
 - [ ] The components of the canvas are on a board
 - [ ] Later code changes keep the model current
@@ -68,19 +68,19 @@ in Context, laid out.
 
 Review path: Reviewer-only
 
-- [ ] `overview` lists `context` with `containers` inside it, both `mirrored · current` with a
+- [x] `overview` lists `context` with `containers` inside it, both `mirrored · current` with a
       summary, and the element counts match the files under `abyme/elements/`.
-- [ ] Every directory under `crates/` except `abyme-test-support` is the anchor of exactly one
+- [x] Every directory under `crates/` except `abyme-test-support` is the anchor of exactly one
       `c4/container` element, which `containers` places; every element has the type Context gives.
-- [ ] The elements relate exactly as Context lists, and the relations between container elements
+- [x] The elements relate exactly as Context lists, and the relations between container elements
       are the direct non-dev dependencies between the workspace's crates.
-- [ ] Every anchor names a path `git ls-files` lists.
-- [ ] Every anchored element carries a stamp by the AI on the commit HEAD named before this task's
+- [x] Every anchor names a path `git ls-files` lists.
+- [x] Every anchored element carries a stamp by the AI on the commit HEAD named before this task's
       commit, and no element without an anchor carries one.
-- [ ] `status` reports no open review flags, and no `read_board` output of the two boards shows `⚠`.
-- [ ] A reader of the element `abyme` learns how the model is cut and what it leaves out, helper
+- [x] `status` reports no open review flags, and no `read_board` output of the two boards shows `⚠`.
+- [x] A reader of the element `abyme` learns how the model is cut and what it leaves out, helper
       and entry-point modules included.
-- [ ] The board files are byte-identical before and after a second `layout_board` of each board,
+- [x] The board files are byte-identical before and after a second `layout_board` of each board,
       by a checksum listing of `abyme/boards/` from before and after in the handoff.
 
 ### Task 3: The components of abyme-core are on a board
