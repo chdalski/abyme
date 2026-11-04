@@ -5,9 +5,7 @@ use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 
 use abyme_core::LocalKey;
-use abyme_model::{
-    Element, ElementFields, Placement, Rect, Relations, StatementKind, TypeRef, Zone,
-};
+use abyme_model::{ElementFixture, Placement, Rect, StatementKind, Zone};
 use serde_json::{Value, json};
 
 fn operation(value: Value) -> Operation {
@@ -437,20 +435,10 @@ fn names_only_the_position_and_the_board_of_a_refused_release() {
 /// `snapshot` with the note `payments`, which no board places.
 fn snapshot_with_a_note() -> Snapshot {
     let id: ElementId = "payments".parse().unwrap();
-    let note = Element::new(
-        id.clone(),
-        ElementFields {
-            statement: None,
-            type_ref: TypeRef::try_from("note".to_owned()).unwrap(),
-            name: "Ask".to_owned(),
-            summary: None,
-            body: String::new(),
-            relations: Relations::new(),
-            anchor: None,
-            verified: None,
-        },
-    )
-    .unwrap();
+    let note = ElementFixture::new("payments")
+        .type_ref("note")
+        .name("Ask")
+        .build();
     let mut snapshot = snapshot();
     snapshot.elements.insert(id, note);
     snapshot

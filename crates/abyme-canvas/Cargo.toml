@@ -18,7 +18,7 @@ tauri.workspace = true
 tauri-build.workspace = true
 
 [dev-dependencies]
-abyme-model = { workspace = true, features = ["ts"] }
+abyme-model = { workspace = true, features = ["fixtures", "ts"] }
 abyme-test-support.workspace = true
 serde_json.workspace = true
 tauri = { workspace = true, features = ["test"] }

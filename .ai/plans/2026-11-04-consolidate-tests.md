@@ -25,7 +25,7 @@ the way.
 
 ## Steps
 
-- [ ] Tests build elements with a builder
+- [x] Tests build elements with a builder
 - [ ] The backlog's assertions on these files are tightened
 - [ ] The apply tests share their setup
 - [ ] The apply tests are split by topic
@@ -43,13 +43,13 @@ turn on, gives them one place that follows `ElementFields`.
 
 Review path: Reviewer-only
 
-- [ ] `abyme-model` offers a builder for elements behind a feature that no non-dev dependency
+- [x] `abyme-model` offers a builder for elements behind a feature that no non-dev dependency
       turns on, and `cargo build --workspace` compiles none of it.
-- [ ] Every full `ElementFields` literal that only sets up a test, in a helper or inside a test
+- [x] Every full `ElementFields` literal that only sets up a test, in a helper or inside a test
       body, builds its element through the builder; literals stay where `Element::new` or
       `ElementFields` is the subject under test, in property-test generators, in struct updates of
       an existing element, and in production code.
-- [ ] The Conventions of the root `CLAUDE.md` tell a reader which commands compile the feature,
+- [x] The Conventions of the root `CLAUDE.md` tell a reader which commands compile the feature,
       as they do for `ts`.
 
 ### Task 2: The backlog's assertions on these files are tightened

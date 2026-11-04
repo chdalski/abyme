@@ -8,7 +8,7 @@ use super::*;
 use std::collections::BTreeSet;
 use std::num::NonZeroU32;
 
-use abyme_model::{ElementFields, Placement, Relations, TypeRef};
+use abyme_model::{ElementFixture, Placement};
 use proptest::prelude::*;
 use rstest::rstest;
 
@@ -19,23 +19,15 @@ fn id(value: &str) -> ElementId {
 }
 
 fn element(name: &str, summary: Option<&str>, relations: &[(RelationKind, &str)]) -> Element {
-    Element::new(
-        id(name),
-        ElementFields {
-            statement: None,
-            type_ref: TypeRef::try_from("c4/container".to_owned()).unwrap(),
-            name: name.to_owned(),
-            summary: summary.map(str::to_owned),
-            body: String::new(),
-            relations: relations
-                .iter()
-                .map(|(kind, to)| ((*kind, id(to)), None))
-                .collect::<Relations>(),
-            anchor: None,
-            verified: None,
-        },
-    )
-    .unwrap()
+    let relations: Vec<_> = relations
+        .iter()
+        .map(|(kind, to)| (*kind, *to, None))
+        .collect();
+    ElementFixture::new(name)
+        .type_ref("c4/container")
+        .summary(summary)
+        .relations(&relations)
+        .build()
 }
 
 fn rect(x: i32, y: i32, width: u32, height: u32) -> Rect {

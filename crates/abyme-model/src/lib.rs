@@ -8,6 +8,8 @@
 mod anchor;
 mod board;
 mod element;
+#[cfg(feature = "fixtures")]
+mod fixture;
 mod id;
 mod object_only;
 mod relation;
@@ -25,6 +27,8 @@ pub use element::{
     Element, ElementError, ElementFields, ElementProblem, MAX_FRONTMATTER_BYTES, NOTE_TYPE,
     Relations, TypeRef, is_allowed,
 };
+#[cfg(feature = "fixtures")]
+pub use fixture::ElementFixture;
 pub use id::{BoardId, BoardKind, ElementId, ElementKind, Id, IdError, IdKind, IdRule, MAX_ID_LEN};
 pub use object_only::ObjectOnly;
 pub use relation::RelationKind;

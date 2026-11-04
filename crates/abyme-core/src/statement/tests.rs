@@ -3,9 +3,7 @@
 use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 
-use abyme_model::{
-    Board, Element, ElementFields, Mode, Placement, Rect, Relations, StatementKind, TypeRef, Zone,
-};
+use abyme_model::{Board, Element, ElementFixture, Mode, Placement, Rect, StatementKind, Zone};
 
 use super::*;
 
@@ -18,20 +16,7 @@ fn board_id(value: &str) -> BoardId {
 }
 
 fn element(id: &str) -> Element {
-    Element::new(
-        element_id(id),
-        ElementFields {
-            statement: None,
-            type_ref: TypeRef::try_from("t".to_owned()).unwrap(),
-            name: id.to_owned(),
-            summary: None,
-            body: String::new(),
-            relations: Relations::new(),
-            anchor: None,
-            verified: None,
-        },
-    )
-    .unwrap()
+    ElementFixture::new(id).build()
 }
 
 /// The board `id`, a zone of `kind` if one is given, the inside of `owner`,

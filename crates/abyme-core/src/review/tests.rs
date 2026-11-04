@@ -733,19 +733,10 @@ fn names_only_the_element_when_it_refuses() {
 #[test]
 fn refuses_a_stamp_that_would_make_the_frontmatter_too_large() {
     let with_summary = |length: usize| {
-        Element::new(
-            element_id("x"),
-            abyme_model::ElementFields {
-                statement: None,
-                type_ref: abyme_model::TypeRef::try_from("t".to_owned()).unwrap(),
-                name: "X".to_owned(),
-                summary: Some("a".repeat(length)),
-                body: String::new(),
-                relations: abyme_model::Relations::new(),
-                anchor: None,
-                verified: None,
-            },
-        )
+        abyme_model::ElementFixture::new("x")
+            .name("X")
+            .summary(Some(&"a".repeat(length)))
+            .try_build()
     };
     let largest = (abyme_model::MAX_FRONTMATTER_BYTES - 200..=abyme_model::MAX_FRONTMATTER_BYTES)
         .rev()

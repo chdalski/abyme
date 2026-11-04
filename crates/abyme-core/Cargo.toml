@@ -22,6 +22,7 @@ unicode-width.workspace = true
 json-schema = ["dep:schemars", "abyme-model/json-schema"]
 
 [dev-dependencies]
+abyme-model = { workspace = true, features = ["fixtures"] }
 abyme-test-support.workspace = true
 proptest.workspace = true
 rstest.workspace = true

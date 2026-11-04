@@ -4,7 +4,7 @@ use super::*;
 use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 
-use abyme_model::{Board, ElementFields, Rect, Relations, TypeRef};
+use abyme_model::{Board, ElementFixture, Rect};
 use serde_json::{Value, json};
 
 fn element_id(value: &str) -> ElementId {
@@ -29,20 +29,12 @@ fn placed(x: i32, y: i32, width: u32, height: u32) -> abyme_model::Placement {
 }
 
 fn element(id: &str, name: &str, summary: Option<&str>, body: &str) -> Element {
-    Element::new(
-        element_id(id),
-        ElementFields {
-            statement: None,
-            type_ref: TypeRef::try_from("c4/container".to_owned()).unwrap(),
-            name: name.to_owned(),
-            summary: summary.map(str::to_owned),
-            body: body.to_owned(),
-            relations: Relations::new(),
-            anchor: None,
-            verified: None,
-        },
-    )
-    .unwrap()
+    ElementFixture::new(id)
+        .type_ref("c4/container")
+        .name(name)
+        .summary(summary)
+        .body(body)
+        .build()
 }
 
 /// A snapshot with the board `context` placing `payments` and `orders`,

@@ -17,8 +17,7 @@ use abyme_index::{
     ModelSpec, ProjectKey, UserCache, indexed_text,
 };
 use abyme_model::{
-    Board, Element, ElementFields, ElementId, Mode, Placement, Rect, Relations, StatementKind,
-    TypeRef, Zone,
+    Board, Element, ElementFixture, ElementId, Mode, Placement, Rect, StatementKind, Zone,
 };
 use fastembed::{Pooling, QuantizationMode};
 use futures::TryStreamExt as _;
@@ -147,19 +146,11 @@ impl Embedder for BrokenEmbedder {
 }
 
 fn element(id: &str, name: &str, body: &str) -> TestResult<Element> {
-    Ok(Element::new(
-        id.parse()?,
-        ElementFields {
-            statement: None,
-            type_ref: TypeRef::try_from("c4/container".to_owned())?,
-            name: name.to_owned(),
-            summary: None,
-            body: body.to_owned(),
-            relations: Relations::new(),
-            anchor: None,
-            verified: None,
-        },
-    )?)
+    Ok(ElementFixture::new(id)
+        .type_ref("c4/container")
+        .name(name)
+        .body(body)
+        .try_build()?)
 }
 
 fn snapshot(elements: Vec<Element>) -> Snapshot {

@@ -2,8 +2,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU32;
 
 use abyme_model::{
-    Anchor, CommitId, ElementFields, FORMAT_AND_SEPARATORS, Mode, Placement, Rect, Relations,
-    TypeRef, Verification, Verifier,
+    Anchor, CommitId, ElementFields, ElementFixture, FORMAT_AND_SEPARATORS, Mode, Placement, Rect,
+    Relations, TypeRef, Verification, Verifier,
 };
 use proptest::prelude::*;
 use rstest::rstest;
@@ -24,20 +24,11 @@ fn rect() -> Rect {
 }
 
 fn element(id: &str, type_ref: &str, name: &str, summary: Option<&str>) -> Element {
-    Element::new(
-        id.parse().unwrap(),
-        ElementFields {
-            statement: None,
-            type_ref: TypeRef::try_from(type_ref.to_owned()).unwrap(),
-            name: name.to_owned(),
-            summary: summary.map(str::to_owned),
-            body: String::new(),
-            relations: Relations::new(),
-            anchor: None,
-            verified: None,
-        },
-    )
-    .unwrap()
+    ElementFixture::new(id)
+        .type_ref(type_ref)
+        .name(name)
+        .summary(summary)
+        .build()
 }
 
 /// A snapshot with the board `b` titled `title` that places `elements` and

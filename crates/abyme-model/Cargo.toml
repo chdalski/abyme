@@ -20,6 +20,8 @@ ts-rs = { workspace = true, optional = true }
 json-schema = ["dep:schemars"]
 # TypeScript declarations for the types the canvas's UI receives; off unless the canvas needs them.
 ts = ["dep:ts-rs"]
+# A builder of elements for other crates' tests; only dev-dependencies turn it on.
+fixtures = []
 
 [dev-dependencies]
 proptest.workspace = true

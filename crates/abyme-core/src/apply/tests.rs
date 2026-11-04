@@ -7,7 +7,7 @@
 use super::*;
 use std::num::NonZeroU32;
 
-use abyme_model::{Mode, Rect, StatementKind, hides_or_breaks_text};
+use abyme_model::{ElementFixture, Mode, Rect, StatementKind, hides_or_breaks_text};
 use rstest::rstest;
 
 use crate::operation::Operations;
@@ -29,20 +29,7 @@ fn placed(x: i32, y: i32) -> Placement {
 }
 
 fn element(id: &str) -> Element {
-    Element::new(
-        element_id(id),
-        ElementFields {
-            statement: None,
-            type_ref: TypeRef::try_from("t".to_owned()).unwrap(),
-            name: id.to_owned(),
-            summary: None,
-            body: String::new(),
-            relations: Relations::new(),
-            anchor: None,
-            verified: None,
-        },
-    )
-    .unwrap()
+    ElementFixture::new(id).build()
 }
 
 /// A snapshot with the elements `orders-db` (placed on `main`) and `loose`
@@ -1003,23 +990,13 @@ fn deletes_a_relation_from_an_existing_element_to_one_created_in_the_same_reques
 /// The snapshot with `loose` given a summary, a body, and a relation.
 fn snapshot_with_full_loose() -> Snapshot {
     let mut snapshot = snapshot();
-    let loose = Element::new(
-        element_id("loose"),
-        ElementFields {
-            statement: None,
-            type_ref: TypeRef::try_from("c4/container".to_owned()).unwrap(),
-            name: "Loose".to_owned(),
-            summary: Some("first".to_owned()),
-            body: "Body\r\nwith CRLF\n".to_owned(),
-            relations: Relations::from([(
-                (RelationKind::Uses, element_id("orders-db")),
-                Some("SQL".to_owned()),
-            )]),
-            anchor: None,
-            verified: None,
-        },
-    )
-    .unwrap();
+    let loose = ElementFixture::new("loose")
+        .type_ref("c4/container")
+        .name("Loose")
+        .summary(Some("first"))
+        .body("Body\r\nwith CRLF\n")
+        .relations(&[(RelationKind::Uses, "orders-db", Some("SQL"))])
+        .build();
     snapshot.elements.insert(element_id("loose"), loose);
     snapshot
 }
@@ -2364,20 +2341,10 @@ fn place_refuses_an_element_the_request_deleted() {
 #[case::update(r#"{"op": "update_element", "element": {"existing": "tall"}, "summary": "short"}"#)]
 fn a_move_or_an_update_leaves_a_placement_its_size(#[case] operation: &str) {
     let mut before = snapshot();
-    let tall = Element::new(
-        element_id("tall"),
-        ElementFields {
-            statement: None,
-            type_ref: TypeRef::try_from("c4/container".to_owned()).unwrap(),
-            name: "Tall".to_owned(),
-            summary: None,
-            body: String::new(),
-            relations: Relations::new(),
-            anchor: None,
-            verified: None,
-        },
-    )
-    .unwrap();
+    let tall = ElementFixture::new("tall")
+        .type_ref("c4/container")
+        .name("Tall")
+        .build();
     before.elements.insert(element_id("tall"), tall);
     before
         .boards
@@ -2659,20 +2626,10 @@ fn the_layouts_of_a_request_share_their_work() {
         let id = element_id(&format!("e{index}"));
         before.elements.insert(
             id.clone(),
-            Element::new(
-                id.clone(),
-                ElementFields {
-                    statement: None,
-                    type_ref: TypeRef::try_from("t".to_owned()).unwrap(),
-                    name: "n".to_owned(),
-                    summary: Some(text.clone()),
-                    body: String::new(),
-                    relations: Relations::new(),
-                    anchor: None,
-                    verified: None,
-                },
-            )
-            .unwrap(),
+            ElementFixture::new(id.as_str())
+                .name("n")
+                .summary(Some(&text))
+                .build(),
         );
         before
             .boards
