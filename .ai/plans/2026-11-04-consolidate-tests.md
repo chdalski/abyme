@@ -31,7 +31,7 @@ the way.
 - [x] The apply tests are split by topic
 - [x] The outline tests are split by topic
 - [x] The server tests share their session steps
-- [ ] The server tests are split by topic
+- [x] The server tests are split by topic
 
 ## Tasks
 
@@ -133,11 +133,11 @@ the split adds no link step.
 
 Review path: Reviewer-only
 
-- [ ] The tests of the server lie in one module per topic of one integration test target, still
+- [x] The tests of the server lie in one module per topic of one integration test target, still
       run by `cargo test --workspace --test server`, and its root holds the session type and the
       helpers that two or more modules use.
-- [ ] The move changes no test body, by the same `git diff --color-moved` check as the apply split.
-- [ ] The backlog entry that asks for this consolidation leaves `.ai/backlog.md`.
+- [x] The move changes no test body, by the same `git diff --color-moved` check as the apply split.
+- [x] The backlog entry that asks for this consolidation leaves `.ai/backlog.md`.
 
 ## Decisions
 

@@ -32,7 +32,6 @@ share a parent line with one sub-item each.
 
 ## Tests
 
-- Consolidate the test files that grew across plans (`crates/abyme-core/src/apply/tests.rs`, `crates/abyme-core/src/outline/tests.rs`, `crates/abyme-mcp/tests/server.rs`) in a plan of its own before the dogfooding plan, with a builder for test elements such as `ElementFixture::new("id").summary("s").build()` behind a test feature of `abyme-model`, replacing the `ElementFields` literals in the fixtures (plan reviewer, plan D; the user chose a later plan, and this builder in the statement kind plan).
 - A full `cargo test --workspace` ended the test process `element_properties` twice, once with SIGKILL and once with the signal unconfirmed (sticky notes Task 1); it passed alone and in the next full runs, cause unknown, and the cgroup's `oom_kill` counter stands above zero: `crates/abyme-model/tests/element_properties.rs` (plan D Task 4).
 - The arrow-key test asserts element, x, and y but not `pinned`; `expect(move?.pinned).toBe(true)` would make it explicit: `crates/abyme-canvas/ui/src/main.test.tsx` (Reviewer, auto-layout Task 4)
 - The order test of `Board::placed` compares with `placements.keys()`, so it pins the map's order but not the element-ID order its doc comment promises; assert the IDs explicitly: `crates/abyme-model/src/board.rs` (Reviewer, attach notes Task 1).
@@ -41,7 +40,7 @@ share a parent line with one sub-item each.
 - In the BoardPane test "keeps a written note through a view asked for before the write answered", `waitFor(() => expect(client.openCalls).toHaveLength(2))` is already true when it runs; the `setTimeout(0)` after it does the waiting, so waiting on something the view shows would state the intent: `crates/abyme-canvas/ui/src/BoardPane.test.tsx` (Reviewer, backlog bugs Task 11).
 - A test fails now and then, cause unknown: `crates/abyme-canvas/ui/src/main.test.tsx`, "shows the boards, opens one with its boxes, and moves a box", which presses ArrowRight right after Enter; waiting for the box's `selected` class may fix it, untested (Reviewer, canvas display Task 8).
 - The canvas display has not run in a real WebKitGTK window: arrows, breadcrumb, `▸` buttons, the pin's marker and its click, review marks, and `visibilityState` when minimized are checked only in jsdom and from CSS values; for the user, together with the webview checklist in the Task Notes of `.ai/plans/completed/2026-11-03-backlog-bugs.md` (canvas display; backlog bugs Task 13, the user deferred the checklist).
-- Three loops in the server tests send each case through `call_refused`, whose message shows the result but not the case's arguments, so a case that is wrongly accepted no longer names its arguments when it fails; a context argument for the call helpers would bring them back: `crates/abyme-mcp/tests/server.rs`, `answers_arguments_that_do_not_fit_with_tool_errors_and_keeps_serving`, `read_board_takes_coordinates_only_as_an_optional_boolean`, and the attachment refusals (Reviewer, consolidate tests Task 6, Low).
+- Three loops in the server tests send each case through `call_refused`, whose message shows the result but not the case's arguments, so a case that is wrongly accepted no longer names its arguments when it fails; a context argument for the call helpers would bring them back: `crates/abyme-mcp/tests/server/protocol.rs` and `notes.rs`, `answers_arguments_that_do_not_fit_with_tool_errors_and_keeps_serving`, `read_board_takes_coordinates_only_as_an_optional_boolean`, and the attachment refusals (Reviewer, consolidate tests Task 6, Low).
 
 ## Cleanup
 
@@ -59,7 +58,8 @@ share a parent line with one sub-item each.
 - Two comparisons with `NOTE_TYPE` could become one `TypeRef::is_note()` that `Element::is_note` delegates to: `crates/abyme-core/src/apply.rs`, `crates/abyme-model/src/element.rs` (Reviewer, sticky notes Task 2).
 - The test name `the_projection_carries_exactly_the_named_fields_and_no_body` holds only for elements that are not notes: `crates/abyme-canvas/src/projection/tests.rs` (Reviewer, sticky notes Task 2).
 - `ElementContent` takes `editing` as optional, defaulting to false, only for the standalone tests in `ElementBox.test.tsx`; making it required keeps the prop with one source: `crates/abyme-canvas/ui/src/ElementBox.tsx` (Reviewer, backlog bugs Task 12).
-- Three reads in the apply tests take a board's placements through `before.boards[&board_id(..)].placements`, the read-only twin of `placements_on`; a second helper for three reads did not pay: `crates/abyme-core/src/apply/tests.rs` (Reviewer, consolidate tests Task 3, Low).
+- Three reads in the apply tests take a board's placements through `before.boards[&board_id(..)].placements`, the read-only twin of `placements_on`; a second helper for three reads did not pay: `crates/abyme-core/src/apply/tests/` (`layout.rs`, `hierarchy.rs`, `placement.rs`) (Reviewer, consolidate tests Task 3, Low).
+- Three imports of the server test root are used by one module each, `TcpListener` by `environment.rs` and `ErrorCode` and `JsonObject` by `protocol.rs`; they could move into those modules: `crates/abyme-mcp/tests/server/main.rs` (Reviewer, consolidate tests Task 7, Low).
 
 ## Documentation
 
