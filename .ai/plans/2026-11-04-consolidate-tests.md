@@ -29,7 +29,7 @@ the way.
 - [x] The backlog's assertions on these files are tightened
 - [x] The apply tests share their setup
 - [x] The apply tests are split by topic
-- [ ] The outline tests are split by topic
+- [x] The outline tests are split by topic
 - [ ] The server tests share their session steps
 - [ ] The server tests are split by topic
 
@@ -108,9 +108,9 @@ module of its own.
 
 Review path: Reviewer-only
 
-- [ ] The tests of `outline` lie in one module per topic, and the root test module holds only the
+- [x] The tests of `outline` lie in one module per topic, and the root test module holds only the
       helpers that two or more of them use.
-- [ ] The move changes no test body, by the same `git diff --color-moved` check as the apply split.
+- [x] The move changes no test body, by the same `git diff --color-moved` check as the apply split.
 
 ### Task 6: The server tests share their session steps
 
