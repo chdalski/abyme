@@ -40,7 +40,7 @@ commit it with the code, and set the rule by which later code changes keep the m
 - [x] The repository is an Abyme project whose server Claude Code starts
 - [x] The context and the containers are on boards
 - [x] The components of abyme-core are on a board
-- [ ] The components of the canvas are on a board
+- [x] The components of the canvas are on a board
 - [ ] Later code changes keep the model current
 
 ## Tasks
@@ -105,14 +105,14 @@ Context gives them, related as their modules call each other, laid out.
 
 Review path: Reviewer-only
 
-- [ ] `overview` shows `canvas-components` inside `containers`, `mirrored · current` with a
+- [x] `overview` shows `canvas-components` inside `containers`, `mirrored · current` with a
       summary.
-- [ ] Every component of the board has its type and anchor from Context, a path `git ls-files`
+- [x] Every component of the board has its type and anchor from Context, a path `git ls-files`
       lists, and a stamp by the AI on the commit HEAD named before this task's commit.
-- [ ] The relations between the components follow the calls between their modules and the Tauri
+- [x] The relations between the components follow the calls between their modules and the Tauri
       commands the UI invokes.
-- [ ] `status` reports no open review flags, and no `read_board` output of the board shows `⚠`.
-- [ ] The board files are byte-identical before and after a second `layout_board`, by a checksum
+- [x] `status` reports no open review flags, and no `read_board` output of the board shows `⚠`.
+- [x] The board files are byte-identical before and after a second `layout_board`, by a checksum
       listing of `abyme/boards/` from before and after in the handoff.
 
 ### Task 5: Later code changes keep the model current

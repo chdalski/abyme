@@ -1,0 +1,15 @@
+{
+  "format": 1,
+  "id": "canvas-components",
+  "title": "Canvas components",
+  "owner": "abyme-canvas",
+  "summary": "The parts of the canvas app with a responsibility of their own and how they call each other",
+  "zone": {"mode": "mirrored", "statement": "current"},
+  "placements": [
+    {"element": "admission", "x": 0, "y": 410, "width": 180, "height": 150},
+    {"element": "canvas-commands", "x": 220, "y": 205, "width": 180, "height": 165},
+    {"element": "canvas-ui", "x": 220, "y": 0, "width": 180, "height": 165},
+    {"element": "file-watcher", "x": 220, "y": 410, "width": 180, "height": 135},
+    {"element": "projection", "x": 440, "y": 410, "width": 180, "height": 135}
+  ]
+}
