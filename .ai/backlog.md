@@ -72,4 +72,4 @@ share a parent line with one sub-item each.
 
 ## Open decisions
 
-- Remaining MVP plans, in this order: attaching a sticky note to a box (the Non-Goal of the sticky notes plan); dogfooding on Abyme and the rlsp replay (MVP roadmap the user approved; plan D's Non-Goals).
+- Remaining MVP plan: the rlsp replay (MVP roadmap the user approved; plan D's Non-Goals).

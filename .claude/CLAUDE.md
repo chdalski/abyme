@@ -344,8 +344,18 @@ both paths.
    advisor's to guess. Wait for its explicit
    pre-implementation sign-off. A reported escalation
    trigger means stop and escalate before any edit.
-4. **Implement** the task, honoring its Task Notes, and
-   delete any scratch file you wrote to measure or try
+4. **Implement** the task. First verify the elements of
+   the Abyme model (root `CLAUDE.md`) that the previous
+   task's commit left flagged: call the MCP tool `status`,
+   check each flagged element against the committed code,
+   update it with `apply` where it no longer matches, and
+   stamp it with `verify`; these stamps go into this
+   task's commit. Then implement, honoring the Task Notes,
+   and bring each element the task's code flags up to date
+   with `apply` (root `CLAUDE.md`). `verify` stamps only
+   committed code, so their stamps go to the next task, or,
+   for the plan's last task, to Completion step 2. Delete
+   any scratch file you wrote to measure or try
    something: it is a tool, not a deliverable, and only
    the task's files belong in `git status`. Then run the
    build, format,
@@ -361,7 +371,8 @@ both paths.
    configuration also needs a fresh one.
 6. **Reviewer handoff.** Message the `reviewer` the plan
    path, task goal, acceptance criteria with the task's
-   Task Notes, changed files,
+   Task Notes, changed files, each element step 4 verified
+   or updated with what was checked or changed,
    advisor consultation status, and every quality command
    run with its result. The status is either
    `security-engineer pre-implementation signed off;
@@ -387,7 +398,9 @@ both paths.
    the task. Add every finding the task leaves open — an
    unfixed Low finding, a cleanup wish — to `.ai/backlog.md`
    and stage that file too.
-   Stage the Reviewer's exact file list and the plan file
+   Stage the Reviewer's exact file list, which includes
+   the element files step 4 stamped or updated, and the
+   plan file
    with `git add <paths>` — never `git add .` or `-A`.
    Commit with the Reviewer's message — with the user's
    edits for the last task — plus a final `Plan:`
@@ -487,11 +500,20 @@ When every task is committed:
    adding task slices (with the user's approval) or asking
    the user to lower the target — see
    `no-silent-target-weakening.md`.
-2. **Mark the plan Completed** and commit:
-   `docs(<scope>): mark plan complete`.
+2. **Mark the plan Completed**, verify the elements the
+   last task's commit left flagged as in Implementing a
+   Task step 4, and commit both:
+   `docs(<scope>): mark plan complete`. No Reviewer sees
+   this commit, so under `abyme/` it changes nothing but
+   the stamps' `verified` and `verified_by` lines. An
+   element that needs more than a stamp was missed by the
+   last task: add a task slice for it, as in step 1, before
+   marking the plan complete.
 3. **Report**: what was implemented, commits (SHA and
    message), accepted risks from the Security Engineer,
-   the entries this plan added to `.ai/backlog.md`.
+   the entries this plan added to `.ai/backlog.md`, and
+   the `git diff` of the stamps the completion commit
+   carries.
    Offer to plan the change the plan's Goal says it
    prepares, and each Non-Goal marked `(separate plan
    after this one)` — no plan file holds them yet.
@@ -541,7 +563,8 @@ config, plugin entries in `.claude/settings.json`),
 `/ensure-ai-dirs` outputs (format guide, review checklist,
 `completed/` moves, a newly created `.ai/backlog.md`), and
 plan status changes (approved,
-Completed, Canceled).
+Completed, Canceled). The commit that marks a plan
+Completed also carries the stamps of Completion step 2.
 
 This is not a general permission to commit files you write
 on your own judgment. **The test:** if you

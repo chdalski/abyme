@@ -41,7 +41,7 @@ commit it with the code, and set the rule by which later code changes keep the m
 - [x] The context and the containers are on boards
 - [x] The components of abyme-core are on a board
 - [x] The components of the canvas are on a board
-- [ ] Later code changes keep the model current
+- [x] Later code changes keep the model current
 
 ## Tasks
 
@@ -122,18 +122,18 @@ up to date before the commit and verify them once the change is committed.
 
 Review path: Reviewer-only
 
-- [ ] The Conventions of the root `CLAUDE.md` tell an AI agent that the model in `abyme/` describes
+- [x] The Conventions of the root `CLAUDE.md` tell an AI agent that the model in `abyme/` describes
       this repository, that before a commit that changes code it calls `status` and brings each
       flagged element up to date with `apply`, that a new crate gets a container and a new module
       of `abyme-core` or `abyme-canvas` that carries a responsibility of its own a component, and
       that the element `abyme` says how the model is cut.
-- [ ] `.claude/CLAUDE.md` tells the lead that each task first verifies the elements the previous
+- [x] `.claude/CLAUDE.md` tells the lead that each task first verifies the elements the previous
       task's commit left flagged, with those stamps in its own commit and its handoff naming each
       flagged element and what was checked or changed, and that the stamps of a plan's last task go
       into the commit that marks the plan complete, which then changes nothing under `abyme/` but
       `verified` lines; Implementing a Task step 8, Completion step 2, and Skill-Output Commits agree
       with it.
-- [ ] The entry of `.ai/backlog.md` that names the remaining MVP plans no longer names the
+- [x] The entry of `.ai/backlog.md` that names the remaining MVP plans no longer names the
       dogfooding on Abyme.
 
 ## Decisions
