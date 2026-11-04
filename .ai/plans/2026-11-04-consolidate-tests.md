@@ -28,7 +28,7 @@ the way.
 - [x] Tests build elements with a builder
 - [x] The backlog's assertions on these files are tightened
 - [x] The apply tests share their setup
-- [ ] The apply tests are split by topic
+- [x] The apply tests are split by topic
 - [ ] The outline tests are split by topic
 - [ ] The server tests share their session steps
 - [ ] The server tests are split by topic
@@ -92,12 +92,12 @@ module of its own, so that a reader finds a topic by its file.
 
 Review path: Reviewer-only
 
-- [ ] The tests of `apply` lie in one module per topic, and the root test module holds only the
+- [x] The tests of `apply` lie in one module per topic, and the root test module holds only the
       helpers that two or more of them use.
-- [ ] The move changes no test body: `git diff --color-moved=dimmed-zebra
+- [x] The move changes no test body: `git diff --color-moved=dimmed-zebra
       --color-moved-ws=allow-indentation-change` shows as new only `use` and `mod` lines, lint
       attributes, and one doc line per module.
-- [ ] Each expectation of `clippy::disallowed_fields` and `clippy::disallowed_methods` stands on
+- [x] Each expectation of `clippy::disallowed_fields` and `clippy::disallowed_methods` stands on
       exactly the modules or tests that read the disallowed fields or call the disallowed method.
 
 ### Task 5: The outline tests are split by topic
