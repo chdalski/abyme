@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "id": "core-components",
+  "title": "Core components",
+  "owner": "abyme-core",
+  "summary": "The modules of abyme-core with a responsibility of their own and how they use each other",
+  "zone": {"mode": "mirrored", "statement": "current"},
+  "placements": [
+    {"element": "apply", "x": 110, "y": 380, "width": 180, "height": 135},
+    {"element": "layout", "x": 110, "y": 555, "width": 180, "height": 135},
+    {"element": "operations", "x": 110, "y": 730, "width": 180, "height": 150},
+    {"element": "outline", "x": 0, "y": 0, "width": 180, "height": 135},
+    {"element": "project-store", "x": 220, "y": 0, "width": 180, "height": 150},
+    {"element": "review-flags", "x": 110, "y": 190, "width": 180, "height": 150}
+  ]
+}
