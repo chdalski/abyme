@@ -54,6 +54,8 @@ type BoardCanvasProps = {
   ) => Promise<string | null>;
   deleteNotes: (elements: string[]) => void;
   onMoveFailed: (message: string) => void;
+  /** Answers a held note's write, which the canvas never sends, as failed. */
+  refuseNote: () => Promise<boolean>;
   onOpen: (board: string) => void;
 };
 
@@ -82,6 +84,7 @@ function Flow({
   createNote,
   deleteNotes,
   onMoveFailed,
+  refuseNote,
   onOpen,
 }: BoardCanvasProps) {
   const {
@@ -160,6 +163,11 @@ function Flow({
     [onOpen],
   );
 
+  const fields = useMemo(
+    () => ({ ...noteFields, refuse: refuseNote }),
+    [noteFields, refuseNote],
+  );
+
   const newNotes = useMemo(
     () => ({
       create: async (draft: string, position: XYPosition, parts: NoteParts) => {
@@ -179,7 +187,7 @@ function Flow({
       <ReleasePin.Provider value={view.mode === "mirrored" ? null : release}>
         <WriteNote.Provider value={writeNote}>
           <NewNotes.Provider value={newNotes}>
-            <NoteFields.Provider value={noteFields}>
+            <NoteFields.Provider value={fields}>
               <div
                 ref={surface}
                 className="board-surface"

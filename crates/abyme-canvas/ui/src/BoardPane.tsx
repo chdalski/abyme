@@ -16,6 +16,9 @@ import {
 } from "./notes";
 import type { Move } from "./nodes";
 
+/** What the pane says when the canvas writes nothing from a deleted note. */
+const DELETED_NOTE = "This note was deleted, so its text was not written.";
+
 /**
  * The open board: its title and boxes, or the core's message in their place
  * when it never loaded. When a later reload fails, it keeps the board as last
@@ -82,6 +85,15 @@ export function BoardPane({
     [send, board],
   );
 
+  // The canvas never sends the write of a note a view left out while its field
+  // was open; it fails here like any write, so that the way to another board
+  // waits on it the same way.
+  const refuseNote = useCallback(() => {
+    const refused = Promise.resolve(false);
+    setWriteFailure(DELETED_NOTE);
+    onNoteWrite(refused);
+    return refused;
+  }, [onNoteWrite]);
   const writeNote = useCallback(
     (element: string, parts: NoteParts) => {
       const write = send([toNoteUpdate(element, parts)]).then(
@@ -184,6 +196,7 @@ export function BoardPane({
           createNote={createNote}
           deleteNotes={deleteNotes}
           onMoveFailed={setWriteFailure}
+          refuseNote={refuseNote}
           onOpen={onOpen}
         />
       </div>

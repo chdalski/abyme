@@ -26,11 +26,13 @@ export const NewNotes = createContext<{
 
 /**
  * Opens and closes a note's text field, whose state the board's boxes hold, so
- * that a new view of the board can keep it.
+ * that a new view of the board can keep it, and answers the write of a held
+ * note, which it never sends, as failed.
  */
 export const NoteFields = createContext<{
   open: (element: string) => void;
   close: (element: string) => void;
+  refuse: () => Promise<boolean>;
 } | null>(null);
 
 /** The rows a note's text field has at least. */
@@ -138,26 +140,32 @@ function NoteField({
  * editing; whether its field is open, `editing`, comes from the board's boxes.
  * A written text stays until the board's next view brings a new one. A new
  * note, at `draftAt`, opens by itself, and once written it writes no more: it
- * only waits for the view that lists it.
+ * only waits for the view that lists it. A note a view left out while its field
+ * was open, `leftOut`, writes nothing at all, new or not: its ID may belong to
+ * another element by then.
  */
 export function NoteContent({
   element,
   name,
   body,
   editing,
+  leftOut,
   draftAt,
 }: {
   element: string;
   name: string;
   body: string;
   editing: boolean;
+  leftOut: boolean;
   draftAt?: XYPosition | undefined;
 }) {
   const update = useContext(WriteNote);
   const newNotes = useContext(NewNotes);
   const fields = useContext(NoteFields);
-  const write =
-    draftAt === undefined
+  const refuse = fields && (() => fields.refuse());
+  const write = leftOut
+    ? refuse
+    : draftAt === undefined
       ? update
       : newNotes &&
         ((id: string, parts: NoteParts) => newNotes.create(id, draftAt, parts));

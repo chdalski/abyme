@@ -20,12 +20,15 @@ share a parent line with one sub-item each.
 - A note whose slug equals a relation's target without a file takes over that incoming relation, and then cannot be deleted while it holds; `taken_elements` holds no relation targets: `crates/abyme-core/src/apply.rs` (security engineer, sticky notes Task 6).
 - `listed_id` ignores entries that are no regular file or have no valid ID as a name, so a symlink `note.md` counts as free and is replaced by the rename, and on a case-insensitive file system `Note.md` too: `crates/abyme-core/src/project/store.rs` (security engineer, sticky notes Task 6).
 - When a box moves, a note whose attachment did not hold only because of the range can start to hold, and the request's free space does not count it where it now lies, so a later `place_element` of the request can overlap it; only a hand-edited board file gets there: `crates/abyme-core/src/apply.rs`, `move_element` (security engineer, attach notes Task 2, accepted Low).
+- A single view that carries both the deletion of a note whose field is open and a new element under its ID never leaves the note out, so the open field carries over onto a new note and its write lands there (a new element of another kind closes the field instead, see Bugs); a write already on its way when the view that leaves the note out arrives lands on whatever holds the ID too: `crates/abyme-canvas/ui/src/nodes.ts`, `keepUiState` (security engineer, backlog bugs Task 13, Low).
 
 ## Bugs
 
 - A board opened by Enter while a note write is pending marks no mouse double click in flight when the write answers, so that double click's rest can act on the new board; `opened()` could set `openedByPress` without the `click >= 1` condition, which drops nothing else: `crates/abyme-canvas/ui/src/App.tsx`, `useOpenAfterNoteWrite` (Reviewer and security engineer, backlog bugs Task 10, Low).
 - After a failed note write, any keydown ends the hold on the press that ended the input, also a key held down or a bare modifier during a double click, so its second click can open the board; clearing only on a keydown without `repeat` that is no bare modifier would close it: `crates/abyme-canvas/ui/src/App.tsx`, `useOpenAfterNoteWrite` (security engineer, backlog bugs Task 9, Low).
-- When the AI deletes a note while its text is being typed, the typed text goes without a message: `crates/abyme-canvas/ui/src/NoteContent.tsx` (Reviewer, sticky notes Task 5).
+- A view that lists an open note's ID as anything but a note closes its field, and the typed text goes without a message: a hand deletion of the note's file, which the board still places, shows it `missing`, and one view can carry the deletion and a non-note element under its ID: `crates/abyme-canvas/ui/src/nodes.ts`, `keepUiState` (Reviewer, backlog bugs Task 13, Low).
+- The user's own new note whose ID equals a held note's counts as listed, so it vanishes until the held note's field closes and the latest view brings it back; nothing wrong is written: `crates/abyme-canvas/ui/src/boardNodes.ts`, `draftWritten`, and `keepUiState` (security engineer and Reviewer, backlog bugs Task 13, Low).
+- A note a view lists afresh but hanging on a held note's ID is held back with that box, so if its own field was open, its field and text go: `crates/abyme-canvas/ui/src/nodes.ts`, `keepUiState` (Reviewer, backlog bugs Task 13, Low).
 
 ## Tests
 
@@ -40,7 +43,7 @@ share a parent line with one sub-item each.
 - `the_anchor_of_those_requests_is_invalid_on_its_own` accepts any `InvalidElement`; `ElementProblem::InvalidAnchor { .. }` names its intent: `crates/abyme-core/src/apply/tests.rs` (Reviewer, statement kind Task 2)
 - In the BoardPane test "keeps a written note through a view asked for before the write answered", `waitFor(() => expect(client.openCalls).toHaveLength(2))` is already true when it runs; the `setTimeout(0)` after it does the waiting, so waiting on something the view shows would state the intent: `crates/abyme-canvas/ui/src/BoardPane.test.tsx` (Reviewer, backlog bugs Task 11).
 - A test fails now and then, cause unknown: `crates/abyme-canvas/ui/src/main.test.tsx`, "shows the boards, opens one with its boxes, and moves a box", which presses ArrowRight right after Enter; waiting for the box's `selected` class may fix it, untested (Reviewer, canvas display Task 8).
-- The canvas display has not run in a real WebKitGTK window: arrows, breadcrumb, `▸` buttons, the pin's marker and its click, review marks, and `visibilityState` when minimized are checked only in jsdom and from CSS values; for the user (canvas display).
+- The canvas display has not run in a real WebKitGTK window: arrows, breadcrumb, `▸` buttons, the pin's marker and its click, review marks, and `visibilityState` when minimized are checked only in jsdom and from CSS values; for the user, together with the webview checklist in the Task Notes of `.ai/plans/completed/2026-11-03-backlog-bugs.md` (canvas display; backlog bugs Task 13, the user deferred the checklist).
 
 ## Cleanup
 

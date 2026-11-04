@@ -11,8 +11,9 @@ import type { BoardEntry, BoardView, Shown } from "./bindings";
  * What a box shows: its element's ID and what the projection says of it,
  * its position in the board file, where it returns when a move fails, the
  * boards its element owns, whether the board file pins it, the box it hangs on,
- * whether its note's text field is open, and, for a new note no file holds yet,
- * the ID the write gave it.
+ * whether its note's text field is open, whether it is a note a view left out
+ * while its field was open (see `keepUiState`), and, for a new note no file
+ * holds yet, the ID the write gave it.
  */
 export type ElementData = {
   element: string;
@@ -22,6 +23,7 @@ export type ElementData = {
   pinned: boolean;
   attachedTo: string | null;
   editing: boolean;
+  leftOut: boolean;
   draft: { createdAs: string | null; writtenAt: number | null } | null;
 };
 
@@ -82,6 +84,7 @@ export function toNodes(view: BoardView): ElementNode[] {
         pinned: placement.pinned,
         attachedTo: parent === undefined ? null : parent.element,
         editing: false,
+        leftOut: false,
         draft: null,
       },
       draggable:
@@ -218,6 +221,40 @@ export function finishedMoves(changes: NodeChange<ElementNode>[]): Move[] {
   );
 }
 
+/** Whether `node` is one of `elements` or hangs on one of them. */
+function isOrHangsOn(node: ElementNode, elements: Set<string>): boolean {
+  return (
+    elements.has(node.id) ||
+    (node.parentId !== undefined && elements.has(node.parentId))
+  );
+}
+
+/**
+ * `node`, a note a view left out while its field was open, held where it lies
+ * on the board, hanging on nothing, since the box it hung on may be gone. It
+ * offers nothing but its field.
+ */
+function hold(node: ElementNode, byId: Map<string, ElementNode>): ElementNode {
+  const { parentId, ...free } = node;
+  const parent = parentId === undefined ? undefined : byId.get(parentId);
+  return {
+    ...free,
+    position:
+      parent === undefined
+        ? node.position
+        : {
+            x: parent.position.x + node.position.x,
+            y: parent.position.y + node.position.y,
+          },
+    selected: false,
+    dragging: false,
+    selectable: false,
+    draggable: false,
+    deletable: false,
+    data: { ...node.data, leftOut: true },
+  };
+}
+
 /**
  * `fresh`, with the state of the canvas that a reload must not reset: a box
  * `current` has selected stays selected, so the arrow keys keep moving it, a
@@ -225,29 +262,47 @@ export function finishedMoves(changes: NodeChange<ElementNode>[]): Move[] {
  * note, and a box `current` is dragging stays where the drag holds it. A new
  * note stays until `fresh` lists it, and a written one also leaves once a view
  * asked for after its write answered (`askedAt`) leaves it out.
+ * A note whose field is open and that `fresh` leaves out, as when the AI
+ * deleted it, is held: it stays as it is, whatever later views list, until its
+ * field closes (`closeNoteField`). Its ID may belong to a new element by then,
+ * so nothing is written, moved, or deleted from it, and no other box carries
+ * its ID or hangs on it until then.
  */
 export function keepUiState(
   fresh: ElementNode[],
   current: ElementNode[],
   askedAt: number | null,
 ): ElementNode[] {
-  const held = new Map(current.map((node) => [node.id, node]));
+  const before = new Map(current.map((node) => [node.id, node]));
   const listed = new Set(fresh.map((node) => node.id));
-  const kept = fresh.map((node) => {
-    const was = held.get(node.id);
-    if (was === undefined) {
-      return node;
-    }
-    const selected = was.selected === true ? { selected: true } : {};
-    // A box that no longer shows a note has no field to keep open.
-    const merged =
-      was.data.editing && node.data.shown.kind === "note"
-        ? { ...node, ...selected, data: { ...node.data, editing: true } }
-        : { ...node, ...selected };
-    return was.dragging === true
-      ? { ...merged, position: was.position, dragging: true }
-      : merged;
-  });
+  const holding = current
+    .filter(
+      ({ id, data }) =>
+        data.leftOut ||
+        (data.editing &&
+          data.draft === null &&
+          data.shown.kind === "note" &&
+          !listed.has(id)),
+    )
+    .map((node) => (node.data.leftOut ? node : hold(node, before)));
+  const held = new Set(holding.map((node) => node.id));
+  const kept = fresh
+    .filter((node) => !isOrHangsOn(node, held))
+    .map((node) => {
+      const was = before.get(node.id);
+      if (was === undefined) {
+        return node;
+      }
+      const selected = was.selected === true ? { selected: true } : {};
+      // A box that no longer shows a note has no field to keep open.
+      const merged =
+        was.data.editing && node.data.shown.kind === "note"
+          ? { ...node, ...selected, data: { ...node.data, editing: true } }
+          : { ...node, ...selected };
+      return was.dragging === true
+        ? { ...merged, position: was.position, dragging: true }
+        : merged;
+    });
   // A new note stays until a view lists it, also when that view was asked for
   // before the note's write answered; a view asked for after it that leaves the
   // note out says another writer deleted it.
@@ -262,7 +317,36 @@ export function keepUiState(
       askedAt !== null && draft.writtenAt !== null && askedAt > draft.writtenAt;
     return !listed.has(draft.createdAs) && !deleted;
   });
-  return [...kept, ...drafts];
+  return [...kept, ...holding, ...drafts];
+}
+
+/**
+ * `nodes`, with the text field of `element`'s note closed. A held note goes
+ * then, and the boxes `latest`, the boxes of the latest view, lists under its ID
+ * or hanging on it take its place, unless they are there already or hang on a
+ * note still held, whose own close brings them.
+ */
+export function closeNoteField(
+  nodes: ElementNode[],
+  element: string,
+  latest: ElementNode[],
+): ElementNode[] {
+  const closing = nodes.find((node) => node.id === element);
+  if (closing === undefined || !closing.data.leftOut) {
+    return withNoteField(nodes, element, false);
+  }
+  const rest = nodes.filter((node) => node.id !== element);
+  const there = new Set(rest.map((node) => node.id));
+  const stillHeld = new Set(
+    rest.filter((node) => node.data.leftOut).map((node) => node.id),
+  );
+  const back = latest.filter(
+    (node) =>
+      isOrHangsOn(node, new Set([element])) &&
+      !there.has(node.id) &&
+      !isOrHangsOn(node, stillHeld),
+  );
+  return [...rest, ...back];
 }
 
 /**
@@ -287,6 +371,7 @@ export function draftNote(id: string, position: XYPosition): ElementNode {
       pinned: true,
       attachedTo: null,
       editing: true,
+      leftOut: false,
       draft: { createdAs: null, writtenAt: null },
     },
     style: { pointerEvents: "all" },

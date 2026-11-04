@@ -10,6 +10,7 @@ import { nextStamp } from "./boards";
 import {
   type ElementNode,
   type Move,
+  closeNoteField,
   draftNote,
   finishedMoves,
   finishedRemovals,
@@ -30,7 +31,9 @@ import {
  * `remove` and stays until a view leaves it out. A new note lives among the
  * boxes, as React Flow measures only what this state holds, under an ID no
  * element can have; once written, it goes when a view asked for after the
- * write answered (`askedAt`, a stamp of `nextStamp`) leaves it out.
+ * write answered (`askedAt`, a stamp of `nextStamp`) leaves it out. A note a
+ * view left out while its field was open stays until its field closes; nothing
+ * is written from it, and no change React Flow reports for it is passed on.
  */
 export function useBoardNodes(
   view: BoardView,
@@ -53,9 +56,31 @@ export function useBoardNodes(
   useEffect(() => {
     shown.current = nodes;
   }, [nodes]);
+  // The latest view, for what takes the place of a held note when its field
+  // closes, however long it stayed open.
+  const latest = useRef(view);
+  useEffect(() => {
+    latest.current = view;
+  }, [view]);
 
   const onNodesChange = useCallback(
-    (changes: NodeChange<ElementNode>[]) => {
+    (reported: NodeChange<ElementNode>[]) => {
+      // A held note's ID may belong to another element by now, so neither its
+      // removal nor its move goes on, whatever React Flow reports for it.
+      const held = new Set(
+        shown.current
+          .filter((node) => node.data.leftOut)
+          .map((node) => node.id),
+      );
+      const changes = reported.filter(
+        (change) =>
+          !(
+            (change.type === "remove" ||
+              change.type === "position" ||
+              change.type === "select") &&
+            held.has(change.id)
+          ),
+      );
       const kept = changes.filter((change) => change.type !== "remove");
       setNodes((current) => applyNodeChanges(kept, current));
       const removals = finishedRemovals(changes);
@@ -114,7 +139,9 @@ export function useBoardNodes(
         setNodes((current) => withNoteField(current, element, true));
       },
       close: (element: string) => {
-        setNodes((current) => withNoteField(current, element, false));
+        setNodes((current) =>
+          closeNoteField(current, element, toNodes(latest.current)),
+        );
       },
     }),
     [],

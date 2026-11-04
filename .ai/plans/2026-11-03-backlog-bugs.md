@@ -42,7 +42,7 @@ the same code, so that the canvas and the core keep their stated behaviour befor
 - [x] One press opens one board
 - [x] A new note that is deleted before a view lists it goes
 - [x] The canvas knows which note's field is open
-- [ ] A note deleted while it is typed keeps its field
+- [x] A note deleted while it is typed keeps its field
 
 ## Tasks
 
@@ -228,25 +228,25 @@ it, since a new element can get the deleted note's ID.
 
 Review path: Security-Hybrid
 
-- [ ] A note whose field is open stays on the board, at its last position on the board, with its
+- [x] A note whose field is open stays on the board, at its last position on the board, with its
       field and text when a view leaves it out; it cannot be selected, dragged, moved with the
       arrow keys, or deleted while it stays. Vitest shows it.
-- [ ] Ending that field's input with changed text sends nothing, shows the canvas's message that
+- [x] Ending that field's input with changed text sends nothing, shows the canvas's message that
       the note was deleted and its text not written, and keeps the field and the text open, and
       Vitest shows it.
-- [ ] A later view that lists the note's ID again, as a note or as another box, leaves the field,
+- [x] A later view that lists the note's ID again, as a note or as another box, leaves the field,
       its text, and the refusal as they are while the field is open, and the box that view lists
       under that ID is not shown until the field closes; Vitest shows it.
-- [ ] Ending that field's input with unchanged or blank text writes nothing; the note leaves the
+- [x] Ending that field's input with unchanged or blank text writes nothing; the note leaves the
       board at once when the latest view does not list its ID, and gives way to the box that view
       lists under its ID when it does. Vitest shows both.
-- [ ] A note whose field is closed still goes when a view leaves it out.
-- [ ] A new note no file holds yet, whose field is open, still writes and is never refused as
+- [x] A note whose field is closed still goes when a view leaves it out.
+- [x] A new note no file holds yet, whose field is open, still writes and is never refused as
       deleted, and a written new note still goes as Task 11 says; Vitest shows it.
-- [ ] A reader of Canvas can tell what happens to a note deleted while it is typed.
-- [ ] The review before the last commit gives the user the webview checklist with every item the
+- [x] A reader of Canvas can tell what happens to a note deleted while it is typed.
+- [x] The review before the last commit gives the user the webview checklist with every item the
       tasks name.
-- [ ] `pnpm --dir crates/abyme-canvas/ui check` and `pnpm --dir crates/abyme-canvas/ui test` pass.
+- [x] `pnpm --dir crates/abyme-canvas/ui check` and `pnpm --dir crates/abyme-canvas/ui test` pass.
 
 ## Task Notes
 
@@ -282,6 +282,24 @@ Review path: Security-Hybrid
   when the write arrives, would write the text over it. Once a view leaves the note out, its field
   sends nothing until it closes, whatever later views list under its ID (security engineer, Task 13
   pre-implementation assessment).
+- **While a deleted note's ID is held back, so are the boxes that hang on it:** a later view that
+  lists the ID as a box with notes on it would otherwise hang those notes on the held note, and a
+  drag of one would send a position or a detach judged against the wrong box; they appear with
+  their box once the field closes (security engineer, Task 13 pre-implementation sign-off, C6).
+- **Closing a deleted note's field restores from the latest view,** read when the field closes,
+  never a view captured earlier (security engineer, Task 13 pre-implementation sign-off, C7).
+- **Only the note's mark decides the refusal,** never whether the latest view lists its ID, and no
+  way of ending the field, Esc, blur, or a second end, reaches the write for a marked note
+  (security engineer, Task 13 pre-implementation sign-off, C8). Arrows to a held-back ID drawn to
+  the held note are accepted as cosmetic.
+- **No node but a held note carries its ID, and none hangs on it:** closing a held note's field
+  restores from the latest view only what hangs on no note still held, and closing twice adds
+  nothing (security engineer, Task 13 pre-implementation sign-off, R1).
+- **The canvas drops every remove and finished move of a held note itself,** besides React Flow's
+  flags, since the pane would pass them on to whatever element holds the ID by then (security
+  engineer, Task 13 pre-implementation sign-off, R2).
+- **The mark decides the refusal when the field ends,** before whether the note is new, and marking
+  keeps the note's field mounted (security engineer, Task 13 pre-implementation sign-off, R3).
 - **The marks are cut, not stacked:** widths below 180 px come only from hand edits, and cutting
   follows the existing style of the `▸` buttons.
 - **A box whose file is missing loses the drag too:** a box offers only what the admission and the

@@ -222,3 +222,88 @@ describe("two batches of changes before React renders", () => {
     });
   });
 });
+
+describe("a note a view left out while its field was open", () => {
+  const NOTE = { kind: "note", name: "N", body: "" } as const;
+  const asBox = (name: string) =>
+    boardView({
+      placements: [
+        placedBox("n", {
+          shown: { kind: "element", type_ref: "t", name, summary: null },
+        }),
+      ],
+    });
+
+  /** The note `n` with its field open, held by a view that leaves it out. */
+  function held() {
+    const moves: Move[][] = [];
+    const removed: string[][] = [];
+    const hook = renderHook(
+      ({ board }: { board: BoardView }) =>
+        useBoardNodes(
+          board,
+          null,
+          (sent) => {
+            moves.push(sent);
+            return Promise.resolve();
+          },
+          () => {},
+          (elements) => removed.push(elements),
+        ),
+      {
+        initialProps: {
+          board: boardView({ placements: [placedBox("n", { shown: NOTE })] }),
+        },
+      },
+    );
+    act(() => {
+      hook.result.current.noteFields.open("n");
+    });
+    hook.rerender({ board: boardView() });
+    return { hook, moves, removed };
+  }
+
+  it("passes on neither a selection, a move, nor a removal React Flow reports for it", () => {
+    const { hook, moves, removed } = held();
+
+    act(() => {
+      hook.result.current.onNodesChange([
+        { type: "select", id: "n", selected: true },
+        {
+          type: "position",
+          id: "n",
+          position: { x: 5, y: 5 },
+          dragging: false,
+        },
+        { type: "remove", id: "n" },
+      ]);
+    });
+
+    expect(moves).toEqual([]);
+    expect(removed).toEqual([]);
+    expect(
+      hook.result.current.nodes.map((node) => [
+        node.id,
+        node.position,
+        node.selected,
+        node.data.leftOut,
+      ]),
+    ).toEqual([["n", { x: 0, y: 0 }, false, true]]);
+  });
+
+  it("gives way to the box of the view that came last before its field closed", () => {
+    const { hook } = held();
+
+    hook.rerender({ board: asBox("Three") });
+    hook.rerender({ board: asBox("Four") });
+    act(() => {
+      hook.result.current.noteFields.close("n");
+    });
+
+    expect(
+      hook.result.current.nodes.map((node) => [node.id, node.data.shown]),
+    ).toEqual([
+      ["n", { kind: "element", type_ref: "t", name: "Four", summary: null }],
+    ]);
+  });
+});

@@ -57,6 +57,7 @@ function canvasOf(
         createNote={createNote}
         deleteNotes={deleteNotes}
         onMoveFailed={() => {}}
+        refuseNote={() => Promise.resolve(false)}
         onOpen={onOpen}
       />
     </div>
@@ -149,6 +150,7 @@ describe("BoardCanvas", () => {
           deleteNotes={() => {}}
           onOpen={() => {}}
           onMoveFailed={() => {}}
+          refuseNote={() => Promise.resolve(false)}
         />
       </div>,
     );

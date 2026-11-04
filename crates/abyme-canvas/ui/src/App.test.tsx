@@ -11,7 +11,7 @@ import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
-import type { BoardView } from "./bindings";
+import type { BoardView, Placement } from "./bindings";
 import { FakeClient } from "./fakeClient";
 import { boardView, placedBox } from "./testBoards";
 
@@ -579,6 +579,319 @@ describe("deleting a note another element relates to", () => {
     expect(container.querySelector(".react-flow__edge-text")?.textContent).toBe(
       "asks",
     );
+  });
+});
+
+describe("a note deleted while its text is typed", () => {
+  const DELETED = "This note was deleted, so its text was not written.";
+  const ASK = placedBox("ask", {
+    x: 200,
+    y: 50,
+    shown: { kind: "note", name: "Ask", body: "" },
+  });
+  const element = (name: string) =>
+    ({
+      kind: "element",
+      type_ref: "c4/container",
+      name,
+      summary: null,
+    }) as const;
+  /** The board `context`, whose box `payments` shows `marker`, with `placements`. */
+  const contextWith = (marker: string, ...placements: Placement[]) =>
+    boardView({
+      id: "context",
+      title: "Context",
+      placements: [
+        placedBox("payments", { shown: element(marker) }),
+        ...placements,
+      ],
+    });
+  const field = () =>
+    screen.getByRole<HTMLTextAreaElement>("textbox", {
+      name: "Text of the note",
+    });
+  /** Brings `view`, whose box `payments` shows `marker`, as a change of the files does. */
+  async function reload(
+    client: FakeClient,
+    marker: string,
+    ...placements: Placement[]
+  ) {
+    client.views.context = contextWith(marker, ...placements);
+    act(() => {
+      client.change();
+    });
+    await screen.findByText(marker);
+  }
+  /** Opens `ask` for typing, types `Asked`, and has the AI delete it. */
+  async function deletedWhileTyped(client: FakeClient) {
+    client.views.context = contextWith("Payments", ASK);
+    const rendered = await openContext(client);
+    fireEvent.doubleClick(screen.getByText("Ask"));
+    fireEvent.change(field(), { target: { value: "Asked" } });
+    await reload(client, "Deleted");
+    return rendered;
+  }
+  const settle = () =>
+    act(() => new Promise<void>((done) => queueMicrotask(done)));
+
+  it("keeps the note where it lay, with its field and text, and lets it be neither selected, moved, nor deleted", async () => {
+    const client = clientWithBoards();
+    const { container } = await deletedWhileTyped(client);
+    const note = container.querySelector('.react-flow__node[data-id="ask"]');
+    if (!(note instanceof HTMLElement)) {
+      throw new Error("no note");
+    }
+
+    expect(field().value).toBe("Asked");
+    expect(note.style.transform).toBe("translate(200px,50px)");
+    expect(note.classList.contains("selectable")).toBe(false);
+    expect(note.classList.contains("draggable")).toBe(false);
+    fireEvent.click(note);
+    fireEvent.keyDown(note, { key: "Enter" });
+    fireEvent.keyUp(note, { key: "Enter" });
+    fireEvent.keyDown(note, { key: "ArrowRight" });
+    fireEvent.keyDown(note, { key: "Delete" });
+    fireEvent.keyDown(note, { key: "Backspace" });
+    await settle();
+
+    expect(note.classList.contains("selected")).toBe(false);
+    expect(note.style.transform).toBe("translate(200px,50px)");
+    expect(field().value).toBe("Asked");
+    expect(client.applied).toEqual([]);
+  });
+
+  it.each([
+    ["Esc", [() => fireEvent.keyDown(field(), { key: "Escape" })]],
+    ["a click next to it", [() => fireEvent.blur(field())]],
+    [
+      "Esc and a blur",
+      [
+        () => fireEvent.keyDown(field(), { key: "Escape" }),
+        () => fireEvent.blur(field()),
+      ],
+    ],
+    [
+      "Esc twice",
+      [
+        () => fireEvent.keyDown(field(), { key: "Escape" }),
+        () => fireEvent.keyDown(field(), { key: "Escape" }),
+      ],
+    ],
+  ])(
+    "writes nothing on %s with changed text, says so, and keeps the field",
+    async (_how, ends) => {
+      const client = clientWithBoards();
+      await deletedWhileTyped(client);
+
+      for (const end of ends) {
+        end();
+        await settle();
+      }
+
+      expect((await screen.findByRole("alert")).textContent).toBe(DELETED);
+      expect(field().value).toBe("Asked");
+      expect(field().readOnly).toBe(false);
+      expect(client.applied).toEqual([]);
+    },
+  );
+
+  it.each([
+    ["a click next to it", [() => fireEvent.blur(field())]],
+    ["Esc", [() => fireEvent.keyDown(field(), { key: "Escape" })]],
+  ])(
+    "stays on the board after %s, with the text and the message, when the click of that press goes to another board",
+    async (_how, ends) => {
+      const client = clientWithBoards();
+      await deletedWhileTyped(client);
+
+      for (const end of ends) {
+        end();
+      }
+      fireEvent.click(screen.getByRole("button", { name: "Containers" }));
+      await settle();
+
+      expect(screen.getByRole("heading", { name: "Context" })).toBeDefined();
+      expect(field().value).toBe("Asked");
+      expect((await screen.findByRole("alert")).textContent).toBe(DELETED);
+      expect(client.applied).toEqual([]);
+
+      fireEvent.mouseDown(window, { detail: 1 });
+      fireEvent.click(screen.getByRole("button", { name: "Containers" }));
+      expect(
+        await screen.findByRole("heading", { name: "Containers" }),
+      ).toBeDefined();
+    },
+  );
+
+  it.each([
+    ["unchanged", "Ask"],
+    ["blank", "  "],
+  ])(
+    "writes nothing for %s text, and the note goes at once",
+    async (_kind, text) => {
+      const client = clientWithBoards();
+      await deletedWhileTyped(client);
+
+      fireEvent.change(field(), { target: { value: text } });
+      fireEvent.keyDown(field(), { key: "Escape" });
+      await settle();
+
+      expect(
+        screen.queryByRole("textbox", { name: "Text of the note" }),
+      ).toBeNull();
+      expect(screen.queryByText("Ask")).toBeNull();
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(client.applied).toEqual([]);
+    },
+  );
+
+  it("shows nothing a later view lists under its ID until the field closes, then the box of the latest view with what hangs on it", async () => {
+    const client = clientWithBoards();
+    const { container } = await deletedWhileTyped(client);
+    const askAsABox = (name: string) => [
+      placedBox("ask", { x: 400, y: 0, shown: element(name) }),
+      placedBox("hung", {
+        x: 420,
+        y: 10,
+        shown: { kind: "note", name: "Hung", body: "" },
+        attached_to: "ask",
+      }),
+    ];
+
+    await reload(client, "Third", ...askAsABox("Ask three"));
+    expect(screen.queryByText("Ask three")).toBeNull();
+    expect(screen.queryByText("Hung")).toBeNull();
+    await reload(client, "Fourth", ...askAsABox("Ask four"));
+    fireEvent.keyDown(field(), { key: "Escape" });
+    await settle();
+    expect(field().value).toBe("Asked");
+    expect(screen.queryByText("Ask four")).toBeNull();
+
+    fireEvent.change(field(), { target: { value: "" } });
+    fireEvent.keyDown(field(), { key: "Escape" });
+    expect(await screen.findByText("Ask four")).toBeDefined();
+    expect(client.applied).toEqual([]);
+
+    // The note hangs on the box of the latest view and moves against it.
+    const hung = container.querySelector('.react-flow__node[data-id="hung"]');
+    if (!(hung instanceof HTMLElement)) {
+      throw new Error("no hung note");
+    }
+    fireEvent.keyDown(hung, { key: "Enter" });
+    fireEvent.keyUp(hung, { key: "Enter" });
+    await waitFor(() => expect(hung.classList.contains("selected")).toBe(true));
+    fireEvent.keyDown(hung, { key: "ArrowRight" });
+    await waitFor(() => expect(client.applied).toHaveLength(1));
+    expect(client.applied[0]).toEqual([
+      {
+        op: "move_element",
+        element: { existing: "hung" },
+        board: { existing: "context" },
+        x: 425,
+        y: 10,
+        pinned: true,
+      },
+    ]);
+  });
+
+  it.each([
+    [
+      "another note",
+      { kind: "note", name: "Other", body: "" } as const,
+      "Other",
+    ],
+    [
+      "a box whose file is missing",
+      { kind: "missing" } as const,
+      "Missing element ask",
+    ],
+  ])(
+    "refuses the write when a later view lists its ID as %s, and gives way to it once closed",
+    async (_as, shown, text) => {
+      const client = clientWithBoards();
+      await deletedWhileTyped(client);
+
+      await reload(client, "Third", placedBox("ask", { x: 400, shown }));
+      expect(screen.queryByText(text)).toBeNull();
+      fireEvent.keyDown(field(), { key: "Escape" });
+      expect((await screen.findByRole("alert")).textContent).toBe(DELETED);
+      fireEvent.change(field(), { target: { value: "" } });
+      fireEvent.keyDown(field(), { key: "Escape" });
+
+      expect(await screen.findByText(text)).toBeDefined();
+      expect(client.applied).toEqual([]);
+    },
+  );
+
+  it("refuses the next end itself when a write on its way fails after the note was deleted", async () => {
+    const client = clientWithBoards();
+    client.views.context = contextWith("Payments", ASK);
+    await openContext(client);
+    let fail: (message: string) => void = () => {};
+    const apply = vi.spyOn(client, "apply").mockImplementationOnce(
+      () =>
+        new Promise<string[]>((_resolve, reject) => {
+          fail = reject;
+        }),
+    );
+    fireEvent.doubleClick(screen.getByText("Ask"));
+    fireEvent.change(field(), { target: { value: "Asked" } });
+    fireEvent.keyDown(field(), { key: "Escape" });
+
+    await reload(client, "Deleted");
+    await act(async () => {
+      fail("no element has the ID ask");
+      await Promise.resolve();
+    });
+    expect(field().value).toBe("Asked");
+    fireEvent.keyDown(field(), { key: "Escape" });
+
+    expect((await screen.findByRole("alert")).textContent).toBe(DELETED);
+    expect(apply).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets the note go when a write on its way works after the note was deleted", async () => {
+    const client = clientWithBoards();
+    client.views.context = contextWith("Payments", ASK);
+    await openContext(client);
+    let finish = () => {};
+    vi.spyOn(client, "apply").mockImplementationOnce(
+      () =>
+        new Promise<string[]>((resolve) => {
+          finish = () => resolve([]);
+        }),
+    );
+    fireEvent.doubleClick(screen.getByText("Ask"));
+    fireEvent.change(field(), { target: { value: "Asked" } });
+    fireEvent.keyDown(field(), { key: "Escape" });
+
+    await reload(client, "Deleted");
+    await act(async () => {
+      finish();
+      await Promise.resolve();
+    });
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("textbox", { name: "Text of the note" }),
+      ).toBeNull(),
+    );
+    expect(screen.queryByText("Asked")).toBeNull();
+  });
+
+  it("still writes a new note whose field is open through a later view", async () => {
+    const client = clientWithBoards();
+    client.views.context = contextWith("Payments");
+    await openContext(client);
+    fireEvent.keyDown(window, { key: "n" });
+    fireEvent.change(field(), { target: { value: "Idea" } });
+
+    await reload(client, "Later");
+    fireEvent.keyDown(field(), { key: "Escape" });
+
+    await waitFor(() => expect(client.applied).toHaveLength(1));
+    expect(client.applied[0]?.[0]?.op).toBe("create_element");
+    expect(screen.queryByText(DELETED)).toBeNull();
   });
 });
 

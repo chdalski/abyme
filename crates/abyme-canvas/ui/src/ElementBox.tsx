@@ -119,6 +119,7 @@ export function ElementBox({
         element={data.element}
         shown={data.shown}
         editing={data.editing}
+        leftOut={data.leftOut}
         draftAt={data.draft === null ? undefined : data.home}
       />
       {data.pinned && data.shown.kind !== "note" && (
@@ -148,9 +149,11 @@ export function ElementContent({
   element,
   shown,
   editing = false,
+  leftOut = false,
   draftAt,
 }: Pick<ElementData, "element" | "shown"> & {
   editing?: boolean;
+  leftOut?: boolean;
   draftAt?: XYPosition | undefined;
 }) {
   switch (shown.kind) {
@@ -171,6 +174,7 @@ export function ElementContent({
           name={shown.name}
           body={shown.body}
           editing={editing}
+          leftOut={leftOut}
           draftAt={draftAt}
         />
       );

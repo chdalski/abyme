@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { BoardView } from "./bindings";
 import {
   type ElementNode,
+  closeNoteField,
   draftNote,
   finishedMoves,
   finishedRemovals,
@@ -10,6 +11,7 @@ import {
   onTheBoardAndHung,
   returnHome,
   toNodes,
+  withNoteField,
 } from "./nodes";
 import { boardView, placedBox, placedElement } from "./testBoards";
 
@@ -111,6 +113,7 @@ describe("toNodes", () => {
         pinned: false,
         attachedTo: null,
         editing: false,
+        leftOut: false,
         draft: null,
       },
       {
@@ -126,6 +129,7 @@ describe("toNodes", () => {
         pinned: false,
         attachedTo: null,
         editing: false,
+        leftOut: false,
         draft: null,
       },
     ]);
@@ -505,5 +509,170 @@ describe("a box whose file is missing", () => {
       expect(node?.draggable).toBe(false);
       expect(node?.data.pinned).toBe(true);
     }
+  });
+});
+
+describe("a note a view leaves out while its field is open", () => {
+  const BOX = {
+    kind: "element",
+    type_ref: "t",
+    name: "B",
+    summary: null,
+  } as const;
+  const note = (name: string) => ({ kind: "note", name, body: "" }) as const;
+  /** The box `b` at (100, 100) and the note `n` hanging on it at (110, 120). */
+  const first = boardView({
+    placements: [
+      placedBox("b", { x: 100, y: 100, shown: BOX }),
+      placedBox("n", { x: 110, y: 120, shown: note("N"), attached_to: "b" }),
+    ],
+  });
+  const withoutN = boardView({
+    placements: [placedBox("b", { x: 100, y: 100, shown: BOX })],
+  });
+  /** `n` as a box at (400, 0), with the note `m` hanging on it. */
+  const nAsABox = boardView({
+    placements: [
+      placedBox("b", { x: 100, y: 100, shown: BOX }),
+      placedBox("n", { x: 400, y: 0, shown: BOX }),
+      placedBox("m", { x: 410, y: 10, shown: note("M"), attached_to: "n" }),
+    ],
+  });
+  const opened = (view: BoardView, element: string) =>
+    withNoteField(toNodes(view), element, true).map((node) =>
+      node.id === element ? { ...node, selected: true } : node,
+    );
+  const held = () => keepUiState(toNodes(withoutN), opened(first, "n"), null);
+
+  it("is held where it lies on the board, hanging on nothing, and offers nothing but its field", () => {
+    const n = held().find((node) => node.id === "n");
+
+    expect(n?.position).toEqual({ x: 110, y: 120 });
+    expect(n?.parentId).toBeUndefined();
+    expect([n?.selected, n?.selectable, n?.draggable, n?.deletable]).toEqual([
+      false,
+      false,
+      false,
+      false,
+    ]);
+    expect(n?.data).toMatchObject({
+      leftOut: true,
+      editing: true,
+      shown: note("N"),
+    });
+  });
+
+  it("is held where it lay on the board when the box it hung on is gone too", () => {
+    const kept = keepUiState(toNodes(boardView()), opened(first, "n"), null);
+
+    expect(kept.map((node) => [node.id, node.position])).toEqual([
+      ["n", { x: 110, y: 120 }],
+    ]);
+  });
+
+  it("stays as it is through a later view that lists its ID, which holds back that box and what hangs on it", () => {
+    const kept = keepUiState(toNodes(nAsABox), held(), null);
+
+    expect(kept.map((node) => node.id)).toEqual(["b", "n"]);
+    expect(kept.find((node) => node.id === "n")).toEqual(
+      held().find((node) => node.id === "n"),
+    );
+  });
+
+  it("is not held when its field is closed, when a view lists it, or when it is new", () => {
+    const closed = keepUiState(toNodes(withoutN), toNodes(first), null);
+    const listed = keepUiState(toNodes(first), opened(first, "n"), null);
+    const unwritten = draftNote("+note-1", { x: 0, y: 0 });
+    const written: ElementNode = {
+      ...unwritten,
+      data: { ...unwritten.data, draft: { createdAs: "n", writtenAt: 5 } },
+    };
+    const drafts = keepUiState(
+      toNodes(withoutN),
+      [...toNodes(withoutN), unwritten, written],
+      null,
+    );
+
+    expect(closed.map((node) => node.id)).toEqual(["b"]);
+    expect(listed.map((node) => [node.id, node.data.leftOut])).toEqual([
+      ["b", false],
+      ["n", false],
+    ]);
+    expect(drafts.map((node) => [node.id, node.data.leftOut])).toEqual([
+      ["b", false],
+      ["+note-1", false],
+      ["+note-1", false],
+    ]);
+  });
+
+  it("goes when its field closes and the latest view does not list its ID", () => {
+    const closed = closeNoteField(held(), "n", toNodes(withoutN));
+
+    expect(closed.map((node) => node.id)).toEqual(["b"]);
+  });
+
+  it("gives way to the box the latest view lists under its ID, with what hangs on it", () => {
+    const closed = closeNoteField(held(), "n", toNodes(nAsABox));
+
+    expect(
+      closed.map((node) => [
+        node.id,
+        node.parentId,
+        node.data.shown.kind,
+        node.data.leftOut,
+      ]),
+    ).toEqual([
+      ["b", undefined, "element", false],
+      ["n", undefined, "element", false],
+      ["m", "n", "note", false],
+    ]);
+  });
+
+  it("brings back nothing that hangs on a note still held, until that note's field closes", () => {
+    const both = boardView({
+      placements: [
+        placedBox("a", { shown: note("A") }),
+        placedBox("c", { x: 300, shown: note("C") }),
+      ],
+    });
+    const twoHeld = keepUiState(
+      toNodes(boardView()),
+      withNoteField(withNoteField(toNodes(both), "a", true), "c", true),
+      null,
+    );
+    const cAsABox = toNodes(
+      boardView({
+        placements: [
+          placedBox("c", { x: 300, shown: BOX }),
+          placedBox("a", { x: 310, shown: note("A"), attached_to: "c" }),
+        ],
+      }),
+    );
+
+    const aClosed = closeNoteField(twoHeld, "a", cAsABox);
+    const cClosed = closeNoteField(aClosed, "c", cAsABox);
+
+    expect(aClosed.map((node) => [node.id, node.data.leftOut])).toEqual([
+      ["c", true],
+    ]);
+    expect(cClosed.map((node) => [node.id, node.parentId])).toEqual([
+      ["c", undefined],
+      ["a", "c"],
+    ]);
+  });
+
+  it("adds nothing when its field closes a second time", () => {
+    const once = closeNoteField(held(), "n", toNodes(nAsABox));
+
+    expect(closeNoteField(once, "n", toNodes(nAsABox))).toEqual(once);
+  });
+
+  it("only closes the field of a note no view left out", () => {
+    const closed = closeNoteField(opened(first, "n"), "n", toNodes(withoutN));
+
+    expect(closed.map((node) => [node.id, node.data.editing])).toEqual([
+      ["b", false],
+      ["n", false],
+    ]);
   });
 });
