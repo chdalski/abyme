@@ -29,7 +29,7 @@ cleanups of the same code are done: one path argument in `recorded_matches`, the
 
 - [x] Recorded content is compared by one path argument, and one rule assigns an element to a
       repository
-- [ ] A flag after a rewrite names the files that changed under the anchor
+- [x] A flag after a rewrite names the files that changed under the anchor
 - [ ] Review keeps only the tree entries it needs
 
 ## Tasks
@@ -58,43 +58,43 @@ anchor. Whether the anchor is a folder or a file is decided by the entry HEAD ho
 
 Review path: Security-Hybrid
 
-- [ ] After a rewrite, an anchor where HEAD holds a tree, whose recorded object is a tree in its
+- [x] After a rewrite, an anchor where HEAD holds a tree, whose recorded object is a tree in its
       repository and differs from HEAD's tree, is flagged `Changed` with the files that differ,
       plus the staged and working-tree files under it.
-- [ ] After a rewrite, an anchor where HEAD holds a file, whose recorded object differs in any way,
+- [x] After a rewrite, an anchor where HEAD holds a file, whose recorded object differs in any way,
       a missing object and one of another length included, is flagged `Changed` with the anchor
       itself, plus the staged and working-tree files under it, by a test of each.
-- [ ] Two elements on one anchor with different recorded objects each get the files of their own
+- [x] Two elements on one anchor with different recorded objects each get the files of their own
       object, by a test.
-- [ ] Where HEAD holds a tree, a recorded object that is missing, is no tree, or has another length
+- [x] Where HEAD holds a tree, a recorded object that is missing, is no tree, or has another length
       than the repository's object IDs, two trees whose diff names no file, and a failing or
       malformed Git answer for one element leave that element `UnknownStamp` and every other
       element as it would be without it, by a test of each.
-- [ ] An anchor where HEAD holds a gitlink, an anchor the stamp recorded as holding nothing while
+- [x] An anchor where HEAD holds a gitlink, an anchor the stamp recorded as holding nothing while
       HEAD holds an entry there, and an anchor HEAD no longer holds keep their flags of today:
       `UnknownStamp`, plus `AnchorMissing` for the last, by a test of each.
-- [ ] Integration tests in temporary repositories show the file lists after a rebase for a folder
+- [x] Integration tests in temporary repositories show the file lists after a rebase for a folder
       anchor, a file anchor, an anchor equal to a nested repository's root, and a project below the
       top of its repository; a partial clone without its trees fetches nothing and gives a folder
       anchor no file list; and a hostile nested repository runs nothing while its files are listed.
-- [ ] No recorded object reaches Git before its full object ID and its type are confirmed through
+- [x] No recorded object reaches Git before its full object ID and its type are confirmed through
       Git's standard input, and no anchor or recorded path reaches Git at all.
-- [ ] Existing assertions change only where this task turns `UnknownStamp` into `Changed` or
+- [x] Existing assertions change only where this task turns `UnknownStamp` into `Changed` or
       rewords the `UnknownStamp` reason: in `crates/abyme-core/tests/review.rs` the committed own
       change after a rebase, the stamp on another branch, the nested root, the project below the
       top of its repository, and the partial clone with a file anchor; in
       `crates/abyme-mcp/tests/server/review.rs` the reason line of the element `unknown`.
-- [ ] `read_element` and `status` give one reason for every `UnknownStamp` that says the files
+- [x] `read_element` and `status` give one reason for every `UnknownStamp` that says the files
       that changed since the stamp cannot be told; the doc comment of `Flag::Changed` names the
       files that differ from the recorded content, that of `Flag::UnknownStamp` says when it
       replaces them, and that of `Flag::Upstream` tells a stamp that holds no entry for the path
       from one that recorded the path as holding nothing.
-- [ ] `impl Display for ObjectId` has a caller in the finished code; otherwise it is gone.
-- [ ] `docs/3 Reconciliation/Reconciliation.md` ("After a Rewrite"), `docs/Decisions.md`, the
+- [x] `impl Display for ObjectId` has a caller in the finished code; otherwise it is gone.
+- [x] `docs/3 Reconciliation/Reconciliation.md` ("After a Rewrite"), `docs/Decisions.md`, the
       module doc of `git.rs`, and the Security Baseline in `docs/5 Architecture/Hexagonal
       Architecture.md` tell a reader which value from an element file reaches Git and when a flag
       names files after a rewrite.
-- [ ] The backlog entries about the `Flag::Upstream` doc, the `UnknownStamp` reason, and
+- [x] The backlog entries about the `Flag::Upstream` doc, the `UnknownStamp` reason, and
       `impl Display for ObjectId` are gone.
 
 ### Task 3: Review keeps only the tree entries it needs
@@ -141,5 +141,10 @@ Review path: Security-Hybrid
   relations, while `verify` learns the paths of its targets only after reading the objects.
 - **Every `ls-tree` entry is still parsed and checked, also when it is dropped:** a malformed
   entry fails the review wherever it lies, as today.
+- **Task 2 meets the security engineer's controls by tests of their exact outcome:** the batch
+  check runs on standard input from a writer of its own, so that no pipe fills; a candidate counts
+  only when Git echoes exactly its ID as a tree; every failure leaves `UnknownStamp`; and the
+  partial clones assert their flags exactly. The literal `ls-tree` test also checks each entry's
+  type, which the file lists need.
 - **Restamping unchanged elements after a rewrite stays out:** it would end the fallback's cost at
   its cause, but it adds a write path and commits nobody asked for.

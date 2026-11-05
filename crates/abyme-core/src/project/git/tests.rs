@@ -245,11 +245,17 @@ fn reads_the_entries_of_ls_tree_without_the_folders_that_enclose_the_project() {
     assert_eq!(
         entries,
         BTreeMap::from([
-            (b"crates".as_slice(), object(TREE)),
-            (b"crates/a b.rs".as_slice(), object(BLOB)),
-            (b"link".as_slice(), object(BLOB)),
-            (b"run".as_slice(), object(BLOB)),
-            (b"vendor/lib".as_slice(), object(TREE)),
+            (b"crates".as_slice(), (ObjectKind::Tree, object(TREE))),
+            (
+                b"crates/a b.rs".as_slice(),
+                (ObjectKind::Blob, object(BLOB))
+            ),
+            (b"link".as_slice(), (ObjectKind::Blob, object(BLOB))),
+            (b"run".as_slice(), (ObjectKind::Blob, object(BLOB))),
+            (
+                b"vendor/lib".as_slice(),
+                (ObjectKind::Gitlink, object(TREE))
+            ),
         ])
     );
 }
@@ -275,4 +281,165 @@ fn reads_the_entries_of_ls_tree_without_the_folders_that_enclose_the_project() {
 #[case::missing_nul(format!("100644 blob {BLOB}\ta"))]
 fn rejects_ls_tree_entries_it_does_not_expect(#[case] output: String) {
     assert_eq!(tree_entries(output.as_bytes()), Err(Unavailable::GitFailed));
+}
+
+const OTHER_TREE: &str = "1111111111111111111111111111111111111111";
+
+#[test]
+fn confirms_only_candidates_echoed_exactly_as_trees() {
+    let tree = object(TREE);
+    let other = object(OTHER_TREE);
+    let blob = object(BLOB);
+    let output = format!("{TREE} tree 59\n{OTHER_TREE} missing\n{BLOB} blob 3\n");
+
+    let confirmed = confirmed(&[&tree, &other, &blob], output.as_bytes());
+
+    assert_eq!(confirmed, Some(BTreeSet::from([tree])));
+}
+
+#[rstest]
+#[case::commit(format!("{TREE} commit 164\n"))]
+#[case::blob(format!("{TREE} blob 3\n"))]
+#[case::tag(format!("{TREE} tag 140\n"))]
+#[case::ambiguous(format!("{TREE} ambiguous\n"))]
+#[case::another_id_echoed(format!("{OTHER_TREE} tree 59\n"))]
+#[case::empty_size(format!("{TREE} tree \n"))]
+#[case::size_not_decimal(format!("{TREE} tree 5a\n"))]
+#[case::trailing_field(format!("{TREE} tree 59 x\n"))]
+fn leaves_out_a_candidate_not_confirmed_as_a_tree(#[case] output: String) {
+    let tree = object(TREE);
+
+    assert_eq!(
+        confirmed(&[&tree], output.as_bytes()),
+        Some(BTreeSet::new())
+    );
+}
+
+#[rstest]
+#[case::fewer_lines(format!("{TREE} tree 59\n"))]
+#[case::more_lines(format!("{TREE} tree 59\n{OTHER_TREE} tree 59\nx\n"))]
+#[case::no_final_line_feed(format!("{TREE} tree 59\n{OTHER_TREE} tree 59"))]
+#[case::nothing(String::new())]
+fn confirms_nothing_from_batch_check_output_of_another_shape(#[case] output: String) {
+    let tree = object(TREE);
+    let other = object(OTHER_TREE);
+
+    assert_eq!(confirmed(&[&tree, &other], output.as_bytes()), None);
+}
+
+#[test]
+fn reads_the_paths_diff_tree_prints() {
+    assert_eq!(
+        diff_paths(b"a.rs\0src/b c.rs\0"),
+        Some(vec![b"a.rs".to_vec(), b"src/b c.rs".to_vec()])
+    );
+}
+
+#[rstest]
+#[case::no_path(b"")]
+#[case::empty_path(b"a.rs\0\0")]
+#[case::leading_slash(b"/a.rs\0")]
+#[case::parent_segment(b"../a.rs\0")]
+#[case::dot_segment(b"./a.rs\0")]
+#[case::git_segment(b".git/config\0")]
+#[case::no_nul(b"a.rs")]
+fn reads_no_paths_from_diff_tree_output_that_does_not_fit(#[case] output: &[u8]) {
+    assert_eq!(diff_paths(output), None);
+}
+
+/// The anchor `path`.
+fn anchor(path: &str) -> Anchor {
+    Anchor::try_from(path.to_owned()).unwrap()
+}
+
+#[test]
+fn selects_each_rewritten_anchor_by_what_head_holds_there() {
+    let stamp = CommitId::try_from(TREE.to_owned()).unwrap();
+    let since = BTreeMap::from([(stamp.clone(), Since::Unknown)]);
+    let objects: BTreeMap<Vec<u8>, TreeEntry> = BTreeMap::from([
+        (b"tree".to_vec(), (ObjectKind::Tree, object(TREE))),
+        (b"same".to_vec(), (ObjectKind::Tree, object(TREE))),
+        (b"file".to_vec(), (ObjectKind::Blob, object(BLOB))),
+        (b"link".to_vec(), (ObjectKind::Gitlink, object(TREE))),
+    ]);
+    let longer = ObjectId::try_from("1".repeat(64)).unwrap();
+    let cases: Vec<(Anchor, Option<ObjectId>)> = vec![
+        (anchor("tree"), Some(object(OTHER_TREE))),
+        (anchor("same"), Some(object(TREE))),
+        (anchor("file"), Some(longer.clone())),
+        (anchor("link"), Some(object(OTHER_TREE))),
+        (anchor("gone"), Some(object(OTHER_TREE))),
+        (anchor("tree"), None),
+        (anchor("tree"), Some(longer)),
+    ];
+    let contents: Vec<RecordedContent> = cases
+        .iter()
+        .map(|(anchor, recorded)| RecordedContent::from([(anchor.clone(), recorded.clone())]))
+        .collect();
+    let elements: Vec<AnchorAndStamp<'_>> = cases
+        .iter()
+        .zip(&contents)
+        .map(|((anchor, _), content)| AnchorAndStamp {
+            anchor: Some(anchor),
+            stamp: Some(&stamp),
+            content: Some(content),
+        })
+        .collect();
+    let members: Vec<&AnchorAndStamp<'_>> = elements.iter().collect();
+
+    let rewritten = rewritten(&members, &since, &objects);
+
+    let other = object(OTHER_TREE);
+    let tree = object(TREE);
+    let longer = ObjectId::try_from("1".repeat(64)).unwrap();
+    assert_eq!(
+        rewritten,
+        BTreeSet::from([
+            Rewritten::Trees {
+                anchor: b"tree",
+                recorded: &other,
+                head: &tree,
+            },
+            Rewritten::File {
+                anchor: b"file",
+                recorded: &longer,
+            },
+        ])
+    );
+}
+
+#[test]
+fn selects_no_anchor_whose_stamp_s_commit_tells_what_changed() {
+    let stamp = CommitId::try_from(TREE.to_owned()).unwrap();
+    let since = BTreeMap::from([(stamp.clone(), Since::Changed(BTreeSet::new()))]);
+    let objects: BTreeMap<Vec<u8>, TreeEntry> =
+        BTreeMap::from([(b"file".to_vec(), (ObjectKind::Blob, object(BLOB)))]);
+    let file = anchor("file");
+    let content = RecordedContent::from([(file.clone(), Some(object(OTHER_TREE)))]);
+    let element = AnchorAndStamp {
+        anchor: Some(&file),
+        stamp: Some(&stamp),
+        content: Some(&content),
+    };
+
+    assert_eq!(rewritten(&[&element], &since, &objects), BTreeSet::new());
+}
+
+#[test]
+fn writes_much_input_and_reads_much_output_without_waiting_on_a_full_pipe() {
+    let directory = tempfile::tempdir().unwrap();
+    abyme_test_support::git(directory.path(), &["init", "-q"]).unwrap();
+    let git = Git::find().unwrap();
+    let place = Place::project(directory.path());
+    let input: String = (0..5000)
+        .map(|index| format!("{index:040x}\n"))
+        .collect::<Vec<_>>()
+        .concat();
+
+    let output = git
+        .run_with_input(&place, &["cat-file", "--batch-check"], input.as_bytes())
+        .unwrap();
+
+    assert!(output.status.success());
+    assert_eq!(output.stdout.split(|byte| *byte == b'\n').count(), 5001);
 }

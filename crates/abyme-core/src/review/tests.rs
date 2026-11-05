@@ -844,6 +844,7 @@ fn rewritten(staged: &[&str], uncommitted: &[&str], fallback: bool) -> GitFacts 
                 ),
             ]),
             staged: paths(staged),
+            differing: BTreeMap::new(),
         }),
     })
 }
@@ -991,6 +992,7 @@ fn passes_nothing_on_by_recorded_content_from_a_target_outside_the_source_s_repo
                     ObjectId::try_from(TREE_X.to_owned()).unwrap(),
                 )]),
                 staged: BTreeSet::new(),
+                differing: BTreeMap::new(),
             }),
         },
     );
@@ -1041,4 +1043,69 @@ fn records_the_own_anchor_and_each_target_that_passes_something_on() {
             (anchor("crates/y"), None),
         ]))
     );
+}
+
+#[test]
+fn lists_the_files_each_recorded_object_differs_in_and_what_changed_since_head() {
+    let first = recorded_element(
+        "x",
+        Some("crates/x"),
+        &format!("verified_content:\n  - {{path: crates/x, object: \"{TREE_Y}\"}}\n"),
+        &[],
+    );
+    let other = "3333333333333333333333333333333333333333";
+    let second = recorded_element(
+        "w",
+        Some("crates/x"),
+        &format!("verified_content:\n  - {{path: crates/x, object: \"{other}\"}}\n"),
+        &[],
+    );
+    let held_nothing = recorded_element(
+        "v",
+        Some("crates/x"),
+        "verified_content:\n  - {path: crates/x}\n",
+        &[],
+    );
+    let mut facts = rewritten(&["crates/x/staged.rs"], &["crates/x/new.rs"], true);
+    if let Some(fallback) = facts.project.fallback.as_mut() {
+        fallback.differing = BTreeMap::from([
+            (
+                (
+                    b"crates/x".to_vec(),
+                    ObjectId::try_from(TREE_Y.to_owned()).unwrap(),
+                ),
+                paths(&["crates/x/a.rs"]),
+            ),
+            (
+                (
+                    b"crates/x".to_vec(),
+                    ObjectId::try_from(other.to_owned()).unwrap(),
+                ),
+                paths(&["crates/x/b.rs"]),
+            ),
+        ]);
+    }
+    let elements = vec![first, second, held_nothing];
+
+    let flags = |id: &str| flags_in(elements.clone(), &facts, id);
+
+    let changed =
+        |files: &[&str]| Flag::Changed(files.iter().map(|file| file.as_bytes().to_vec()).collect());
+    assert_eq!(
+        flags("x"),
+        [changed(&[
+            "crates/x/a.rs",
+            "crates/x/new.rs",
+            "crates/x/staged.rs"
+        ])]
+    );
+    assert_eq!(
+        flags("w"),
+        [changed(&[
+            "crates/x/b.rs",
+            "crates/x/new.rs",
+            "crates/x/staged.rs"
+        ])]
+    );
+    assert_eq!(flags("v"), [Flag::UnknownStamp]);
 }

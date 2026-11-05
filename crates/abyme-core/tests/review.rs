@@ -4,9 +4,11 @@
 use std::error::Error;
 use std::ffi::OsStr;
 use std::fs;
+use std::io::Write as _;
 use std::os::unix::ffi::OsStrExt as _;
 use std::os::unix::fs::{PermissionsExt as _, symlink};
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 use std::time::{Duration, SystemTime};
 
 use abyme_core::{Flag, Priority, Project, Review, Unavailable};
@@ -1765,6 +1767,19 @@ impl Repository {
         git(self.top(), &["merge-base", "--is-ancestor", stamp, "HEAD"]).is_err()
     }
 
+    /// Writes the element `y` on `crates/y`, whose recorded tree differs from
+    /// HEAD's in `crates/y/a.rs` after two commits; returns the flags `y`
+    /// gets for that once its stamp is judged by its content.
+    fn sibling_with_a_file_list(&self) -> TestResult<Vec<Flag>> {
+        self.write(b"crates/y/a.rs", "fn a() {}\n")?;
+        self.commit()?;
+        let recorded = git(self.top(), &["rev-parse", "HEAD:crates/y"])?;
+        self.write(b"crates/y/a.rs", "fn a() { b() }\n")?;
+        self.rewritten_element("y", "crates/y", Some(&recorded))?;
+        self.commit()?;
+        Ok(vec![changed(&[b"crates/y/a.rs"])])
+    }
+
     /// The object the element file of `id` records for `path`.
     fn recorded_object(&self, id: &str, path: &str) -> TestResult<String> {
         let file = self.element_file(id)?;
@@ -1839,7 +1854,7 @@ fn flags_a_change_after_a_rewrite(#[case] change: ChangeAfterRewrite) -> TestRes
         ChangeAfterRewrite::Staged | ChangeAfterRewrite::WorkingTree => {
             vec![changed(&[b"crates/x/lib.rs"])]
         }
-        ChangeAfterRewrite::CommittedOwn => vec![Flag::UnknownStamp],
+        ChangeAfterRewrite::CommittedOwn => vec![changed(&[b"crates/x/lib.rs"])],
         ChangeAfterRewrite::CommittedTarget => vec![Flag::Upstream {
             kind: RelationKind::DependsOn,
             target: "y".parse()?,
@@ -1869,7 +1884,7 @@ fn judges_a_stamp_on_another_branch_by_its_recorded_content() -> TestResult {
 
     assert!(repository.element_file("x")?.contains(&side));
     assert_eq!(unchanged, []);
-    assert_eq!(changed_since, [Flag::UnknownStamp]);
+    assert_eq!(changed_since, [changed(&[b"crates/x/lib.rs"])]);
     Ok(())
 }
 
@@ -1967,7 +1982,7 @@ fn compares_a_nested_root_by_its_tree_and_a_submodule_target_by_its_commit() -> 
     assert_eq!(
         after_a_move,
         (
-            vec![Flag::UnknownStamp],
+            vec![changed(&[b"vendor/lib/a.rs"])],
             vec![Flag::Upstream {
                 kind: RelationKind::DependsOn,
                 target: "t".parse()?,
@@ -1995,7 +2010,7 @@ fn reads_a_rewritten_history_of_a_project_below_the_top_of_its_repository() -> T
 
     assert!(repository.is_rewritten(&stamped));
     assert_eq!(unchanged, []);
-    assert_eq!(changed_since, [Flag::UnknownStamp]);
+    assert_eq!(changed_since, [changed(&[b"crates/x/lib.rs"])]);
     Ok(())
 }
 
@@ -2093,6 +2108,317 @@ fn fetches_nothing_for_a_partial_clone_while_judging_recorded_content() -> TestR
     let flags = repository.flags()?;
 
     assert!(!marker.exists());
-    assert!(flags.contains(&Flag::UnknownStamp), "{flags:?}");
+    assert_eq!(flags, [changed(&[b"vendor/lib/a.rs"])]);
+    Ok(())
+}
+
+impl Repository {
+    /// Writes the element `id` anchored on `anchor`, stamped with a commit
+    /// no repository holds, so that its stamp is judged by its content,
+    /// which records `object` for the anchor, or that nothing lay there.
+    fn rewritten_element(&self, id: &str, anchor: &str, object: Option<&str>) -> TestResult {
+        let entry = object.map_or_else(
+            || format!("{{path: \"{anchor}\"}}"),
+            |object| format!("{{path: \"{anchor}\", object: \"{object}\"}}"),
+        );
+        self.write(
+            format!("abyme/elements/{id}.md").as_bytes(),
+            &format!(
+                "---\nid: \"{id}\"\ntype: \"t\"\nname: \"X\"\nanchor: \"{anchor}\"\n\
+                 verified: \"{UNKNOWN}\"\nverified_by: \"ai\"\nverified_content:\n  - {entry}\n---\n"
+            ),
+        )
+    }
+}
+
+#[test]
+fn lists_the_files_under_a_folder_anchor_after_a_rewrite() -> TestResult {
+    let repository = Repository::new()?;
+    repository.write(b"crates/x/lib.rs", "fn a() {}\n")?;
+    repository.write(b"crates/x/old.rs", "fn o() {}\n")?;
+    repository.commit()?;
+    let recorded = git(repository.top(), &["rev-parse", "HEAD:crates/x"])?;
+    repository.write(b"crates/x/lib.rs", "fn a() { b() }\n")?;
+    fs::remove_file(repository.project.join("crates/x/old.rs"))?;
+    repository.write(b"crates/x/sub/new.rs", "fn n() {}\n")?;
+    repository.rewritten_element("x", "crates/x", Some(&recorded))?;
+    repository.commit()?;
+    repository.write(b"crates/x/staged.rs", "fn s() {}\n")?;
+    git(repository.top(), &["add", "crates/x/staged.rs"])?;
+    repository.write(b"crates/x/untracked.rs", "fn u() {}\n")?;
+
+    let flags = repository.flags()?;
+
+    assert_eq!(
+        flags,
+        [changed(&[
+            b"crates/x/lib.rs",
+            b"crates/x/old.rs",
+            b"crates/x/staged.rs",
+            b"crates/x/sub/new.rs",
+            b"crates/x/untracked.rs",
+        ])]
+    );
+    Ok(())
+}
+
+#[rstest]
+#[case::the_file_s_former_object(None)]
+#[case::a_missing_object(Some(UNKNOWN.to_owned()))]
+#[case::an_object_of_another_length(Some("ab".repeat(32)))]
+fn lists_a_file_anchor_after_a_rewrite(#[case] recorded: Option<String>) -> TestResult {
+    let repository = Repository::new()?;
+    repository.write(b"crates/x/lib.rs", "fn a() {}\n")?;
+    repository.commit()?;
+    let recorded = match recorded {
+        Some(recorded) => recorded,
+        None => git(repository.top(), &["rev-parse", "HEAD:crates/x/lib.rs"])?,
+    };
+    repository.write(b"crates/x/lib.rs", "fn a() { b() }\n")?;
+    repository.rewritten_element("x", "crates/x/lib.rs", Some(&recorded))?;
+    repository.commit()?;
+
+    assert_eq!(repository.flags()?, [changed(&[b"crates/x/lib.rs"])]);
+    Ok(())
+}
+
+/// What a stamp records for a folder anchor that is no tree there.
+#[derive(Debug, Clone, Copy)]
+enum NoTree {
+    Commit,
+    Blob,
+    AnnotatedTag,
+    Missing,
+    OtherLength,
+    HeldNothing,
+}
+
+#[rstest]
+#[case::a_commit(NoTree::Commit)]
+#[case::a_blob(NoTree::Blob)]
+#[case::an_annotated_tag(NoTree::AnnotatedTag)]
+#[case::a_missing_object(NoTree::Missing)]
+#[case::an_object_of_another_length(NoTree::OtherLength)]
+#[case::nothing(NoTree::HeldNothing)]
+fn tells_no_files_of_a_folder_anchor_whose_recorded_object_is_no_tree_there(
+    #[case] kind: NoTree,
+) -> TestResult {
+    let repository = Repository::new()?;
+    repository.write(b"crates/x/lib.rs", "fn a() {}\n")?;
+    repository.commit()?;
+    let recorded = match kind {
+        NoTree::Commit => Some(git(repository.top(), &["rev-parse", "HEAD"])?),
+        NoTree::Blob => Some(git(
+            repository.top(),
+            &["rev-parse", "HEAD:crates/x/lib.rs"],
+        )?),
+        NoTree::AnnotatedTag => {
+            git(repository.top(), &["tag", "-a", "-m", "tag", "v1"])?;
+            Some(git(repository.top(), &["rev-parse", "v1"])?)
+        }
+        NoTree::Missing => Some(UNKNOWN.to_owned()),
+        NoTree::OtherLength => Some("ab".repeat(32)),
+        NoTree::HeldNothing => None,
+    };
+    repository.write(b"crates/x/lib.rs", "fn a() { b() }\n")?;
+    repository.rewritten_element("x", "crates/x", recorded.as_deref())?;
+    let sibling = repository.sibling_with_a_file_list()?;
+
+    assert_eq!(repository.flags()?, [Flag::UnknownStamp]);
+    assert_eq!(repository.flags_of("y")?, sibling);
+    Ok(())
+}
+
+#[test]
+fn tells_no_files_from_a_tree_only_another_repository_holds() -> TestResult {
+    let sources = tempfile::tempdir()?;
+    library(&sources.path().join("lib"))?;
+    let repository = Repository::new()?;
+    repository.write(b"crates/x/lib.rs", "fn a() {}\n")?;
+    repository.commit()?;
+    let outer_tree = git(repository.top(), &["rev-parse", "HEAD:crates/x"])?;
+    let sibling = repository.sibling_with_a_file_list()?;
+    let nested = repository.nest(&sources.path().join("lib"), "vendor/lib", Nesting::Embedded)?;
+    fs::write(nested.join("a.rs"), "fn a() { b() }\n")?;
+    commit_all(&nested)?;
+    repository.rewritten_element("x", "vendor/lib", Some(&outer_tree))?;
+
+    assert_eq!(repository.flags()?, [Flag::UnknownStamp]);
+    assert_eq!(repository.flags_of("y")?, sibling);
+    Ok(())
+}
+
+/// A source repository at `sources/deep` whose first commit holds
+/// `src/a.rs` and whose second changes it, cloned without trees to
+/// `vendor/lib` of `repository` with an SSH remote whose command leaves
+/// `marker` behind; returns the root tree of the first commit and the
+/// clone's directory.
+fn deep_partial_clone(
+    repository: &Repository,
+    sources: &Path,
+    marker: &Path,
+) -> TestResult<(String, PathBuf)> {
+    let source = sources.join("deep");
+    fs::create_dir_all(source.join("src"))?;
+    git(&source, &["init", "-q"])?;
+    fs::write(source.join("src/a.rs"), "fn a() {}\n")?;
+    commit_all(&source)?;
+    let first_tree = git(&source, &["rev-parse", "HEAD^{tree}"])?;
+    fs::write(source.join("src/a.rs"), "fn a() { b() }\n")?;
+    commit_all(&source)?;
+    git(&source, &["config", "uploadpack.allowFilter", "true"])?;
+    git(
+        repository.top(),
+        &[
+            "clone",
+            "-q",
+            "--filter=tree:0",
+            &format!("file://{}", source.display()),
+            "vendor/lib",
+        ],
+    )?;
+    let nested = repository.project.join("vendor/lib");
+    git(
+        &nested,
+        &["remote", "set-url", "origin", "ssh://example.invalid/lib"],
+    )?;
+    git(
+        &nested,
+        &[
+            "config",
+            "core.sshCommand",
+            &format!("sh -c 'touch {}'", marker.display()),
+        ],
+    )?;
+    git(&nested, &["config", "protocol.ssh.allow", "always"])?;
+    Ok((first_tree, nested))
+}
+
+#[test]
+fn fetches_nothing_for_a_recorded_tree_a_partial_clone_lacks() -> TestResult {
+    let sources = tempfile::tempdir()?;
+    let repository = Repository::new()?;
+    let marker = sources.path().join("marker");
+    let sibling = repository.sibling_with_a_file_list()?;
+    let (first_tree, _) = deep_partial_clone(&repository, sources.path(), &marker)?;
+    repository.rewritten_element("x", "vendor/lib", Some(&first_tree))?;
+
+    let flags = repository.flags()?;
+
+    assert!(!marker.exists());
+    assert_eq!(flags, [Flag::UnknownStamp]);
+    assert_eq!(repository.flags_of("y")?, sibling);
+    Ok(())
+}
+
+#[test]
+fn fetches_nothing_for_the_subtrees_of_a_recorded_tree_a_partial_clone_holds() -> TestResult {
+    let sources = tempfile::tempdir()?;
+    let repository = Repository::new()?;
+    let marker = sources.path().join("marker");
+    let sibling = repository.sibling_with_a_file_list()?;
+    let (first_tree, nested) = deep_partial_clone(&repository, sources.path(), &marker)?;
+    let content = Command::new("git")
+        .current_dir(sources.path().join("deep"))
+        .args(["cat-file", "tree", &first_tree])
+        .output()?
+        .stdout;
+    let mut write = Command::new("git")
+        .current_dir(&nested)
+        .args(["hash-object", "-t", "tree", "-w", "--stdin"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()?;
+    write.stdin.take().ok_or("no stdin")?.write_all(&content)?;
+    let written = String::from_utf8(write.wait_with_output()?.stdout)?;
+    repository.rewritten_element("x", "vendor/lib", Some(&first_tree))?;
+
+    let flags = repository.flags()?;
+
+    assert_eq!(written.trim_end(), first_tree);
+    assert!(!marker.exists());
+    assert_eq!(flags, [Flag::UnknownStamp]);
+    assert_eq!(repository.flags_of("y")?, sibling);
+    Ok(())
+}
+
+#[rstest]
+#[case::clean_filter(Hostile::Clean)]
+#[case::process_filter(Hostile::Process)]
+#[case::odd_driver_name(Hostile::OddDriverName)]
+#[case::included_filter(Hostile::Included)]
+#[case::work_tree_configuration(Hostile::WorkTreeConfig)]
+#[case::required_filter(Hostile::Required)]
+#[case::info_attributes(Hostile::InfoAttributes)]
+#[case::file_system_monitor(Hostile::Fsmonitor)]
+#[case::index_hook(Hostile::Hook)]
+fn runs_nothing_that_a_nested_repository_sets_up_while_listing_its_files(
+    #[case] case: Hostile,
+) -> TestResult {
+    let sources = tempfile::tempdir()?;
+    library(&sources.path().join("lib"))?;
+    let repository = Repository::new()?;
+    let nested = repository.nest(&sources.path().join("lib"), "vendor/lib", Nesting::Embedded)?;
+    let recorded = git(&nested, &["rev-parse", "HEAD:"])?;
+    fs::write(nested.join("c.rs"), "fn c() {}\n")?;
+    commit_all(&nested)?;
+    let marker = sources.path().join("marker");
+    make_hostile(&nested, case, &marker, sources.path())?;
+    repository.rewritten_element("x", "vendor/lib", Some(&recorded))?;
+
+    let flags = repository.flags()?;
+
+    assert!(!marker.exists());
+    let [Flag::Changed(files)] = flags.as_slice() else {
+        return Err(format!("{flags:?}").into());
+    };
+    assert!(files.contains(&b"vendor/lib/c.rs".to_vec()), "{files:?}");
+    Ok(())
+}
+
+#[test]
+fn lists_for_each_recorded_tree_of_one_anchor_its_own_files() -> TestResult {
+    let repository = Repository::new()?;
+    repository.write(b"crates/x/a.rs", "fn a() {}\n")?;
+    repository.commit()?;
+    let first = git(repository.top(), &["rev-parse", "HEAD:crates/x"])?;
+    repository.write(b"crates/x/b.rs", "fn b() {}\n")?;
+    repository.commit()?;
+    let second = git(repository.top(), &["rev-parse", "HEAD:crates/x"])?;
+    repository.write(b"crates/x/a.rs", "fn a() { b() }\n")?;
+    repository.rewritten_element("x", "crates/x", Some(&first))?;
+    repository.rewritten_element("w", "crates/x", Some(&second))?;
+    repository.rewritten_element("v", "crates/x", Some(UNKNOWN))?;
+    repository.commit()?;
+
+    assert_eq!(
+        repository.flags_of("x")?,
+        [changed(&[b"crates/x/a.rs", b"crates/x/b.rs"])]
+    );
+    assert_eq!(repository.flags_of("w")?, [changed(&[b"crates/x/a.rs"])]);
+    assert_eq!(repository.flags_of("v")?, [Flag::UnknownStamp]);
+    Ok(())
+}
+
+#[test]
+fn lists_a_file_anchor_stamped_by_verify_after_a_rebase() -> TestResult {
+    let repository = Repository::new()?;
+    git(repository.top(), &["switch", "-q", "-c", "feature"])?;
+    repository.write(b"crates/x/lib.rs", "fn a() {}\n")?;
+    repository.element(Some("crates/x/lib.rs"), None)?;
+    let stamped = repository.commit()?;
+    repository.verify("x")??;
+    repository.commit()?;
+    git(repository.top(), &["switch", "-q", "main"])?;
+    repository.write(b"other.rs", "fn o() {}\n")?;
+    repository.commit()?;
+    repository.rewrite(Rewrite::Rebase)?;
+    repository.write(b"crates/x/lib.rs", "fn a() { b() }\n")?;
+    repository.commit()?;
+
+    let flags = repository.flags()?;
+
+    assert!(repository.is_rewritten(&stamped));
+    assert_eq!(flags, [changed(&[b"crates/x/lib.rs"])]);
     Ok(())
 }

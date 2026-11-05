@@ -71,7 +71,9 @@ Changes in the repo are detected without source-specific code, through anchors a
 
 A rebase, a squash merge, or a cherry-pick rewrites the commits a stamp names, so the stamp's commit is no longer an ancestor of HEAD although nothing under the anchors may have changed. Then Abyme judges the stamp by the content it recorded, compared with what each path holds in the commit HEAD names:
 
-- **The own anchor** is unflagged while it holds the recorded object; files under it that the index or the working tree changed since HEAD are flagged as in step 3. If it holds another object, or the stamp holds no entry for it, the element is flagged as a stamp whose commit is unknown: without the files that changed, it is checked from scratch.
+- **The own anchor** is unflagged while it holds the recorded object; files under it that the index or the working tree changed since HEAD are flagged as in step 3.
+- **An own anchor that holds another object** is flagged with the files that differ, together with what the index and the working tree changed under it. A file anchor lists itself. A folder anchor lists the files that differ between the recorded tree and HEAD's, when the repository still holds the recorded tree (see [[Hexagonal Architecture#Security Baseline]]).
+- **The files cannot be told** when the stamp holds no entry for the anchor or recorded that nothing lay there, when HEAD holds nothing at the anchor or a nested repository's commit there, or when Git does not hold the recorded tree or cannot compare it, for example in a clone that lacks old objects. The element is then flagged as a stamp whose commit is unknown and is checked from scratch.
 - **A relation target** passes its flag on when the path that stands for it holds another object, the index or the working tree changed it, or the stamp did not record it, for example because the target was anchored elsewhere after the stamp.
 - **An element without an anchor** that vouches for no path stays unflagged.
 - **A stamp without recorded content** is flagged as a stamp whose commit is unknown and passes nothing on.

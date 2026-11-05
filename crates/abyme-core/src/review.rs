@@ -29,12 +29,14 @@ pub enum Flag {
     /// The element has an anchor but no stamp.
     NeverVerified,
     /// The element's repository does not know the stamp's commit, or it is
-    /// no ancestor of HEAD there, and the stamp recorded no content, or the
-    /// content it recorded for the anchor does not match HEAD.
+    /// no ancestor of HEAD there, and the files that changed since cannot be
+    /// told: the stamp recorded no content, or the content it recorded for
+    /// the anchor does not match HEAD and Git cannot list the files that
+    /// differ from it.
     UnknownStamp,
-    /// These files under the anchor differ from the stamp's commit or are
-    /// untracked in the element's repository: paths relative to the project
-    /// root, sorted.
+    /// These files under the anchor differ from the stamp's commit, or after
+    /// a rewrite from the content the stamp recorded, or are untracked in the
+    /// element's repository: paths relative to the project root, sorted.
     Changed(Vec<Vec<u8>>),
     /// No file that the element's repository tracks or lists as untracked
     /// lies under the anchor.
@@ -44,7 +46,8 @@ pub enum Flag {
     /// element's repository, files under that anchor changed, or the root of
     /// the nested repository the anchor lies in; after a rewrite, also when
     /// that path holds another object than the stamp recorded, or the stamp
-    /// recorded nothing for it.
+    /// holds no entry for it. A path the stamp recorded as holding nothing
+    /// passes the flag on as soon as it holds something.
     Upstream {
         /// The relation's kind, which decides the priority.
         kind: RelationKind,
@@ -117,6 +120,10 @@ pub struct Fallback {
     pub objects: BTreeMap<Vec<u8>, ObjectId>,
     /// The paths in which the index differs from that commit.
     pub staged: BTreeSet<Vec<u8>>,
+    /// For each own anchor that holds another object at that commit than
+    /// a stamp recorded, the files under it that differ, keyed by the
+    /// anchor and the recorded object; missing where they cannot be told.
+    pub differing: BTreeMap<(Vec<u8>, ObjectId), BTreeSet<Vec<u8>>>,
 }
 
 /// What `verify` needs to know of the repository. Paths are bytes,
@@ -316,7 +323,10 @@ fn own_flags(element: &Element, baseline: Baseline<'_>, facts: &RepositoryFacts)
             if recorded_matches(recorded, anchor, head) {
                 changed_under(anchor, &head.staged, &facts.uncommitted)
             } else {
-                Some(Flag::UnknownStamp)
+                differing_files(recorded, anchor, head).map_or(Some(Flag::UnknownStamp), |files| {
+                    let since = files.iter().chain(&head.staged).cloned().collect();
+                    changed_under(anchor, &since, &facts.uncommitted)
+                })
             }
         }
         (Baseline::Content { .. } | Baseline::Unstamped, None) => None,
@@ -337,6 +347,18 @@ fn recorded_matches(recorded: &RecordedContent, path: &Anchor, head: &Fallback) 
     recorded
         .get(path)
         .is_some_and(|object| object.as_ref() == head.objects.get(path.as_str().as_bytes()))
+}
+
+/// The files under `anchor` that differ between the object the stamp
+/// recorded for it and the one HEAD holds there, if Git could tell them.
+fn differing_files<'a>(
+    recorded: &RecordedContent,
+    anchor: &Anchor,
+    head: &'a Fallback,
+) -> Option<&'a BTreeSet<Vec<u8>>> {
+    let object = recorded.get(anchor)?.as_ref()?;
+    head.differing
+        .get(&(anchor.as_str().as_bytes().to_vec(), object.clone()))
 }
 
 /// The flag for the files under `anchor` that the index changed since the

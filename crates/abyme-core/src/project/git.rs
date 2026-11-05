@@ -1,10 +1,13 @@
 //! What Git reports about the project's files, read through the `git`
 //! command line.
 //!
-//! Element files are untrusted, so no anchor, recorded path, or recorded
-//! object ever reaches Git's command line: they are matched against the
-//! paths and objects Git prints. Only a hex-checked [`CommitId`] does, a
-//! stamp's or the one HEAD names, after all options. Git runs
+//! Element files are untrusted, so no anchor or recorded path ever reaches
+//! Git's command line: they are matched against the paths and objects Git
+//! prints. Only hex-checked object IDs do, after all options: a stamp's
+//! commit, the commit HEAD names, and, after a rewrite, an object a stamp
+//! recorded for its anchor, which first goes to `cat-file --batch-check` on
+//! standard input and reaches the command line only once Git has echoed
+//! exactly that ID as a tree. Git runs
 //! without a shell, with every `GIT_` variable of the environment removed,
 //! without transports, and only with commands that leave the repository and
 //! its index as they are. It never uses a bare repository it finds on its
@@ -25,12 +28,14 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs;
+use std::io::Write as _;
 use std::iter;
 use std::os::unix::ffi::{OsStrExt as _, OsStringExt as _};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
+use std::thread;
 
-use abyme_model::{Anchor, CommitId, ObjectId};
+use abyme_model::{Anchor, CommitId, ObjectId, RecordedContent};
 
 use crate::review::{
     Fallback, GitFacts, HeadFacts, RepositoryFacts, Since, Unavailable, repository_root,
@@ -52,12 +57,46 @@ const ENVIRONMENT: [(&str, &str); 5] = [
 const FILTER_OVERRIDES: [(&str, &str); 3] = [("clean", ""), ("process", ""), ("required", "false")];
 
 /// What Git is asked about for one element: where its anchor lies, which
-/// commit its stamp names, and whether the stamp recorded the content it
-/// vouches for.
+/// commit its stamp names, and the content the stamp recorded, if any.
 pub struct AnchorAndStamp<'a> {
     pub anchor: Option<&'a Anchor>,
     pub stamp: Option<&'a CommitId>,
-    pub recorded: bool,
+    pub content: Option<&'a RecordedContent>,
+}
+
+/// An entry of a tree: the type of what it holds and its object.
+type TreeEntry = (ObjectKind, ObjectId);
+
+/// What a path holds in a commit, as `ls-tree` names its type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ObjectKind {
+    /// A folder.
+    Tree,
+    /// A file or a symbolic link.
+    Blob,
+    /// The commit a nested repository is at.
+    Gitlink,
+}
+
+/// An element whose stamp's commit tells nothing and whose anchor holds
+/// another object at HEAD than the stamp recorded, with how the files that
+/// differ can be told.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+enum Rewritten<'a> {
+    /// HEAD holds a file at the anchor: the anchor itself differs.
+    File {
+        anchor: &'a [u8],
+        recorded: &'a ObjectId,
+    },
+    /// HEAD holds a folder at the anchor, and the recorded object has the
+    /// length of the repository's object IDs: the files that differ between
+    /// the recorded tree and HEAD's, once Git confirms the recorded object
+    /// is a tree.
+    Trees {
+        anchor: &'a [u8],
+        recorded: &'a ObjectId,
+        head: &'a ObjectId,
+    },
 }
 
 /// The `git` program, found in a directory of `PATH` given as an absolute
@@ -124,9 +163,9 @@ pub fn facts(root: &Path, elements: &[AnchorAndStamp<'_>]) -> Result<GitFacts, U
         let store = git.store(&project)?;
         Walk { git: &git, root }.nested(&wanted, store.as_deref(), elements)
     };
-    let stamps = stamps(None, &nested, elements);
+    let members = members(None, &nested, elements);
     Ok(GitFacts {
-        project: git.repository_facts(&project, listing, &stamps)?,
+        project: git.repository_facts(&project, listing, &members)?,
         nested,
     })
 }
@@ -192,8 +231,8 @@ impl Walk<'_> {
         let listing = self.git.listing(&place, b"").ok()?;
         let wanted = wanted(&listing.repositories, elements);
         let mut nested = self.nested(&wanted, own_store.as_deref(), elements);
-        let stamps = stamps(Some(root), &nested, elements);
-        let facts = self.git.repository_facts(&place, listing, &stamps).ok()?;
+        let members = members(Some(root), &nested, elements);
+        let facts = self.git.repository_facts(&place, listing, &members).ok()?;
         nested.insert(root.to_vec(), facts);
         Some(nested)
     }
@@ -304,6 +343,32 @@ impl Git {
         self.command(place, arguments)
             .output()
             .map_err(|_| Unavailable::NoGit)
+    }
+
+    /// Runs `git` at `place` with `arguments`, writing `input` to its
+    /// standard input from a thread of its own while its output is read, so
+    /// that neither side waits on a full pipe. A failure to write fails the
+    /// run.
+    fn run_with_input(
+        &self,
+        place: &Place,
+        arguments: &[&str],
+        input: &[u8],
+    ) -> Result<Output, Unavailable> {
+        let mut child = self
+            .command(place, arguments)
+            .stdin(Stdio::piped())
+            .spawn()
+            .map_err(|_| Unavailable::NoGit)?;
+        let mut stdin = child.stdin.take().ok_or(Unavailable::GitFailed)?;
+        thread::scope(|scope| {
+            let writer = scope.spawn(move || stdin.write_all(input));
+            let output = child.wait_with_output();
+            match (output, writer.join()) {
+                (Ok(output), Ok(Ok(()))) => Ok(output),
+                _ => Err(Unavailable::GitFailed),
+            }
+        })
     }
 
     /// The `git` command at `place` with `arguments`, in its environment.
@@ -500,14 +565,30 @@ impl Git {
         place: &Place,
         commit: &CommitId,
     ) -> Result<BTreeMap<Vec<u8>, ObjectId>, Unavailable> {
+        Ok(self
+            .typed_objects(place, commit)?
+            .into_iter()
+            .map(|(path, (_, object))| (path, object))
+            .collect())
+    }
+
+    /// The object each path held in `commit` of the repository at `place`,
+    /// as [`Git::objects`] reads them, each with its type.
+    fn typed_objects(
+        &self,
+        place: &Place,
+        commit: &CommitId,
+    ) -> Result<BTreeMap<Vec<u8>, TreeEntry>, Unavailable> {
         let output = self.success(place, &["ls-tree", "-r", "-t", "-z", commit.as_str()])?;
         let listed = tree_entries(&output)?
             .into_iter()
-            .map(|(path, object)| Ok((place.path(path)?, object)));
-        let root = place
-            .root
-            .iter()
-            .map(|root| Ok((root.clone(), self.root_tree(place, commit)?)));
+            .map(|(path, entry)| Ok((place.path(path)?, entry)));
+        let root = place.root.iter().map(|root| {
+            Ok((
+                root.clone(),
+                (ObjectKind::Tree, self.root_tree(place, commit)?),
+            ))
+        });
         listed.chain(root).collect()
     }
 
@@ -531,16 +612,17 @@ impl Git {
     }
 
     /// The facts of the repository at `place` from its `listing`, with what
-    /// each of `stamps` tells there, and its content at HEAD when a stamp
-    /// that recorded content names a commit that tells nothing. `stamps`
-    /// maps each commit to whether a stamp naming it recorded content.
+    /// the stamp of each of its `members` tells there, and its content at
+    /// HEAD when a stamp that recorded content names a commit that tells
+    /// nothing.
     fn repository_facts(
         &self,
         place: &Place,
         listing: Listing,
-        stamps: &BTreeMap<&CommitId, bool>,
+        members: &[&AnchorAndStamp<'_>],
     ) -> Result<RepositoryFacts, Unavailable> {
         let head = self.commit(place, "HEAD")?;
+        let stamps = stamps(members);
         let since = stamps
             .keys()
             .map(|stamp| Ok(((*stamp).clone(), self.since(place, stamp, head.as_ref())?)))
@@ -549,10 +631,19 @@ impl Git {
             .iter()
             .any(|(stamp, recorded)| *recorded && since.get(*stamp) == Some(&Since::Unknown));
         let fallback = match head.filter(|_| needed) {
-            Some(head) => Some(Fallback {
-                objects: self.objects(place, &head)?,
-                staged: self.changed_in_index(place, &head)?,
-            }),
+            Some(head) => {
+                let objects = self.typed_objects(place, &head)?;
+                let rewritten = rewritten(members, &since, &objects);
+                let differing = self.differing(place, &rewritten);
+                Some(Fallback {
+                    objects: objects
+                        .into_iter()
+                        .map(|(path, (_, object))| (path, object))
+                        .collect(),
+                    staged: self.changed_in_index(place, &head)?,
+                    differing,
+                })
+            }
             None => None,
         };
         Ok(RepositoryFacts {
@@ -561,6 +652,114 @@ impl Git {
             since,
             fallback,
         })
+    }
+
+    /// The files that differ under the anchor of each of the `rewritten`
+    /// elements of the repository at `place`, keyed by the anchor and the
+    /// object its stamp recorded. A file anchor lists itself. A folder
+    /// anchor lists the files that differ between the recorded tree and
+    /// HEAD's once Git confirmed the recorded object as a tree in this
+    /// repository; each pair of trees is compared once. An element whose
+    /// files cannot be told, because Git does not confirm the tree, fails,
+    /// or prints a path that does not fit, or because no file differs, is
+    /// left out, so that review flags it as a stamp whose commit is unknown.
+    fn differing(
+        &self,
+        place: &Place,
+        rewritten: &BTreeSet<Rewritten<'_>>,
+    ) -> BTreeMap<(Vec<u8>, ObjectId), BTreeSet<Vec<u8>>> {
+        let candidates: Vec<&ObjectId> = rewritten
+            .iter()
+            .filter_map(|element| match element {
+                Rewritten::Trees { recorded, .. } => Some(*recorded),
+                Rewritten::File { .. } => None,
+            })
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        let confirmed = self.confirmed_trees(place, &candidates);
+        let diffs: BTreeMap<(&ObjectId, &ObjectId), Vec<Vec<u8>>> = rewritten
+            .iter()
+            .filter_map(|element| match element {
+                Rewritten::Trees { recorded, head, .. } if confirmed.contains(*recorded) => {
+                    Some((*recorded, *head))
+                }
+                Rewritten::Trees { .. } | Rewritten::File { .. } => None,
+            })
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .filter_map(|(recorded, head)| {
+                Some(((recorded, head), self.tree_diff(place, recorded, head)?))
+            })
+            .collect();
+        rewritten
+            .iter()
+            .filter_map(|element| match element {
+                Rewritten::File { anchor, recorded } => Some((
+                    (anchor.to_vec(), (*recorded).clone()),
+                    BTreeSet::from([anchor.to_vec()]),
+                )),
+                Rewritten::Trees {
+                    anchor,
+                    recorded,
+                    head,
+                } => diffs.get(&(*recorded, *head)).map(|files| {
+                    (
+                        (anchor.to_vec(), (*recorded).clone()),
+                        files
+                            .iter()
+                            .map(|file| [*anchor, b"/", file].concat())
+                            .collect(),
+                    )
+                }),
+            })
+            .collect()
+    }
+
+    /// Those of `candidates` that the repository at `place` holds as trees,
+    /// asked through `cat-file --batch-check` on standard input; none when
+    /// Git fails or prints anything but one line per candidate.
+    fn confirmed_trees(&self, place: &Place, candidates: &[&ObjectId]) -> BTreeSet<ObjectId> {
+        if candidates.is_empty() {
+            return BTreeSet::new();
+        }
+        let input: String = candidates
+            .iter()
+            .map(|object| format!("{object}\n"))
+            .collect::<Vec<_>>()
+            .concat();
+        self.run_with_input(place, &["cat-file", "--batch-check"], input.as_bytes())
+            .ok()
+            .filter(|output| output.status.success())
+            .and_then(|output| confirmed(candidates, &output.stdout))
+            .unwrap_or_default()
+    }
+
+    /// The paths, relative to the trees, that differ between the trees
+    /// `recorded` and `head` in the repository at `place`; `None` when Git
+    /// fails, prints a path that does not fit, or names no path.
+    fn tree_diff(
+        &self,
+        place: &Place,
+        recorded: &ObjectId,
+        head: &ObjectId,
+    ) -> Option<Vec<Vec<u8>>> {
+        let output = self
+            .success(
+                place,
+                &[
+                    "diff-tree",
+                    "-r",
+                    "-z",
+                    "--name-only",
+                    "--no-renames",
+                    recorded.as_str(),
+                    head.as_str(),
+                    "--",
+                ],
+            )
+            .ok()?;
+        diff_paths(&output)
     }
 
     /// The commit `revision` names, or `None` when it names none, such as
@@ -702,23 +901,75 @@ fn wanted<'a>(
         .collect()
 }
 
-/// The stamps of the elements whose repository is the one at `root`, or
-/// the project's for `None`: their anchor lies in it, and in none of the
-/// repositories `nested` below it. Each commit maps to whether a stamp
-/// naming it recorded content.
-fn stamps<'a>(
+/// The elements whose repository is the one at `root`, or the project's
+/// for `None`, as [`belongs_to`] decides it.
+fn members<'e, 'a>(
     root: Option<&[u8]>,
     nested: &BTreeMap<Vec<u8>, RepositoryFacts>,
-    elements: &[AnchorAndStamp<'a>],
-) -> BTreeMap<&'a CommitId, bool> {
+    elements: &'e [AnchorAndStamp<'a>],
+) -> Vec<&'e AnchorAndStamp<'a>> {
     elements
         .iter()
         .filter(|element| belongs_to(element.anchor, root, nested))
-        .filter_map(|element| element.stamp.map(|stamp| (stamp, element.recorded)))
+        .collect()
+}
+
+/// The stamps of a repository's `members`. Each commit maps to whether a
+/// stamp naming it recorded content.
+fn stamps<'a>(members: &[&AnchorAndStamp<'a>]) -> BTreeMap<&'a CommitId, bool> {
+    members
+        .iter()
+        .filter_map(|element| {
+            element
+                .stamp
+                .map(|stamp| (stamp, element.content.is_some()))
+        })
         .fold(BTreeMap::new(), |mut stamps, (stamp, recorded)| {
             *stamps.entry(stamp).or_insert(false) |= recorded;
             stamps
         })
+}
+
+/// The `members` of a repository whose stamp's commit tells nothing there
+/// (`since`) and whose own anchor holds another object at HEAD (`objects`)
+/// than the stamp recorded for it: a file anchor whatever the recorded
+/// object, a folder anchor when the recorded object has the length of
+/// HEAD's. The recorded content is read only for the element's own anchor.
+/// A gitlink at the anchor, an anchor HEAD does not hold, and an anchor
+/// recorded as holding nothing are left out.
+fn rewritten<'a>(
+    members: &[&AnchorAndStamp<'a>],
+    since: &BTreeMap<CommitId, Since>,
+    objects: &'a BTreeMap<Vec<u8>, TreeEntry>,
+) -> BTreeSet<Rewritten<'a>> {
+    members
+        .iter()
+        .filter(|element| {
+            element
+                .stamp
+                .is_some_and(|stamp| since.get(stamp) == Some(&Since::Unknown))
+        })
+        .filter_map(|element| {
+            let anchor = element.anchor?;
+            let recorded = element.content?.get(anchor)?.as_ref()?;
+            let (path, (kind, head)) = objects.get_key_value(anchor.as_str().as_bytes())?;
+            match kind {
+                _ if head == recorded => None,
+                ObjectKind::Blob => Some(Rewritten::File {
+                    anchor: path,
+                    recorded,
+                }),
+                ObjectKind::Tree if head.as_str().len() == recorded.as_str().len() => {
+                    Some(Rewritten::Trees {
+                        anchor: path,
+                        recorded,
+                        head,
+                    })
+                }
+                ObjectKind::Tree | ObjectKind::Gitlink => None,
+            }
+        })
+        .collect()
 }
 
 /// Whether an element with `anchor` belongs to the repository at `root`, or
@@ -868,13 +1119,13 @@ fn staged_entry(record: &[u8]) -> Result<(bool, &[u8]), Unavailable> {
 /// that is not a full object ID, an empty path, a path with an empty, `.`,
 /// `..`, or `.git` segment, or a path printed twice is broken output, so
 /// that a crafted tree cannot choose which of two objects counts.
-fn tree_entries(output: &[u8]) -> Result<BTreeMap<&[u8], ObjectId>, Unavailable> {
+fn tree_entries(output: &[u8]) -> Result<BTreeMap<&[u8], TreeEntry>, Unavailable> {
     let entries = records(output)?
         .into_iter()
         .filter_map(|record| tree_entry(record).transpose())
         .collect::<Result<Vec<_>, Unavailable>>()?;
     let count = entries.len();
-    let entries: BTreeMap<&[u8], ObjectId> = entries.into_iter().collect();
+    let entries: BTreeMap<&[u8], TreeEntry> = entries.into_iter().collect();
     if entries.len() == count {
         Ok(entries)
     } else {
@@ -884,7 +1135,7 @@ fn tree_entries(output: &[u8]) -> Result<BTreeMap<&[u8], ObjectId>, Unavailable>
 
 /// One entry of `git ls-tree`: `<mode> <type> <object>`, a tab, and the
 /// path; `None` for a folder that encloses the place Git ran in.
-fn tree_entry(record: &[u8]) -> Result<Option<(&[u8], ObjectId)>, Unavailable> {
+fn tree_entry(record: &[u8]) -> Result<Option<(&[u8], TreeEntry)>, Unavailable> {
     let parts: Vec<&[u8]> = record.splitn(2, |byte| *byte == b'\t').collect();
     let [fields, path] = parts.as_slice() else {
         return Err(Unavailable::GitFailed);
@@ -893,22 +1144,62 @@ fn tree_entry(record: &[u8]) -> Result<Option<(&[u8], ObjectId)>, Unavailable> {
     let [mode, kind, object] = fields.as_slice() else {
         return Err(Unavailable::GitFailed);
     };
-    let fits = matches!(
-        (*mode, *kind),
-        (b"040000", b"tree")
-            | (b"160000", b"commit")
-            | (b"100644" | b"100755" | b"120000", b"blob")
-    );
+    let kind = match (*mode, *kind) {
+        (b"040000", b"tree") => Some(ObjectKind::Tree),
+        (b"160000", b"commit") => Some(ObjectKind::Gitlink),
+        (b"100644" | b"100755" | b"120000", b"blob") => Some(ObjectKind::Blob),
+        _ => None,
+    };
     let object = String::from_utf8(object.to_vec())
         .ok()
         .and_then(|object| ObjectId::try_from(object).ok());
-    match object {
-        Some(_) if fits && *kind == b"tree" && encloses(path) => Ok(None),
-        Some(object) if fits && path.split(|byte| *byte == b'/').all(is_plain_segment) => {
-            Ok(Some((path, object)))
+    match (kind, object) {
+        (Some(ObjectKind::Tree), Some(_)) if encloses(path) => Ok(None),
+        (Some(kind), Some(object)) if path.split(|byte| *byte == b'/').all(is_plain_segment) => {
+            Ok(Some((path, (kind, object))))
         }
         _ => Err(Unavailable::GitFailed),
     }
+}
+
+/// The `candidates` that `git cat-file --batch-check` confirms as trees in
+/// its `output`, which holds one line per candidate in their order; `None`
+/// when the output has another number of lines or does not end with a line
+/// feed. A line that is not exactly the candidate's full ID, `tree`, and a
+/// decimal size leaves its candidate out.
+fn confirmed(candidates: &[&ObjectId], output: &[u8]) -> Option<BTreeSet<ObjectId>> {
+    let lines: Vec<&[u8]> = output
+        .strip_suffix(b"\n")?
+        .split(|byte| *byte == b'\n')
+        .collect();
+    if lines.len() != candidates.len() {
+        return None;
+    }
+    Some(
+        candidates
+            .iter()
+            .zip(lines)
+            .filter(|(candidate, line)| {
+                line.strip_prefix(candidate.as_str().as_bytes())
+                    .and_then(|rest| rest.strip_prefix(b" tree "))
+                    .is_some_and(|size| !size.is_empty() && size.iter().all(u8::is_ascii_digit))
+            })
+            .map(|(candidate, _)| (*candidate).clone())
+            .collect(),
+    )
+}
+
+/// The paths `git diff-tree -r -z --name-only` prints between two trees,
+/// relative to them; `None` when the output is not NUL-terminated, a path is
+/// empty or has an empty, `.`, `..`, or `.git` segment, or no path is
+/// printed.
+fn diff_paths(output: &[u8]) -> Option<Vec<Vec<u8>>> {
+    let paths = records(output).ok()?;
+    let fits = !paths.is_empty()
+        && paths
+            .iter()
+            .all(|path| path.split(|byte| *byte == b'/').all(is_plain_segment));
+    fits.then(|| paths.iter().map(|path| path.to_vec()).collect())
 }
 
 /// Whether `path` names a folder that encloses the place Git ran in, as

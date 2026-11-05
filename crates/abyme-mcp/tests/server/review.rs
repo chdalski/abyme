@@ -166,7 +166,7 @@ async fn read_element_shows_each_kind_of_review_flag() -> TestResult {
         ),
         (
             "unknown",
-            "Review: task\n  the stamp's commit is unknown to the repository or no ancestor of HEAD\n",
+            "Review: task\n  the stamp's commit is unknown to the repository or no ancestor of HEAD, and the files changed since cannot be told\n",
         ),
         (
             "missing",

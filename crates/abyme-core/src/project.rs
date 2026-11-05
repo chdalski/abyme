@@ -259,9 +259,7 @@ impl Project {
             .map(|element| git::AnchorAndStamp {
                 anchor: element.anchor(),
                 stamp: element.verified().map(|stamp| &stamp.commit),
-                recorded: element
-                    .verified()
-                    .is_some_and(|stamp| stamp.content.is_some()),
+                content: element.verified().and_then(|stamp| stamp.content.as_ref()),
             })
             .collect();
         let facts = git::facts(&self.root, &elements)?;

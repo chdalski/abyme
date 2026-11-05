@@ -553,9 +553,9 @@ fn review_lines(review: &Review, id: &ElementId) -> String {
 fn reason(flag: &Flag) -> String {
     match flag {
         Flag::NeverVerified => "never verified".to_owned(),
-        Flag::UnknownStamp => {
-            "the stamp's commit is unknown to the repository or no ancestor of HEAD".to_owned()
-        }
+        Flag::UnknownStamp => "the stamp's commit is unknown to the repository or no ancestor \
+             of HEAD, and the files changed since cannot be told"
+            .to_owned(),
         Flag::Changed(paths) => {
             let shown: Vec<String> = paths
                 .iter()
