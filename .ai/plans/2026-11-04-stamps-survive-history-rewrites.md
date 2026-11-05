@@ -28,7 +28,7 @@ relation targets' anchors is unchanged, and is flagged when it changed.
 
 - [x] Review flags resolve a stamp's baseline and a relation target's path in one place each
 - [x] Element files read lists of flat mappings through one reader
-- [ ] Element files carry the content a stamp vouches for
+- [x] Element files carry the content a stamp vouches for
 - [ ] `verify` records the content, and review falls back to it after a rewrite
 
 ## Tasks
@@ -71,17 +71,17 @@ this task makes it readable, writable, and removed with the stamp.
 
 Review path: Security-Hybrid
 
-- [ ] An element file with a stamp and recorded content reads and writes back unchanged, and the
+- [x] An element file with a stamp and recorded content reads and writes back unchanged, and the
       round-trip property tests cover it.
-- [ ] A reader can tell a stamp that recorded content from one that did not, a stamp that recorded
+- [x] A reader can tell a stamp that recorded content from one that did not, a stamp that recorded
       no path from one that recorded no content, and a path recorded as holding nothing at the
       stamp's commit from a path not recorded; each pair reads and writes back distinct, by a test.
-- [ ] An object ID that is not 40 or 64 lowercase hex digits, a path recorded twice, recorded
+- [x] An object ID that is not 40 or 64 lowercase hex digits, a path recorded twice, recorded
       content without `verified`, and an entry beyond a flat mapping are rejected with their own
       problem, each by a test.
-- [ ] An element file without recorded content reads as before.
-- [ ] Every `apply` operation that removes a stamp removes the recorded content with it.
-- [ ] `docs/5 Architecture/Storage in Git.md` and `docs/5 Architecture/Data Model.md` describe the
+- [x] An element file without recorded content reads as before.
+- [x] Every `apply` operation that removes a stamp removes the recorded content with it.
+- [x] `docs/5 Architecture/Storage in Git.md` and `docs/5 Architecture/Data Model.md` describe the
       field as the files hold it.
 
 ### Task 4: `verify` records the content, and review falls back to it after a rewrite
@@ -145,8 +145,25 @@ Review path: Security-Hybrid
 - **Task 2 adds relation cases that pin the reader's check order:** a non-scalar value before an
   unknown key, one item read after the other, and a tag on a plain item, so that the shared reader
   keeps the order of the one it replaces.
+- **Task 3 pins every rejection and the stamp's removal by tests of their exact outcome:** each
+  malformed recorded entry, list, path, and object, content without a whole stamp, shortened and
+  escaped messages, bidi, zero-width, and control characters, `verify` writing no content yet,
+  `apply` refusing the field and dropping it with the stamp, and a byte-for-byte round trip, so
+  that the field Task 4 reads cannot hold a state the format does not define.
 - **The project format stays 1:** the new field is optional, and an older Abyme rejects only element
   files that carry it.
+
+## Task Notes
+
+- **Task 4:** Review looks up recorded entries by the path it computes itself and never iterates
+  over recorded paths to drive Git; recorded paths it does not compute are ignored.
+- **Task 4:** An element with an anchor whose recorded content holds no entry for that anchor is
+  flagged after a rewrite, never treated as unchanged.
+- **Task 4:** A recorded object ID whose length differs from that of the repository's object IDs
+  compares as changed.
+- **Task 4:** Object IDs given to Git are validated hex and follow fixed arguments.
+- **Task 4:** A path that stands for a relation target but fails the anchor rules or is not valid
+  UTF-8, such as a nested repository's root, stays unrecorded, never substituted or converted.
 
 ## Non-Goals
 

@@ -484,6 +484,19 @@ fn verify_stamps_head_by_ai_and_changes_nothing_else() -> TestResult {
 }
 
 #[test]
+fn verify_records_no_content_in_the_stamp() -> TestResult {
+    let repository = verified()?;
+    repository.write(b"crates/x/lib.rs", "fn a() { b() }\n")?;
+    repository.commit()?;
+
+    repository.verify("x")??;
+
+    let after = repository.element_file("x")?;
+    assert!(!after.contains("verified_content"), "{after}");
+    Ok(())
+}
+
+#[test]
 fn verify_names_the_commit_of_a_detached_head() -> TestResult {
     let repository = verified()?;
     git(repository.top(), &["switch", "-q", "--detach"])?;

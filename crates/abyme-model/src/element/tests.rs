@@ -1,9 +1,11 @@
 //! Tests of building, reading, and writing element files.
 
+use std::collections::BTreeSet;
+
 use rstest::rstest;
 
 use super::*;
-use crate::verification::{CommitId, Verifier};
+use crate::verification::{CommitId, ObjectId, RecordedContent, Verifier};
 
 fn element_id(value: &str) -> ElementId {
     value.parse().unwrap()
@@ -688,6 +690,7 @@ fn main_with_anchor_and_stamp(
             verified: stamp.map(|by| Verification {
                 commit: CommitId::try_from(COMMIT.to_owned()).unwrap(),
                 by,
+                content: None,
             }),
             ..main_with_relations(&[(RelationKind::Uses, "x", None)])
                 .unwrap()
@@ -848,6 +851,7 @@ fn main_with_statement(statement: Option<StatementKind>) -> Element {
         verified: Some(Verification {
             commit: CommitId::try_from(COMMIT.to_owned()).unwrap(),
             by: Verifier::Ai,
+            content: None,
         }),
     };
     Element::new(element_id("main"), fields).unwrap()
@@ -966,4 +970,305 @@ fn a_statement_counts_toward_the_frontmatter_limit() {
             .problem(),
         ElementProblem::FrontmatterTooLarge { .. }
     ));
+}
+
+const OBJECT: &str = "abcdef0123456789abcdef0123456789abcdef01";
+
+/// The stamp lines of `main` with `content` after `verified_by`.
+fn stamped_file(content: &str) -> String {
+    main_file(&format!(
+        "verified: \"{COMMIT}\"\nverified_by: \"ai\"\n{content}"
+    ))
+}
+
+/// The element `main`, stamped, with `content` recorded.
+fn main_with_content(content: Option<RecordedContent>) -> Element {
+    let mut fields = main_with_anchor_and_stamp(Some("crates/x"), Some(Verifier::Ai))
+        .unwrap()
+        .into_fields();
+    if let Some(stamp) = fields.verified.as_mut() {
+        stamp.content = content;
+    }
+    Element::new(element_id("main"), fields).unwrap()
+}
+
+fn recorded(entries: &[(&str, Option<&str>)]) -> RecordedContent {
+    entries
+        .iter()
+        .map(|(path, object)| {
+            (
+                Anchor::try_from((*path).to_owned()).unwrap(),
+                object.map(|object| ObjectId::try_from(object.to_owned()).unwrap()),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn writes_recorded_content_after_the_verifier_in_the_order_of_its_paths() {
+    let element = main_with_content(Some(recorded(&[
+        ("crates/y", None),
+        ("crates/x", Some(OBJECT)),
+    ])));
+
+    let expected = format!(
+        "verified: \"{COMMIT}\"\nverified_by: \"ai\"\nverified_content:\n  \
+         - {{path: \"crates/x\", object: \"{OBJECT}\"}}\n  - {{path: \"crates/y\"}}\n"
+    );
+    assert!(
+        frontmatter_of(&element.to_markdown()).contains(&expected),
+        "{}",
+        element.to_markdown()
+    );
+}
+
+#[rstest]
+#[case::no_content(None)]
+#[case::no_path(Some(RecordedContent::new()))]
+#[case::a_path_that_held_nothing(Some(recorded(&[("crates/x", None)])))]
+#[case::a_path_with_its_object(Some(recorded(&[("crates/x", Some(OBJECT))])))]
+fn reads_back_recorded_content_byte_for_byte(#[case] content: Option<RecordedContent>) {
+    let element = main_with_content(content.clone());
+    let markdown = element.to_markdown();
+
+    let read = read_main(&markdown).unwrap();
+
+    assert_eq!(read.verified().unwrap().content, content);
+    assert_eq!(read.to_markdown(), markdown);
+}
+
+#[test]
+fn keeps_no_content_no_path_and_a_path_that_held_nothing_apart() {
+    let files: Vec<String> = [
+        None,
+        Some(RecordedContent::new()),
+        Some(recorded(&[("crates/x", None)])),
+        Some(recorded(&[("crates/x", Some(OBJECT))])),
+    ]
+    .into_iter()
+    .map(|content| main_with_content(content).to_markdown())
+    .collect();
+
+    let distinct: BTreeSet<&String> = files.iter().collect();
+    assert_eq!(distinct.len(), files.len());
+    assert!(!files[0].contains("verified_content"));
+    assert!(files[1].contains("verified_content: []\n"));
+}
+
+#[test]
+fn reads_a_stamp_without_recorded_content_as_before() {
+    let read = read_main(&stamped_file("")).unwrap();
+
+    assert_eq!(read.verified().unwrap().content, None);
+}
+
+#[test]
+fn reads_hand_written_recorded_content_in_any_style() {
+    let read = read_main(&stamped_file(&format!(
+        "verified_content:\n  - path: crates/x\n    object: {OBJECT}\n  - {{\"path\": 'crates/y'}}\n"
+    )))
+    .unwrap();
+
+    assert_eq!(
+        read.verified().unwrap().content,
+        Some(recorded(&[("crates/x", Some(OBJECT)), ("crates/y", None)]))
+    );
+}
+
+#[rstest]
+#[case::empty_object("verified_content: [{path: x, object: \"\"}]\n", ElementProblem::InvalidObject { object: "\"\"".to_owned() })]
+#[case::object_without_value("verified_content: [{path: x, object: }]\n", ElementProblem::InvalidObject { object: "\"\"".to_owned() })]
+#[case::tilde_object("verified_content: [{path: x, object: ~}]\n", ElementProblem::InvalidObject { object: "\"~\"".to_owned() })]
+#[case::null_object("verified_content: [{path: x, object: null}]\n", ElementProblem::InvalidObject { object: "\"null\"".to_owned() })]
+#[case::uppercase_object(
+    "verified_content: [{path: x, object: ABCDEF0123456789ABCDEF0123456789ABCDEF01}]\n",
+    ElementProblem::InvalidObject { object: "\"ABCDEF0123456789ABCDEF0123456789ABCDEF01\"".to_owned() }
+)]
+#[case::thirty_nine_digits(
+    "verified_content: [{path: x, object: abcdef0123456789abcdef0123456789abcdef0}]\n",
+    ElementProblem::InvalidObject { object: "\"abcdef0123456789abcdef0123456789abcdef0\"".to_owned() }
+)]
+#[case::forty_one_digits(
+    "verified_content: [{path: x, object: abcdef0123456789abcdef0123456789abcdef012}]\n",
+    ElementProblem::InvalidObject { object: "\"abcdef0123456789abcdef0123456789abcdef012\"".to_owned() }
+)]
+#[case::sixty_three_digits(
+    "verified_content: [{path: x, object: abcdef0123456789abcdef0123456789abcdef0123456789abcdef012345678}]\n",
+    ElementProblem::InvalidObject { object: "\"abcdef0123456789abcdef0123456789abcdef0123456789abcdef012345678\"".to_owned() }
+)]
+#[case::option_as_object(
+    "verified_content: [{path: x, object: \"-abcdef0123456789abcdef0123456789abcdef0\"}]\n",
+    ElementProblem::InvalidObject { object: "\"-abcdef0123456789abcdef0123456789abcdef0\"".to_owned() }
+)]
+#[case::empty_value("verified_content:\n", ElementProblem::RecordedContentNotAList)]
+#[case::null_value("verified_content: null\n", ElementProblem::RecordedContentNotAList)]
+#[case::mapping_value("verified_content: {}\n", ElementProblem::RecordedContentNotAList)]
+#[case::plain_entry("verified_content: [x]\n", ElementProblem::RecordedEntryNotAMapping)]
+#[case::list_as_a_path(
+    "verified_content: [{path: [x]}]\n",
+    ElementProblem::NonScalarRecordedValue { key: "\"path\"".to_owned() }
+)]
+#[case::mapping_as_an_object(
+    "verified_content: [{path: x, object: {a: b}}]\n",
+    ElementProblem::NonScalarRecordedValue { key: "\"object\"".to_owned() }
+)]
+#[case::relation_key_in_an_entry(
+    "verified_content: [{path: x, kind: uses}]\n",
+    ElementProblem::UnknownRecordedKey { key: "\"kind\"".to_owned() }
+)]
+#[case::object_twice(
+    "verified_content: [{path: x, object: a, \"object\": b}]\n",
+    ElementProblem::DuplicateRecordedKey { key: "\"object\"".to_owned() }
+)]
+#[case::missing_path(
+    "verified_content: [{object: abcdef0123456789abcdef0123456789abcdef01}]\n",
+    ElementProblem::MissingRecordedPath
+)]
+#[case::path_with_dot_dot(
+    "verified_content: [{path: a/../b}]\n",
+    ElementProblem::InvalidRecordedPath { path: "\"a/../b\"".to_owned(), rule: AnchorRule::DotSegment }
+)]
+#[case::path_with_a_leading_slash(
+    "verified_content: [{path: /a}]\n",
+    ElementProblem::InvalidRecordedPath { path: "\"/a\"".to_owned(), rule: AnchorRule::LeadingSlash }
+)]
+#[case::path_in_git(
+    "verified_content: [{path: a/.git/b}]\n",
+    ElementProblem::InvalidRecordedPath { path: "\"a/.git/b\"".to_owned(), rule: AnchorRule::Reserved }
+)]
+#[case::path_in_abyme(
+    "verified_content: [{path: abyme/elements}]\n",
+    ElementProblem::InvalidRecordedPath { path: "\"abyme/elements\"".to_owned(), rule: AnchorRule::Reserved }
+)]
+#[case::path_with_a_zero_width_space(
+    "verified_content: [{path: \"a\\u200Bb\"}]\n",
+    ElementProblem::InvalidRecordedPath { path: "\"a\\u{200b}b\"".to_owned(), rule: AnchorRule::Character(0x200B) }
+)]
+#[case::path_quoted_and_plain(
+    "verified_content: [{path: \"a\"}, {path: a}]\n",
+    ElementProblem::DuplicateRecordedPath { path: "\"a\"".to_owned() }
+)]
+#[case::anchor_on_the_list("verified_content: &a []\n", ElementProblem::Anchor)]
+#[case::tag_on_the_list("verified_content: !!seq []\n", ElementProblem::Tag)]
+#[case::alias_as_the_list("verified_content: *a\n", ElementProblem::Alias)]
+#[case::anchor_on_an_entry("verified_content:\n  - &a {path: x}\n", ElementProblem::Anchor)]
+#[case::tag_on_an_entry("verified_content:\n  - !!map {path: x}\n", ElementProblem::Tag)]
+#[case::alias_as_an_entry("verified_content:\n  - *a\n", ElementProblem::Alias)]
+#[case::tag_on_a_path("verified_content: [{path: !!str x}]\n", ElementProblem::Tag)]
+fn rejects_recorded_content_beyond_its_shape(
+    #[case] content: &str,
+    #[case] problem: ElementProblem,
+) {
+    assert_eq!(problem_of(&stamped_file(content)), problem);
+}
+
+#[rstest]
+#[case::without_a_stamp("verified_content: []\n", ElementProblem::ContentWithoutStamp)]
+#[case::with_a_commit_alone(
+    &format!("verified: \"{COMMIT}\"\nverified_content: []\n"),
+    ElementProblem::IncompleteStamp { missing: "verified_by" }
+)]
+#[case::with_a_verifier_alone(
+    "verified_by: \"ai\"\nverified_content: []\n",
+    ElementProblem::IncompleteStamp { missing: "verified" }
+)]
+fn rejects_recorded_content_without_a_whole_stamp(
+    #[case] lines: &str,
+    #[case] problem: ElementProblem,
+) {
+    assert_eq!(problem_of(&main_file(lines)), problem);
+}
+
+#[test]
+fn shows_a_rejected_key_and_object_of_recorded_content_shortened_and_escaped() {
+    let long_key = "k".repeat(10_000);
+    let key_problem = problem_of(&stamped_file(&format!(
+        "verified_content: [{{path: x, \"{long_key}\\n\\u001b\": y}}]\n"
+    )));
+    let object_problem = problem_of(&stamped_file(&format!(
+        "verified_content: [{{path: x, object: \"{}\\u001b[31m\"}}]\n",
+        "a".repeat(10_000)
+    )));
+
+    for problem in [key_problem, object_problem] {
+        let message = problem.to_string();
+        assert!(message.len() < 1_000, "{}", message.len());
+        assert!(!message.chars().any(char::is_control), "{message:?}");
+    }
+}
+
+#[test]
+fn refuses_recorded_content_that_takes_the_frontmatter_over_the_limit() {
+    let entries = (0..2_000)
+        .map(|index| (format!("crates/p{index:05}"), Some(OBJECT)))
+        .collect::<Vec<_>>();
+    let content: RecordedContent = entries
+        .iter()
+        .map(|(path, object)| {
+            (
+                Anchor::try_from(path.clone()).unwrap(),
+                object.map(|object| ObjectId::try_from(object.to_owned()).unwrap()),
+            )
+        })
+        .collect();
+    let mut fields = main_with_anchor_and_stamp(Some("crates/x"), Some(Verifier::Ai))
+        .unwrap()
+        .into_fields();
+    if let Some(stamp) = fields.verified.as_mut() {
+        stamp.content = Some(content);
+    }
+    let lines = entries
+        .iter()
+        .map(|(path, _)| format!("  - {{path: \"{path}\", object: \"{OBJECT}\"}}\n"))
+        .collect::<Vec<_>>()
+        .concat();
+
+    let built = Element::new(element_id("main"), fields);
+    let read = problem_of(&stamped_file(&format!("verified_content:\n{lines}")));
+
+    assert!(matches!(
+        built.unwrap_err().problem(),
+        ElementProblem::FrontmatterTooLarge { .. }
+    ));
+    assert!(matches!(read, ElementProblem::FrontmatterTooLarge { .. }));
+}
+
+#[test]
+fn refuses_a_bidi_character_written_as_an_escape_in_a_recorded_path_while_parsing() {
+    let problem = problem_of(&stamped_file("verified_content: [{path: \"a\\u202Eb\"}]\n"));
+
+    assert!(
+        matches!(problem, ElementProblem::Yaml { .. }),
+        "{problem:?}"
+    );
+}
+
+#[rstest]
+#[case::bidi_character('\u{202E}')]
+#[case::zero_width_space('\u{200B}')]
+fn rejects_a_hidden_character_written_raw_in_a_recorded_path(#[case] character: char) {
+    let problem = problem_of(&stamped_file(&format!(
+        "verified_content: [{{path: \"a{character}b\"}}]\n"
+    )));
+
+    assert_eq!(problem, raw_character_problem(character));
+}
+
+#[test]
+fn refuses_a_control_character_written_raw_in_a_recorded_path_while_parsing() {
+    let problem = problem_of(&stamped_file("verified_content: [{path: \"a\u{1B}b\"}]\n"));
+
+    assert!(
+        matches!(problem, ElementProblem::Yaml { .. }),
+        "{problem:?}"
+    );
+}
+
+/// What reading a recorded path with `character` written raw between `a`
+/// and `b` reports.
+fn raw_character_problem(character: char) -> ElementProblem {
+    ElementProblem::InvalidRecordedPath {
+        path: shown(&format!("a{character}b"), 200),
+        rule: AnchorRule::Character(u32::from(character)),
+    }
 }

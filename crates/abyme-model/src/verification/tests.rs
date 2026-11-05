@@ -55,7 +55,11 @@ fn rejects_half_a_stamp(
     #[case] missing: &'static str,
 ) {
     assert_eq!(
-        stamp(verified.map(str::to_owned), verified_by.map(str::to_owned)),
+        stamp(
+            verified.map(str::to_owned),
+            verified_by.map(str::to_owned),
+            None
+        ),
         Err(ElementProblem::IncompleteStamp { missing })
     );
 }
@@ -68,6 +72,7 @@ fn shows_a_rejected_commit_and_verifier_escaped() {
     let verifier = stamp(
         Some("0123456789abcdef0123456789abcdef01234567".to_owned()),
         Some("bot\n\u{1b}".to_owned()),
+        None,
     )
     .unwrap_err()
     .to_string();

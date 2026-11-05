@@ -13,6 +13,7 @@ fn stamped_note(id: &str, relations: &[(RelationKind, &str, Option<&str>)]) -> E
     fields.verified = Some(abyme_model::Verification {
         commit: abyme_model::CommitId::try_from("a".repeat(40)).unwrap(),
         by: abyme_model::Verifier::Person,
+        content: None,
     });
     Element::new(element_id(id), fields).unwrap()
 }

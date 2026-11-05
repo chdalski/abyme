@@ -91,6 +91,7 @@ fn element(id: ElementId, mut relations: Relations) -> Option<Element> {
             verified: Some(Verification {
                 commit,
                 by: Verifier::Person,
+                content: None,
             }),
         },
     )

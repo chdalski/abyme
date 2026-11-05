@@ -114,9 +114,12 @@ pub struct Relation {
 
 pub struct Anchor(String);                   // path relative to the project root, e.g. crates/payment-service
 
+pub struct ObjectId(String);                 // full Git object ID of a tree or a file, 40 or 64 lowercase hex digits
+
 pub struct Verification {
     pub commit: CommitId,                    // full commit ID of the last check, in the anchor's repository
     pub by: Verifier,                        // ai or person, a label, not a checked identity
+    pub content: Option<BTreeMap<Anchor, Option<ObjectId>>>, // per path its object at `commit`, None = held nothing; no map = not recorded
 }
 
 pub struct Board {
@@ -172,7 +175,7 @@ pub struct Rect { pub x: i32, pub y: i32, pub width: NonZeroU32, pub height: Non
 - **How a name becomes a slug:** ASCII letters become lowercase, ASCII letters and digits stay, every other run of characters becomes one hyphen, and hyphens at the ends are dropped; so `Payment Service` becomes `payment-service`, and `Überweisung` becomes `berweisung`. A name without letters or digits becomes `element`, `note` for an element of the type `note`, or `board`. If the slug is taken, or is a reserved device name, it gets the suffix `-2`, `-3`, and so on; a slug longer than 64 characters is shortened so that it fits together with its suffix, and a hyphen left at the cut is dropped. An element ID that a board still places counts as taken even when its file is missing. A sticky note's ID comes this way from the first line of its text.
 - **Representation or native:** An element is a representation if it has an `anchor` (see [[Elements]]).
 - **Anchors are paths in the project,** relative to its root, covering the path and everything below it. An anchor is kept as written, never normalized, and rejected when it is empty, starts or ends with `/`, has an empty, `.`, or `..` segment, holds a backslash, a colon, or a character a reader cannot see, is longer than 4096 bytes or has a segment longer than 255 bytes, or lies in `abyme` or `.abyme` at the project root or in a `.git` folder (case does not count for these names).
-- **A verification stamp** names a full commit ID (40 or 64 lowercase hex digits) of the repository the element's anchor lies in, a nested one or the project's, and who verified, `ai` or `person`. An element without an anchor can carry one too, a commit of the project's repository.
+- **A verification stamp** names a full commit ID (40 or 64 lowercase hex digits) of the repository the element's anchor lies in, a nested one or the project's, and who verified, `ai` or `person`. An element without an anchor can carry one too, a commit of the project's repository. A stamp can also record the content it vouches for: for each path, the Git object it held at that commit, or that nothing lay there (see [[Storage in Git#Element File]]).
 - **Inner boards:** A board's `owner` names the element whose inside it is. An element owns at most one board, and no board lies inside itself: the board above a board is the home board of its owner, and going up from a board never reaches it again. An owner needs no home; its board then has nothing above it. Merges and hand edits can still break these rules, so readers show such boards instead of failing.
 - **Zones:** A board's zone names its mode and its statement kind, both required. The file stores these two, never a preset: a [[Boards and Zones#Zone Presets|zone preset]] is a named pair, such as Current for mirrored and current. Abyme knows the modes free and mirrored and the kinds current, decision, idea, knowledge, question, and target so far; any other value is rejected.
 - **Home:** Every element has exactly one `Placement` with `is_reference = false`. All others are references (see [[Board Graph]]). An element without a home, for example freshly created by the AI, is allowed and reported as a hint.

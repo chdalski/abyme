@@ -869,6 +869,12 @@ mod tests {
     #[case::update_with_a_verifier(
         r#"[{"op": "update_element", "element": {"existing": "a"}, "verified_by": "person"}]"#
     )]
+    #[case::create_with_recorded_content(
+        r#"[{"op": "create_element", "key": "k", "type_ref": "t", "name": "n", "verified_content": [{"path": "x"}]}]"#
+    )]
+    #[case::update_with_recorded_content(
+        r#"[{"op": "update_element", "element": {"existing": "a"}, "verified_content": []}]"#
+    )]
     #[case::move_with_an_anchor(
         r#"[{"op": "move_element", "element": {"new": "a"}, "board": {"new": "b"}, "x": 0, "y": 0, "anchor": "x"}]"#
     )]

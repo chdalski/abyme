@@ -1,8 +1,8 @@
 //! Properties of the element file that hold for any element and any input.
 
 use abyme_model::{
-    Anchor, CommitId, Element, ElementFields, ElementId, RelationKind, Relations, StatementKind,
-    TypeRef, Verification, Verifier,
+    Anchor, CommitId, Element, ElementFields, ElementId, ObjectId, RecordedContent, RelationKind,
+    Relations, StatementKind, TypeRef, Verification, Verifier,
 };
 use proptest::prelude::*;
 
@@ -83,15 +83,31 @@ fn anchor() -> impl Strategy<Value = Anchor> {
     })
 }
 
+fn object_id() -> impl Strategy<Value = ObjectId> {
+    prop_oneof!["[0-9a-f]{40}", "[0-9a-f]{64}"]
+        .prop_filter_map("not an object ID", |object| ObjectId::try_from(object).ok())
+}
+
+/// Recorded content: none, no path, or paths with and without an object.
+fn recorded_content() -> impl Strategy<Value = Option<RecordedContent>> {
+    proptest::option::of(prop::collection::btree_map(
+        anchor(),
+        proptest::option::of(object_id()),
+        0..4,
+    ))
+}
+
 fn stamp() -> impl Strategy<Value = Verification> {
     (
         prop_oneof!["[0-9a-f]{40}", "[0-9a-f]{64}"],
         prop::sample::select(vec![Verifier::Ai, Verifier::Person]),
+        recorded_content(),
     )
-        .prop_filter_map("not a commit ID", |(commit, by)| {
+        .prop_filter_map("not a commit ID", |(commit, by, content)| {
             Some(Verification {
                 commit: CommitId::try_from(commit).ok()?,
                 by,
+                content,
             })
         })
 }
@@ -183,6 +199,15 @@ proptest! {
         let read = Element::from_markdown(element.id(), &element.to_markdown());
 
         prop_assert_eq!(read, Ok(element));
+    }
+
+    #[test]
+    fn writes_back_any_written_element_file_byte_for_byte(element in element()) {
+        let markdown = element.to_markdown();
+
+        let read = Element::from_markdown(element.id(), &markdown);
+
+        prop_assert_eq!(read.map(|read| read.to_markdown()), Ok(markdown));
     }
 
     #[test]

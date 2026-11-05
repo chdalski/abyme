@@ -77,19 +77,23 @@ impl Anchor {
             .strip_prefix(directory)
             .is_some_and(|rest| rest.is_empty() || rest.starts_with(b"/"))
     }
+
+    /// `value` as an anchor, or the value escaped and shortened with the
+    /// rule it breaks, for a caller that reports it as its own problem.
+    pub(crate) fn checked(value: String) -> Result<Self, (String, AnchorRule)> {
+        match broken_rule(&value) {
+            Some(rule) => Err((shown(&value, SHOWN_LIMIT), rule)),
+            None => Ok(Self(value)),
+        }
+    }
 }
 
 impl TryFrom<String> for Anchor {
     type Error = ElementProblem;
 
     fn try_from(value: String) -> Result<Self, ElementProblem> {
-        match broken_rule(&value) {
-            Some(rule) => Err(ElementProblem::InvalidAnchor {
-                anchor: shown(&value, SHOWN_LIMIT),
-                rule,
-            }),
-            None => Ok(Self(value)),
-        }
+        Self::checked(value)
+            .map_err(|(anchor, rule)| ElementProblem::InvalidAnchor { anchor, rule })
     }
 }
 

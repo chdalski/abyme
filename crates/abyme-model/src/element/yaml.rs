@@ -1,9 +1,9 @@
 //! Reading the frontmatter's YAML into the element's fields.
 //!
 //! The frontmatter must be one mapping of the known keys to plain values,
-//! except `relations`, whose value is a list of mappings of plain values;
-//! everything else YAML allows is rejected, so the file means the same to
-//! every reader.
+//! except `relations` and `verified_content`, whose values are lists of
+//! mappings of plain values; everything else YAML allows is rejected, so
+//! the file means the same to every reader.
 
 use std::collections::BTreeSet;
 use std::collections::btree_map::Entry;
@@ -11,9 +11,11 @@ use std::collections::btree_map::Entry;
 use rlsp_yaml_parser::{Document, LoaderBuilder, Node, Schema, Span};
 
 use super::{ElementProblem, Relations};
+use crate::anchor::Anchor;
 use crate::id::ElementId;
 use crate::relation::RelationKind;
 use crate::untrusted::shown;
+use crate::verification::{ObjectId, RecordedContent};
 
 /// How many characters of a parser message or a key an error shows.
 const DETAIL_LIMIT: usize = 200;
@@ -21,7 +23,8 @@ const DETAIL_LIMIT: usize = 200;
 /// The key-value pairs of a mapping, in the order of the file.
 type Entries = [(Node<Span>, Node<Span>)];
 
-/// The frontmatter's values. Only the relations are checked yet.
+/// The frontmatter's values. Only the relations and the recorded content
+/// are checked yet.
 pub struct Fields {
     pub id: String,
     pub type_ref: String,
@@ -31,6 +34,7 @@ pub struct Fields {
     pub statement: Option<String>,
     pub verified: Option<String>,
     pub verified_by: Option<String>,
+    pub verified_content: Option<RecordedContent>,
     pub relations: Relations,
 }
 
@@ -101,6 +105,7 @@ fn collect_fields(entries: &Entries) -> Result<Fields, ElementProblem> {
     let mut statement = None;
     let mut verified = None;
     let mut verified_by = None;
+    let mut verified_content = None;
     let mut relations = Relations::new();
     for (key_node, value_node) in entries {
         check_node(key_node)?;
@@ -115,6 +120,10 @@ fn collect_fields(entries: &Entries) -> Result<Fields, ElementProblem> {
         check_node(value_node)?;
         if key == "relations" {
             relations = read_relations(value_node)?;
+            continue;
+        }
+        if key == "verified_content" {
+            verified_content = Some(read_recorded_content(value_node)?);
             continue;
         }
         let Node::Scalar { value, .. } = value_node else {
@@ -148,6 +157,7 @@ fn collect_fields(entries: &Entries) -> Result<Fields, ElementProblem> {
         statement,
         verified,
         verified_by,
+        verified_content,
         relations,
     })
 }
@@ -175,6 +185,15 @@ const RELATION_PROBLEMS: ListProblems = ListProblems {
     duplicate_key: |key| ElementProblem::DuplicateRelationKey { key },
     non_scalar_value: |key| ElementProblem::NonScalarRelationValue { key },
     unknown_key: |key| ElementProblem::UnknownRelationKey { key },
+};
+
+/// The problems of `verified_content`.
+const RECORDED_PROBLEMS: ListProblems = ListProblems {
+    not_a_list: || ElementProblem::RecordedContentNotAList,
+    not_a_mapping: || ElementProblem::RecordedEntryNotAMapping,
+    duplicate_key: |key| ElementProblem::DuplicateRecordedKey { key },
+    non_scalar_value: |key| ElementProblem::NonScalarRecordedValue { key },
+    unknown_key: |key| ElementProblem::UnknownRecordedKey { key },
 };
 
 /// The items of a list of flat mappings. The caller has checked `node`
@@ -268,4 +287,39 @@ fn read_relation(
         detail: error.to_string(),
     })?;
     Ok((kind, to, label))
+}
+
+/// Reads the value of `verified_content`: a list of mappings of a `path`
+/// and, when something lay there, its `object`, one entry after the other.
+/// An empty list records that the stamp vouches for no path. The caller
+/// has checked `node` itself with [`check_node`].
+fn read_recorded_content(node: &Node<Span>) -> Result<RecordedContent, ElementProblem> {
+    let items = list_items(node, &RECORDED_PROBLEMS)?;
+    let mut content = RecordedContent::new();
+    for item in items {
+        let (path, object) = read_recorded_entry(item)?;
+        match content.entry(path) {
+            Entry::Occupied(entry) => {
+                return Err(ElementProblem::DuplicateRecordedPath {
+                    path: shown(entry.key().as_str(), DETAIL_LIMIT),
+                });
+            }
+            Entry::Vacant(entry) => {
+                entry.insert(object);
+            }
+        }
+    }
+    Ok(content)
+}
+
+/// Reads one entry of `verified_content`: a mapping of `path` and an
+/// optional `object` to plain values. Without `object`, nothing lay at the
+/// path; an `object` must be a full object ID.
+fn read_recorded_entry(item: &Node<Span>) -> Result<(Anchor, Option<ObjectId>), ElementProblem> {
+    let [path, object] = flat_mapping(item, ["path", "object"], &RECORDED_PROBLEMS)?;
+    let path = path.ok_or(ElementProblem::MissingRecordedPath)?;
+    let path = Anchor::checked(path)
+        .map_err(|(path, rule)| ElementProblem::InvalidRecordedPath { path, rule })?;
+    let object = object.map(ObjectId::try_from).transpose()?;
+    Ok((path, object))
 }

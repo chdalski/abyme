@@ -2,6 +2,7 @@
 //! frontmatter.
 
 use super::{Element, ElementProblem};
+use crate::verification::RecordedContent;
 
 /// The line that opens and closes the frontmatter.
 const DELIMITER: &str = "---";
@@ -66,8 +67,13 @@ pub fn emit(element: &Element) -> String {
         .verified
         .as_ref()
         .map(|stamp| {
+            let content = stamp
+                .content
+                .as_ref()
+                .map(recorded_content)
+                .unwrap_or_default();
             format!(
-                "verified: {}\nverified_by: {}\n",
+                "verified: {}\nverified_by: {}\n{content}",
                 quoted(stamp.commit.as_str()),
                 quoted(stamp.by.as_str())
             )
@@ -101,6 +107,26 @@ pub fn emit(element: &Element) -> String {
         quoted(element.fields.type_ref.as_str()),
         quoted(&element.fields.name),
     )
+}
+
+/// The `verified_content` line of a stamp that recorded `content`, and one
+/// line per path in its sorted order; `[]` when it recorded no path.
+fn recorded_content(content: &RecordedContent) -> String {
+    if content.is_empty() {
+        return "verified_content: []\n".to_owned();
+    }
+    let entries = content
+        .iter()
+        .map(|(path, object)| {
+            let object = object
+                .as_ref()
+                .map(|object| format!(", object: {}", quoted(object.as_str())))
+                .unwrap_or_default();
+            format!("  - {{path: {}{object}}}\n", quoted(path.as_str()))
+        })
+        .collect::<Vec<_>>()
+        .concat();
+    format!("verified_content:\n{entries}")
 }
 
 /// `text` as a YAML double-quoted scalar. Only the characters that would

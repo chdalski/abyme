@@ -44,6 +44,7 @@ share a parent line with one sub-item each.
 
 ## Cleanup
 
+- `impl fmt::Display for ObjectId` has no caller yet; remove it if the fallback to recorded content does not use it: `crates/abyme-model/src/verification.rs` (Reviewer, stamps survive history rewrites Task 3).
 - The test "asks no more once the app is gone" repeats the focus and interval steps of the StrictMode test "...and stops when the app closes"; only turning visible is new, and could join that test: `crates/abyme-canvas/ui/src/App.test.tsx` (Reviewer, backlog bugs Task 7).
 - `canvas.css` has two rules for the marks on a box's top edge, `.element-pin, .element-flag` and `.element-mark`; the shared properties could move to `.element-mark`: `crates/abyme-canvas/ui/src/canvas.css` (Reviewer, backlog bugs Task 6).
 - `apply` requests accept `RelationKind` in the object form (`"kind": {"uses": null}`), unlike `Mode` and `StatementKind`; files read only the string and get the normal form, so this is about consistency: `crates/abyme-model/src/relation.rs` (security engineer, plan D Task 1, rated Low; fix with a later change there).

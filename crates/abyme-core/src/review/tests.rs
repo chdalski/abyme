@@ -638,6 +638,7 @@ fn stamps_an_element_whose_anchor_has_no_change(#[case] changed: &[&str]) {
         Some(&Verification {
             commit: self::commit(OTHER),
             by: Verifier::Ai,
+            content: None,
         })
     );
     assert_eq!(

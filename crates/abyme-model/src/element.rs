@@ -275,6 +275,56 @@ pub enum ElementProblem {
         /// The missing key.
         missing: &'static str,
     },
+    /// `verified_content` is present without `verified` and `verified_by`.
+    #[error("`verified_content` comes only with `verified` and `verified_by`")]
+    ContentWithoutStamp,
+    /// The value of `verified_content` is not a list.
+    #[error("the value of `verified_content` is not a list")]
+    RecordedContentNotAList,
+    /// An entry of `verified_content` is not a mapping.
+    #[error("an entry of `verified_content` is not a mapping of `path` and `object`")]
+    RecordedEntryNotAMapping,
+    /// A value in an entry of `verified_content` is a list or a mapping.
+    #[error("the value of {key} in an entry of `verified_content` is not a plain value")]
+    NonScalarRecordedValue {
+        /// The key, escaped.
+        key: String,
+    },
+    /// A key in an entry of `verified_content` is not `path` or `object`.
+    #[error("the key {key} of an entry of `verified_content` is unknown")]
+    UnknownRecordedKey {
+        /// The key, escaped.
+        key: String,
+    },
+    /// A key appears twice in an entry of `verified_content`.
+    #[error("the key {key} appears twice in an entry of `verified_content`")]
+    DuplicateRecordedKey {
+        /// The key, escaped.
+        key: String,
+    },
+    /// An entry of `verified_content` lacks `path`.
+    #[error("an entry of `verified_content` lacks the required key `path`")]
+    MissingRecordedPath,
+    /// A path in `verified_content` breaks a rule of anchors.
+    #[error("the recorded path {path} {rule}")]
+    InvalidRecordedPath {
+        /// The path, escaped and shortened.
+        path: String,
+        /// The rule it breaks.
+        rule: AnchorRule,
+    },
+    /// An object in `verified_content` is not a full object ID.
+    #[error("the object {object} is not a full object ID of 40 or 64 lowercase hex digits")]
+    InvalidObject {
+        /// The object, escaped and shortened.
+        object: String,
+    },
+    /// A path appears twice in `verified_content`.
+    #[error("the path {path} appears twice in `verified_content`")]
+    DuplicateRecordedPath {
+        /// The path, escaped and shortened.
+        path: String,
+    },
 }
 
 impl Element {
@@ -339,7 +389,8 @@ impl Element {
             })
             .transpose()
             .map_err(fail)?;
-        let verified = stamp(fields.verified, fields.verified_by).map_err(fail)?;
+        let verified =
+            stamp(fields.verified, fields.verified_by, fields.verified_content).map_err(fail)?;
         Self::new(
             id,
             ElementFields {

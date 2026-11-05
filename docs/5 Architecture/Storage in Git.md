@@ -100,13 +100,20 @@ Handles payments through Stripe. Refunds run asynchronously
 through the refund-worker.
 ```
 
-- **Fields:** `id`, which equals the file name, `type`, which is never empty, `name`, the optional `summary`, the optional `anchor`, the optional `statement`, the optional stamp `verified` with `verified_by`, and the optional `relations`. Other keys are rejected.
+- **Fields:** `id`, which equals the file name, `type`, which is never empty, `name`, the optional `summary`, the optional `anchor`, the optional `statement`, the optional stamp `verified` with `verified_by` and the optional `verified_content`, and the optional `relations`. Other keys are rejected.
 - **Anchor and stamp:** `anchor` is a path relative to the project root, with the rules in [[Data Model#Rules]]. `verified` is a full commit ID of the repository the anchor lies in, a [[Reconciliation#Nested Repositories|nested repository]] or the project's, and `verified_by` is `ai` or `person`; the two come together or not at all. Elements without them have none of these keys.
+- **Recorded content:** `verified_content` lists the paths a stamp vouches for, each with the Git object it held at the stamp's commit. It comes only with `verified` and `verified_by`. Each entry has a `path`, with the rules of an anchor, and an `object`, a full object ID (40 or 64 lowercase hex digits); an entry without `object` records that nothing lay at the path, and a path appears at most once. `verified_content: []` records that the stamp vouches for no path, and a stamp without the key recorded no content. Abyme writes the entries in the order of their paths, one line each:
+
+  ```yaml
+  verified_content:
+    - {path: "crates/payment-service", object: "4b825dc642cb6eb9a060e54bf8d69288fbee4904"}
+    - {path: "crates/refund-worker"}
+  ```
 - **Statement kind:** `statement` is the element's own [[Boards and Zones#Statement Kind|statement kind]], one of `current`, `target`, `decision`, `idea`, `knowledge`, and `question`. Most elements have none and take the kind of their home board's zone, and then the file has no such key.
 - **Relations:** the element's outgoing [[Relations|relations]], one line each with `kind`, `to`, and an optional `label`, sorted by the kind's name, then by the target. Adding or removing a relation changes one line. An element without relations has no `relations` key. A relation may point to an element whose file is missing; reading accepts it.
-- **Writing:** Abyme writes every value double-quoted. It escapes backslash, double quote, tab, line feed, carriage return, U+0085, U+2028, U+2029, and U+FEFF and keeps every other character as it is. Values written by hand may use any YAML scalar style, and relations any YAML style.
+- **Writing:** Abyme writes every value double-quoted. It escapes backslash, double quote, tab, line feed, carriage return, U+0085, U+2028, U+2029, and U+FEFF and keeps every other character as it is. Values written by hand may use any YAML scalar style, and relations and recorded content any YAML style.
 - **Limits:** `type`, `name`, `summary`, the anchor, and the labels hold only characters YAML counts as printable: no control characters other than tab, line feed, carriage return, and U+0085, and neither U+FFFE nor U+FFFF. The frontmatter is at most 64 KiB, counted as Abyme writes it.
-- **Strict YAML:** The frontmatter is one mapping of plain values, except `relations`, a list of mappings of plain values. Aliases, YAML anchors, tags, directives, and document markers are rejected, so the file means the same to every reader.
+- **Strict YAML:** The frontmatter is one mapping of plain values, except `relations` and `verified_content`, lists of mappings of plain values. Aliases, YAML anchors, tags, directives, and document markers are rejected, so the file means the same to every reader.
 - **The body** below the closing `---` line is kept byte for byte.
 - **Later fields:** `attributes` and `expected_anchor` from the [[Data Model#Types|data model]] come with the slices that need them. Which board is an element's inside, the [[#Board File|board file]] says, so the element file never changes for it.
 

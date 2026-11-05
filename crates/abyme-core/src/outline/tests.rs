@@ -113,6 +113,7 @@ fn anchored(element: Element, anchor: &str, stamp: Option<(&str, Verifier)>) -> 
             verified: stamp.map(|(commit, by)| Verification {
                 commit: CommitId::try_from(commit.to_owned()).unwrap(),
                 by,
+                content: None,
             }),
             ..element.into_fields()
         },

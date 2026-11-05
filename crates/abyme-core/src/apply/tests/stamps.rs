@@ -177,3 +177,38 @@ fn shows_a_rejected_anchor_escaped_and_shortened() {
     assert!(!message.chars().any(hides_or_breaks_text), "{message:?}");
     assert!(message.contains("\\u{202e}"), "{message:?}");
 }
+
+/// `snapshot()` with `anchored`, whose stamp recorded the content of two
+/// paths, one holding an object and one holding nothing.
+fn snapshot_with_recorded_content() -> Snapshot {
+    let mut snapshot = snapshot();
+    let element = Element::from_markdown(
+        &element_id("anchored"),
+        &format!(
+            "---\nid: anchored\ntype: t\nname: N\nanchor: crates/anchored\nverified: \"{COMMIT}\"\n\
+             verified_by: ai\nverified_content:\n  - {{path: crates/anchored, object: \"{COMMIT}\"}}\n  \
+             - {{path: crates/gone}}\n---\n"
+        ),
+    )
+    .unwrap();
+    assert!(
+        element
+            .verified()
+            .and_then(|stamp| stamp.content.as_ref())
+            .is_some_and(|content| content.len() == 2)
+    );
+    snapshot.elements.insert(element_id("anchored"), element);
+    snapshot
+}
+
+#[rstest]
+#[case::update(r#"[{"op": "update_element", "element": {"existing": "anchored"}, "name": "M"}]"#)]
+#[case::created_relation(
+    r#"[{"op": "create_relation", "from": {"existing": "anchored"}, "kind": "uses", "to": {"existing": "loose"}}]"#
+)]
+fn removes_the_recorded_content_with_the_stamp(#[case] json: &str) {
+    let applied = apply(&snapshot_with_recorded_content(), &operations(json)).unwrap();
+
+    let written = written_element(&applied, "anchored").unwrap().to_markdown();
+    assert!(!written.contains("verified"), "{written}");
+}

@@ -323,6 +323,7 @@ pub fn stamped(
     fields.verified = Some(Verification {
         commit: commit.clone(),
         by,
+        content: None,
     });
     let element = Element::new(id.clone(), fields).map_err(|error| VerifyProblem::Rejected {
         element: id.clone(),
