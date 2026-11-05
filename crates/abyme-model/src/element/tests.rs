@@ -555,6 +555,15 @@ fn reads_an_empty_list_of_relations_as_none() {
     "relations: [{kind: uses, to: x, label: [a]}]\n",
     ElementProblem::NonScalarRelationValue { key: "\"label\"".to_owned() }
 )]
+#[case::list_under_an_unknown_relation_key(
+    "relations: [{kind: uses, to: x, color: [red]}]\n",
+    ElementProblem::NonScalarRelationValue { key: "\"color\"".to_owned() }
+)]
+#[case::first_relation_fails_before_a_later_one(
+    "relations: [{to: x}, {kind: [uses], to: y}]\n",
+    ElementProblem::MissingRelationKey { key: "kind" }
+)]
+#[case::tag_on_a_plain_relation("relations:\n  - !!str x\n", ElementProblem::Tag)]
 #[case::list_as_a_relation_key("relations: [{[a]: b}]\n", ElementProblem::NonScalarKey)]
 #[case::unknown_relation_key(
     "relations: [{kind: uses, to: x, color: red}]\n",

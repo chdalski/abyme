@@ -27,7 +27,7 @@ relation targets' anchors is unchanged, and is flagged when it changed.
 ## Steps
 
 - [x] Review flags resolve a stamp's baseline and a relation target's path in one place each
-- [ ] Element files read lists of flat mappings through one reader
+- [x] Element files read lists of flat mappings through one reader
 - [ ] Element files carry the content a stamp vouches for
 - [ ] `verify` records the content, and review falls back to it after a rewrite
 
@@ -58,9 +58,9 @@ Behavior is unchanged.
 
 Review path: Security-Hybrid
 
-- [ ] Reading a list of flat mappings with its key checks lives in one place, and `relations` reads
+- [x] Reading a list of flat mappings with its key checks lives in one place, and `relations` reads
       through it.
-- [ ] The tests in `crates/abyme-model/src/element/tests.rs` and
+- [x] The tests in `crates/abyme-model/src/element/tests.rs` and
       `crates/abyme-model/tests/element_properties.rs` pass with their assertions unchanged.
 
 ### Task 3: Element files carry the content a stamp vouches for
@@ -142,6 +142,9 @@ Review path: Security-Hybrid
 - **After a rewrite, an own anchor whose recorded object differs from HEAD flags the element
   `UnknownStamp`:** without the files that changed, the element is checked from scratch; a change in
   the index or the working tree under an anchor whose object matches HEAD is flagged with its files.
+- **Task 2 adds relation cases that pin the reader's check order:** a non-scalar value before an
+  unknown key, one item read after the other, and a tag on a plain item, so that the shared reader
+  keeps the order of the one it replaces.
 - **The project format stays 1:** the new field is optional, and an older Abyme rejects only element
   files that carry it.
 
