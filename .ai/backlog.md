@@ -45,7 +45,6 @@ share a parent line with one sub-item each.
 ## Cleanup
 
 - The doc of `Flag::Upstream` says "or the stamp recorded nothing for it", which can be read as "recorded that nothing lay there"; "holds no entry for it" matches the docs: `crates/abyme-core/src/review.rs` (Reviewer, stamps survive history rewrites Task 4).
-- `recorded_matches` takes the path twice, as an anchor and as bytes that always equal it; dropping `bytes` also makes `StandingPath::bytes` unnecessary: `crates/abyme-core/src/review.rs` (Reviewer, stamps survive history rewrites Task 4).
 - The reason `read_element` gives for `UnknownStamp` still speaks only of the commit, not of recorded content that does not match HEAD: `crates/abyme-core/src/outline.rs` (Reviewer, stamps survive history rewrites Task 4).
 - After a rewrite, every review runs a whole-tree `ls-tree -r -t` and keeps every entry, also on the canvas's focus and interval reviews; keeping only the paths review computes would bound it: `crates/abyme-core/src/project/git.rs` (Reviewer, stamps survive history rewrites Task 4).
 - `impl fmt::Display for ObjectId` has no caller yet; remove it if the fallback to recorded content does not use it: `crates/abyme-model/src/verification.rs` (Reviewer, stamps survive history rewrites Task 3).

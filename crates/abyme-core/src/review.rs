@@ -313,7 +313,7 @@ fn own_flags(element: &Element, baseline: Baseline<'_>, facts: &RepositoryFacts)
             anchor.and_then(|anchor| changed_under(anchor, paths, &facts.uncommitted))
         }
         (Baseline::Content { recorded, head }, Some(anchor)) => {
-            if recorded_matches(recorded, anchor, head, anchor.as_str().as_bytes()) {
+            if recorded_matches(recorded, anchor, head) {
                 changed_under(anchor, &head.staged, &facts.uncommitted)
             } else {
                 Some(Flag::UnknownStamp)
@@ -330,19 +330,13 @@ fn own_flags(element: &Element, baseline: Baseline<'_>, facts: &RepositoryFacts)
     stamp.into_iter().chain(missing).collect()
 }
 
-/// Whether the content recorded for `path`, an anchor's path, equals what
-/// `bytes`, the same path as Git prints it, holds at HEAD. A path the stamp
-/// did not record never matches, and an object of another length than
-/// HEAD's differs.
-fn recorded_matches(
-    recorded: &RecordedContent,
-    path: &Anchor,
-    head: &Fallback,
-    bytes: &[u8],
-) -> bool {
+/// Whether the content recorded for `path` equals what the path, as Git
+/// prints it, holds at HEAD. A path the stamp did not record never
+/// matches, and an object of another length than HEAD's differs.
+fn recorded_matches(recorded: &RecordedContent, path: &Anchor, head: &Fallback) -> bool {
     recorded
         .get(path)
-        .is_some_and(|object| object.as_ref() == head.objects.get(bytes))
+        .is_some_and(|object| object.as_ref() == head.objects.get(path.as_str().as_bytes()))
 }
 
 /// The flag for the files under `anchor` that the index changed since the
@@ -430,21 +424,13 @@ enum StandingPath<'a> {
     NestedRoot(&'a [u8]),
 }
 
-impl<'a> StandingPath<'a> {
+impl StandingPath<'_> {
     /// Whether a change of `path` in the source's repository is a change
     /// of what the target stands for.
     fn shows_in(self, path: &[u8]) -> bool {
         match self {
             Self::Anchor(anchor) => anchor.covers(path),
             Self::NestedRoot(root) => path == root,
-        }
-    }
-
-    /// The path as Git prints it.
-    fn bytes(self) -> &'a [u8] {
-        match self {
-            Self::Anchor(anchor) => anchor.as_str().as_bytes(),
-            Self::NestedRoot(root) => root,
         }
     }
 
@@ -520,7 +506,7 @@ fn passed_on(
             let content_differs = recorded.is_some_and(|(recorded, head)| {
                 standing
                     .as_anchor()
-                    .is_none_or(|path| !recorded_matches(recorded, &path, head, standing.bytes()))
+                    .is_none_or(|path| !recorded_matches(recorded, &path, head))
             });
             (content_differs
                 || since

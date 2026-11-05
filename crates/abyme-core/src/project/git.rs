@@ -713,15 +713,27 @@ fn stamps<'a>(
 ) -> BTreeMap<&'a CommitId, bool> {
     elements
         .iter()
-        .filter(|element| {
-            root.is_none_or(|root| element.anchor.is_some_and(|anchor| anchor.lies_in(root)))
-                && repository_root(nested.keys(), element.anchor).is_none()
-        })
+        .filter(|element| belongs_to(element.anchor, root, nested))
         .filter_map(|element| element.stamp.map(|stamp| (stamp, element.recorded)))
         .fold(BTreeMap::new(), |mut stamps, (stamp, recorded)| {
             *stamps.entry(stamp).or_insert(false) |= recorded;
             stamps
         })
+}
+
+/// Whether an element with `anchor` belongs to the repository at `root`, or
+/// the project's for `None`: an element without an anchor belongs to the
+/// project's repository only, and an anchor must lie in `root` and in none
+/// of the repositories `nested` below it, the ones Git was run in. The rule
+/// must match the one review applies through [`repository_root`] over
+/// [`GitFacts::nested`], or a stamp is measured in the wrong repository.
+fn belongs_to(
+    anchor: Option<&Anchor>,
+    root: Option<&[u8]>,
+    nested: &BTreeMap<Vec<u8>, RepositoryFacts>,
+) -> bool {
+    root.is_none_or(|root| anchor.is_some_and(|anchor| anchor.lies_in(root)))
+        && repository_root(nested.keys(), anchor).is_none()
 }
 
 /// The settings for Git in a nested repository below `ceiling`: Git looks

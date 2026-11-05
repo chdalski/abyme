@@ -1,5 +1,5 @@
 **Repository:** root
-**Status:** NotStarted
+**Status:** InProgress
 **Created:** 2026-11-05
 
 ## Goal
@@ -27,7 +27,7 @@ cleanups of the same code are done: one path argument in `recorded_matches`, the
 
 ## Steps
 
-- [ ] Recorded content is compared by one path argument, and one rule assigns an element to a
+- [x] Recorded content is compared by one path argument, and one rule assigns an element to a
       repository
 - [ ] A flag after a rewrite names the files that changed under the anchor
 - [ ] Review keeps only the tree entries it needs
@@ -43,12 +43,12 @@ first. Behavior is unchanged.
 
 Review path: Security-Hybrid
 
-- [ ] `recorded_matches` takes the path once, and `StandingPath::bytes` is gone.
-- [ ] No place in `git.rs` but one function decides whether an element belongs to the repository at
+- [x] `recorded_matches` takes the path once, and `StandingPath::bytes` is gone.
+- [x] No place in `git.rs` but one function decides whether an element belongs to the repository at
       a root, and `stamps()` uses it.
-- [ ] The tests in `crates/abyme-core/src/review/tests.rs`, `crates/abyme-core/src/project/git/
+- [x] The tests in `crates/abyme-core/src/review/tests.rs`, `crates/abyme-core/src/project/git/
       tests.rs`, and `crates/abyme-core/tests/review.rs` pass with their assertions unchanged.
-- [ ] The backlog entry about `recorded_matches` taking the path twice is gone.
+- [x] The backlog entry about `recorded_matches` taking the path twice is gone.
 
 ### Task 2: A flag after a rewrite names the files that changed under the anchor
 
