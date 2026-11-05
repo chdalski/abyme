@@ -8,7 +8,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use abyme_model::{
-    Anchor, CommitId, Element, ElementId, ElementProblem, RelationKind, Verification, Verifier,
+    Anchor, CommitId, Element, ElementId, ElementProblem, ObjectId, RecordedContent, RelationKind,
+    Verification, Verifier,
 };
 
 use crate::apply::Snapshot;
@@ -28,7 +29,8 @@ pub enum Flag {
     /// The element has an anchor but no stamp.
     NeverVerified,
     /// The element's repository does not know the stamp's commit, or it is
-    /// no ancestor of HEAD there.
+    /// no ancestor of HEAD there, and the stamp recorded no content, or the
+    /// content it recorded for the anchor does not match HEAD.
     UnknownStamp,
     /// These files under the anchor differ from the stamp's commit or are
     /// untracked in the element's repository: paths relative to the project
@@ -40,7 +42,9 @@ pub enum Flag {
     /// What the anchor of the element a relation of this kind points to
     /// stands for may have changed since this element's stamp: in this
     /// element's repository, files under that anchor changed, or the root of
-    /// the nested repository the anchor lies in.
+    /// the nested repository the anchor lies in; after a rewrite, also when
+    /// that path holds another object than the stamp recorded, or the stamp
+    /// recorded nothing for it.
     Upstream {
         /// The relation's kind, which decides the priority.
         kind: RelationKind,
@@ -96,6 +100,23 @@ pub struct RepositoryFacts {
     pub uncommitted: BTreeSet<Vec<u8>>,
     /// What each stamp commit of the repository's elements tells.
     pub since: BTreeMap<CommitId, Since>,
+    /// The repository's content at HEAD, when a stamp that recorded content
+    /// names a commit that tells nothing; `None` when no stamp needs it or
+    /// the repository has no commit.
+    pub fallback: Option<Fallback>,
+}
+
+/// The content of a repository at the commit HEAD names, by which a stamp
+/// whose commit tells nothing is judged. Paths are bytes, relative to the
+/// project root.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Fallback {
+    /// The object each path held at that commit: every file, folder, and
+    /// nested repository below the project root, and the repository's own
+    /// root when it is nested. A path that is missing held nothing.
+    pub objects: BTreeMap<Vec<u8>, ObjectId>,
+    /// The paths in which the index differs from that commit.
+    pub staged: BTreeSet<Vec<u8>>,
 }
 
 /// What `verify` needs to know of the repository. Paths are bytes,
@@ -108,6 +129,16 @@ pub struct HeadFacts {
     /// tree, that are unmerged, or that are untracked; never the root of an
     /// untracked repository.
     pub changed: BTreeSet<Vec<u8>>,
+    /// The root of the repository, relative to the project root; `None` for
+    /// the project's repository.
+    pub root: Option<Vec<u8>>,
+    /// The roots of the repositories nested in the project that Git showed
+    /// on the way to this one, so that a relation target's path in it can be
+    /// told.
+    pub roots: BTreeSet<Vec<u8>>,
+    /// The object each path held at that commit, as [`Fallback::objects`]
+    /// names it.
+    pub objects: BTreeMap<Vec<u8>, ObjectId>,
 }
 
 /// Why `verify` refuses to stamp an element. The texts are fixed but for
@@ -245,17 +276,30 @@ enum Baseline<'a> {
     Unstamped,
     /// The paths in which the index differs from the stamp's commit.
     Since(&'a BTreeSet<Vec<u8>>),
+    /// The stamp's commit tells nothing, and the stamp recorded the content
+    /// it vouches for, which is compared with the repository's content at
+    /// HEAD.
+    Content {
+        /// The content the stamp recorded.
+        recorded: &'a RecordedContent,
+        /// The repository's content at HEAD.
+        head: &'a Fallback,
+    },
     /// The repository does not know the stamp's commit, it is no ancestor
-    /// of HEAD there, or the facts do not name it.
+    /// of HEAD there, or the facts do not name it, and there is no recorded
+    /// content to judge it by.
     Unusable,
 }
 
 /// The baseline of `element`'s stamp, from the facts of its repository.
-fn baseline<'a>(element: &Element, facts: &'a RepositoryFacts) -> Baseline<'a> {
+fn baseline<'a>(element: &'a Element, facts: &'a RepositoryFacts) -> Baseline<'a> {
     element.verified().map_or(Baseline::Unstamped, |stamp| {
         match facts.since.get(&stamp.commit) {
             Some(Since::Changed(paths)) => Baseline::Since(paths),
-            Some(Since::Unknown) | None => Baseline::Unusable,
+            Some(Since::Unknown) | None => match (&stamp.content, &facts.fallback) {
+                (Some(recorded), Some(head)) => Baseline::Content { recorded, head },
+                (Some(_) | None, _) => Baseline::Unusable,
+            },
         }
     })
 }
@@ -268,15 +312,37 @@ fn own_flags(element: &Element, baseline: Baseline<'_>, facts: &RepositoryFacts)
         (Baseline::Since(paths), anchor) => {
             anchor.and_then(|anchor| changed_under(anchor, paths, &facts.uncommitted))
         }
+        (Baseline::Content { recorded, head }, Some(anchor)) => {
+            if recorded_matches(recorded, anchor, head, anchor.as_str().as_bytes()) {
+                changed_under(anchor, &head.staged, &facts.uncommitted)
+            } else {
+                Some(Flag::UnknownStamp)
+            }
+        }
+        (Baseline::Content { .. } | Baseline::Unstamped, None) => None,
         (Baseline::Unusable, _) => Some(Flag::UnknownStamp),
         (Baseline::Unstamped, Some(_)) => Some(Flag::NeverVerified),
-        (Baseline::Unstamped, None) => None,
     };
     let missing = element
         .anchor()
         .filter(|anchor| !facts.known.iter().any(|path| anchor.covers(path)))
         .map(|_| Flag::AnchorMissing);
     stamp.into_iter().chain(missing).collect()
+}
+
+/// Whether the content recorded for `path`, an anchor's path, equals what
+/// `bytes`, the same path as Git prints it, holds at HEAD. A path the stamp
+/// did not record never matches, and an object of another length than
+/// HEAD's differs.
+fn recorded_matches(
+    recorded: &RecordedContent,
+    path: &Anchor,
+    head: &Fallback,
+    bytes: &[u8],
+) -> bool {
+    recorded
+        .get(path)
+        .is_some_and(|object| object.as_ref() == head.objects.get(bytes))
 }
 
 /// The flag for the files under `anchor` that the index changed since the
@@ -295,10 +361,13 @@ fn changed_under(
 }
 
 /// The element `id` stamped by `by` with the commit HEAD names, or why it
-/// cannot be: only its stamp changes. An element with an anchor is refused
-/// while files under the anchor differ from that commit or are untracked;
-/// an element without an anchor, or whose anchor matches no file, can be
-/// stamped.
+/// cannot be: only its stamp changes. The stamp records the object each
+/// path it vouches for held at that commit: the element's own anchor and
+/// the path that stands for each relation target that passes something on,
+/// except a path that cannot be written as an anchor. An element with an
+/// anchor is refused while files under the anchor differ from that commit
+/// or are untracked; an element without an anchor, or whose anchor matches
+/// no file, can be stamped.
 pub fn stamped(
     snapshot: &Snapshot,
     id: &ElementId,
@@ -319,11 +388,28 @@ pub fn stamped(
     {
         return Err(VerifyProblem::Uncommitted(id.clone()));
     }
+    let root = head.root.as_deref();
+    let targets = element
+        .relations()
+        .keys()
+        .filter(|(kind, _)| passes_on(*kind).is_some())
+        .filter_map(|(_, target)| snapshot.elements.get(target)?.anchor())
+        .filter_map(|anchor| standing_path(anchor, root, &head.roots)?.as_anchor());
+    let content: RecordedContent = element
+        .anchor()
+        .cloned()
+        .into_iter()
+        .chain(targets)
+        .map(|path| {
+            let object = head.objects.get(path.as_str().as_bytes()).cloned();
+            (path, object)
+        })
+        .collect();
     let mut fields = element.clone().into_fields();
     fields.verified = Some(Verification {
         commit: commit.clone(),
         by,
-        content: None,
+        content: Some(content),
     });
     let element = Element::new(id.clone(), fields).map_err(|error| VerifyProblem::Rejected {
         element: id.clone(),
@@ -344,7 +430,7 @@ enum StandingPath<'a> {
     NestedRoot(&'a [u8]),
 }
 
-impl StandingPath<'_> {
+impl<'a> StandingPath<'a> {
     /// Whether a change of `path` in the source's repository is a change
     /// of what the target stands for.
     fn shows_in(self, path: &[u8]) -> bool {
@@ -353,28 +439,50 @@ impl StandingPath<'_> {
             Self::NestedRoot(root) => path == root,
         }
     }
+
+    /// The path as Git prints it.
+    fn bytes(self) -> &'a [u8] {
+        match self {
+            Self::Anchor(anchor) => anchor.as_str().as_bytes(),
+            Self::NestedRoot(root) => root,
+        }
+    }
+
+    /// The path as a stamp records it. A nested root that a valid anchor
+    /// lies in is a valid anchor itself, so `None` is a guard only.
+    fn as_anchor(self) -> Option<Anchor> {
+        match self {
+            Self::Anchor(anchor) => Some(anchor.clone()),
+            Self::NestedRoot(root) => String::from_utf8(root.to_vec())
+                .ok()
+                .and_then(|root| Anchor::try_from(root).ok()),
+        }
+    }
 }
 
 /// The path that stands for a relation target with `anchor` in the
-/// repository with the root `root`, the source's, among the repositories
-/// `nested` in the project: the anchor itself when the target belongs to
-/// that repository; otherwise, when the anchor lies in that repository, the
-/// root of the outermost repository nested in it that the anchor lies in;
-/// and `None` for a target outside the source's repository.
-fn standing_path<'a>(
+/// repository with the root `root`, the source's, among the repositories at
+/// `roots` nested in the project: the anchor itself when the target belongs
+/// to that repository; otherwise, when the anchor lies in that repository,
+/// the root of the outermost repository nested in it that the anchor lies
+/// in; and `None` for a target outside the source's repository.
+fn standing_path<'a, R>(
     anchor: &'a Anchor,
     root: Option<&[u8]>,
-    nested: &'a BTreeMap<Vec<u8>, RepositoryFacts>,
-) -> Option<StandingPath<'a>> {
-    if repository_root(nested.keys(), Some(anchor)) == root {
+    roots: R,
+) -> Option<StandingPath<'a>>
+where
+    R: IntoIterator<Item = &'a Vec<u8>> + Clone,
+{
+    if repository_root(roots.clone(), Some(anchor)) == root {
         return Some(StandingPath::Anchor(anchor));
     }
     if root.is_some_and(|root| !anchor.lies_in(root)) {
         return None;
     }
     let depth = root.map_or(0, <[u8]>::len);
-    nested
-        .keys()
+    roots
+        .into_iter()
         .filter(|inner| inner.len() > depth && anchor.lies_in(inner))
         .min_by_key(|inner| inner.len())
         .map(|inner| StandingPath::NestedRoot(inner))
@@ -384,9 +492,11 @@ fn standing_path<'a>(
 /// whose kind passes something on, whether what the target's anchor stands
 /// for may have changed since this element's own stamp, whose baseline is
 /// `baseline`, measured in this element's repository, the one with the
-/// root `root`, by the path that stands for the target there. Only the
-/// target's anchor counts, never the target's flags, so nothing travels
-/// further.
+/// root `root`, by the path that stands for the target there. Against
+/// recorded content, the path changed when the stamp did not record it, it
+/// holds another object at HEAD, or the index or the working tree changed
+/// it since. Only the target's anchor counts, never the target's flags, so
+/// nothing travels further.
 fn passed_on(
     element: &Element,
     baseline: Baseline<'_>,
@@ -394,8 +504,10 @@ fn passed_on(
     snapshot: &Snapshot,
     facts: &GitFacts,
 ) -> Vec<Flag> {
-    let Baseline::Since(since) = baseline else {
-        return Vec::new();
+    let (since, recorded) = match baseline {
+        Baseline::Since(since) => (since, None),
+        Baseline::Content { recorded, head } => (&head.staged, Some((recorded, head))),
+        Baseline::Unstamped | Baseline::Unusable => return Vec::new(),
     };
     let repository = facts.repository(root);
     element
@@ -404,16 +516,22 @@ fn passed_on(
         .filter_map(|(kind, target)| {
             let priority = passes_on(*kind)?;
             let anchor = snapshot.elements.get(target)?.anchor()?;
-            let standing = standing_path(anchor, root, &facts.nested)?;
-            since
-                .iter()
-                .chain(&repository.uncommitted)
-                .any(|path| standing.shows_in(path))
-                .then(|| Flag::Upstream {
-                    kind: *kind,
-                    target: target.clone(),
-                    priority,
-                })
+            let standing = standing_path(anchor, root, facts.nested.keys())?;
+            let content_differs = recorded.is_some_and(|(recorded, head)| {
+                standing
+                    .as_anchor()
+                    .is_none_or(|path| !recorded_matches(recorded, &path, head, standing.bytes()))
+            });
+            (content_differs
+                || since
+                    .iter()
+                    .chain(&repository.uncommitted)
+                    .any(|path| standing.shows_in(path)))
+            .then(|| Flag::Upstream {
+                kind: *kind,
+                target: target.clone(),
+                priority,
+            })
         })
         .collect()
 }

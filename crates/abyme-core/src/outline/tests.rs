@@ -148,6 +148,7 @@ fn facts(known: &[&[u8]], since: &[&[u8]]) -> GitFacts {
                 CommitId::try_from(STAMP.to_owned()).unwrap(),
                 Since::Changed(paths(since)),
             )]),
+            fallback: None,
         },
         nested: BTreeMap::new(),
     }

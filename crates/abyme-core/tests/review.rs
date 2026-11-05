@@ -468,7 +468,7 @@ fn verify_stamps_head_by_ai_and_changes_nothing_else() -> TestResult {
     let after = repository.element_file("x")?;
     let without_stamp = |text: &str| -> String {
         text.lines()
-            .filter(|line| !line.starts_with("verified"))
+            .filter(|line| !line.starts_with("verified") && !line.starts_with("  - {path: "))
             .collect::<Vec<_>>()
             .join("\n")
     };
@@ -484,15 +484,28 @@ fn verify_stamps_head_by_ai_and_changes_nothing_else() -> TestResult {
 }
 
 #[test]
-fn verify_records_no_content_in_the_stamp() -> TestResult {
-    let repository = verified()?;
-    repository.write(b"crates/x/lib.rs", "fn a() { b() }\n")?;
-    repository.commit()?;
+fn verify_records_the_content_of_the_anchor_and_of_each_target() -> TestResult {
+    let repository = Repository::new()?;
+    repository.write(b"crates/x/lib.rs", "fn a() {}\n")?;
+    repository.write(b"crates/y/lib.rs", "fn b() {}\n")?;
+    repository.node("x", Some("crates/x"), None, &["y", "z", "w"])?;
+    repository.node("y", Some("crates/y"), None, &[])?;
+    repository.node("z", Some("crates/z"), None, &[])?;
+    repository.node("w", None, None, &[])?;
+    let head = repository.commit()?;
+    let object = |path: &str| git(repository.top(), &["rev-parse", &format!("HEAD:{path}")]);
 
-    repository.verify("x")??;
+    let verified = repository.verify("x")?;
 
-    let after = repository.element_file("x")?;
-    assert!(!after.contains("verified_content"), "{after}");
+    assert_eq!(verified, Ok(head));
+    let expected = format!(
+        "verified_content:\n  - {{path: \"crates/x\", object: \"{}\"}}\n  \
+         - {{path: \"crates/y\", object: \"{}\"}}\n  - {{path: \"crates/z\"}}\n",
+        object("crates/x")?,
+        object("crates/y")?,
+    );
+    let file = repository.element_file("x")?;
+    assert!(file.contains(&expected), "{file}");
     Ok(())
 }
 
@@ -1685,5 +1698,401 @@ fn verify_refuses_an_anchor_in_a_nested_repository_without_a_commit() -> TestRes
         repository.verify("x")?,
         Err("element x cannot be verified: the repository has no commit yet".to_owned())
     );
+    Ok(())
+}
+
+/// How a history is rewritten after elements were stamped on the branch
+/// `feature`.
+#[derive(Debug, Clone, Copy)]
+enum Rewrite {
+    /// `feature` rebased onto `main`.
+    Rebase,
+    /// `feature` merged into `main` as one squashed commit.
+    SquashMerge,
+    /// The commits of `feature` picked onto `main`.
+    CherryPick,
+}
+
+impl Repository {
+    /// The elements `x`, anchored on `crates/x`, and `y`, anchored on
+    /// `crates/y`, with `x` depending on `y`, stamped by `verify` on the
+    /// branch `feature` and their stamps committed there; `main` gains a
+    /// commit of its own that changes nothing under the anchors. Returns
+    /// the commit the stamps name.
+    fn stamped_on_a_branch(&self) -> TestResult<String> {
+        git(self.top(), &["switch", "-q", "-c", "feature"])?;
+        self.write(b"crates/x/lib.rs", "fn a() {}\n")?;
+        self.write(b"crates/y/lib.rs", "fn b() {}\n")?;
+        self.node("x", Some("crates/x"), None, &["y"])?;
+        self.node("y", Some("crates/y"), None, &[])?;
+        let stamped = self.commit()?;
+        self.verify("x")??;
+        self.verify("y")??;
+        self.commit()?;
+        git(self.top(), &["switch", "-q", "main"])?;
+        self.write(b"other.rs", "fn o() {}\n")?;
+        self.commit()?;
+        Ok(stamped)
+    }
+
+    /// Rewrites the history of `feature` as `rewrite` says, ending on the
+    /// branch that holds the result.
+    fn rewrite(&self, rewrite: Rewrite) -> TestResult {
+        match rewrite {
+            Rewrite::Rebase => {
+                git(self.top(), &["switch", "-q", "feature"])?;
+                git(self.top(), &["rebase", "-q", "main"])?;
+            }
+            Rewrite::SquashMerge => {
+                git(self.top(), &["merge", "-q", "--squash", "feature"])?;
+                git(self.top(), &["commit", "-q", "-m", "squashed"])?;
+            }
+            Rewrite::CherryPick => {
+                git(self.top(), &["cherry-pick", "main..feature"])?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Rewrites the commit HEAD names with another message, keeping its
+    /// content and what is not committed.
+    fn rewrite_head(&self) -> TestResult {
+        git(self.top(), &["commit", "-q", "--amend", "-m", "rewritten"]).map(drop)
+    }
+
+    /// Whether `stamp` is no longer an ancestor of HEAD.
+    fn is_rewritten(&self, stamp: &str) -> bool {
+        git(self.top(), &["merge-base", "--is-ancestor", stamp, "HEAD"]).is_err()
+    }
+
+    /// The object the element file of `id` records for `path`.
+    fn recorded_object(&self, id: &str, path: &str) -> TestResult<String> {
+        let file = self.element_file(id)?;
+        let start = format!("{{path: \"{path}\", object: \"");
+        let at = file.find(&start).ok_or("no object recorded")? + start.len();
+        Ok(file
+            .get(at..)
+            .ok_or("no object recorded")?
+            .chars()
+            .take_while(char::is_ascii_hexdigit)
+            .collect())
+    }
+}
+
+#[rstest]
+#[case::rebase(Rewrite::Rebase)]
+#[case::squash_merge(Rewrite::SquashMerge)]
+#[case::cherry_pick(Rewrite::CherryPick)]
+fn flags_nothing_after_a_rewrite_that_changed_nothing_under_the_anchors(
+    #[case] rewrite: Rewrite,
+) -> TestResult {
+    let repository = Repository::new()?;
+    let stamped = repository.stamped_on_a_branch()?;
+
+    repository.rewrite(rewrite)?;
+
+    assert!(repository.is_rewritten(&stamped));
+    assert_eq!(repository.flags_of("x")?, []);
+    assert_eq!(repository.flags_of("y")?, []);
+    Ok(())
+}
+
+/// A change after a rewrite.
+#[derive(Debug, Clone, Copy)]
+enum ChangeAfterRewrite {
+    /// A staged change under the anchor of `x`.
+    Staged,
+    /// A change in the working tree under the anchor of `x`.
+    WorkingTree,
+    /// A committed change under the anchor of `x`.
+    CommittedOwn,
+    /// A committed change under the anchor of `y`, which `x` depends on.
+    CommittedTarget,
+}
+
+#[rstest]
+#[case::staged(ChangeAfterRewrite::Staged)]
+#[case::working_tree(ChangeAfterRewrite::WorkingTree)]
+#[case::committed_under_the_own_anchor(ChangeAfterRewrite::CommittedOwn)]
+#[case::committed_under_the_target_s_anchor(ChangeAfterRewrite::CommittedTarget)]
+fn flags_a_change_after_a_rewrite(#[case] change: ChangeAfterRewrite) -> TestResult {
+    let repository = Repository::new()?;
+    repository.stamped_on_a_branch()?;
+    repository.rewrite(Rewrite::Rebase)?;
+    let path: &[u8] = if matches!(change, ChangeAfterRewrite::CommittedTarget) {
+        b"crates/y/lib.rs"
+    } else {
+        b"crates/x/lib.rs"
+    };
+    repository.write(path, "fn c() {}\n")?;
+    match change {
+        ChangeAfterRewrite::Staged => git(repository.top(), &["add", "-A"]).map(drop)?,
+        ChangeAfterRewrite::WorkingTree => {}
+        ChangeAfterRewrite::CommittedOwn | ChangeAfterRewrite::CommittedTarget => {
+            repository.commit().map(drop)?;
+        }
+    }
+
+    let flags = repository.flags_of("x")?;
+
+    let expected = match change {
+        ChangeAfterRewrite::Staged | ChangeAfterRewrite::WorkingTree => {
+            vec![changed(&[b"crates/x/lib.rs"])]
+        }
+        ChangeAfterRewrite::CommittedOwn => vec![Flag::UnknownStamp],
+        ChangeAfterRewrite::CommittedTarget => vec![Flag::Upstream {
+            kind: RelationKind::DependsOn,
+            target: "y".parse()?,
+            priority: Priority::Task,
+        }],
+    };
+    assert_eq!(flags, expected);
+    Ok(())
+}
+
+#[test]
+fn judges_a_stamp_on_another_branch_by_its_recorded_content() -> TestResult {
+    let repository = Repository::new()?;
+    repository.write(b"crates/x/lib.rs", "fn a() {}\n")?;
+    repository.element(Some("crates/x"), None)?;
+    repository.commit()?;
+    git(repository.top(), &["switch", "-q", "-c", "side"])?;
+    repository.write(b"side.rs", "fn s() {}\n")?;
+    let side = repository.commit()?;
+    repository.verify("x")??;
+    git(repository.top(), &["switch", "-q", "main"])?;
+    let unchanged = repository.flags()?;
+    repository.write(b"crates/x/lib.rs", "fn a() { b() }\n")?;
+    repository.commit()?;
+
+    let changed_since = repository.flags()?;
+
+    assert!(repository.element_file("x")?.contains(&side));
+    assert_eq!(unchanged, []);
+    assert_eq!(changed_since, [Flag::UnknownStamp]);
+    Ok(())
+}
+
+#[test]
+fn passes_a_flag_on_from_a_target_anchored_elsewhere_after_the_stamp() -> TestResult {
+    let repository = Repository::new()?;
+    let stamped = repository.stamped_on_a_branch()?;
+    repository.rewrite(Rewrite::Rebase)?;
+    repository.write(b"crates/z/lib.rs", "fn z() {}\n")?;
+    repository.node("y", Some("crates/z"), Some(&stamped), &[])?;
+    repository.commit()?;
+
+    assert_eq!(
+        repository.flags_of("x")?,
+        [Flag::Upstream {
+            kind: RelationKind::DependsOn,
+            target: "y".parse()?,
+            priority: Priority::Task,
+        }]
+    );
+    Ok(())
+}
+
+#[test]
+fn leaves_an_element_without_anchors_to_vouch_for_unflagged_after_a_rewrite() -> TestResult {
+    let repository = Repository::new()?;
+    let stamped = repository.stamped_on_a_branch()?;
+    git(repository.top(), &["switch", "-q", "feature"])?;
+    repository.node("w", None, None, &[])?;
+    repository.node("old", None, Some(&stamped), &["y"])?;
+    repository.node("old-anchored", Some("crates/x"), Some(&stamped), &["y"])?;
+    repository.commit()?;
+    repository.verify("w")??;
+    repository.commit()?;
+    git(repository.top(), &["switch", "-q", "main"])?;
+
+    repository.rewrite(Rewrite::Rebase)?;
+
+    assert!(
+        repository
+            .element_file("w")?
+            .contains("verified_content: []\n")
+    );
+    assert_eq!(repository.flags_of("w")?, []);
+    assert_eq!(repository.flags_of("old")?, [Flag::UnknownStamp]);
+    assert_eq!(repository.flags_of("old-anchored")?, [Flag::UnknownStamp]);
+    Ok(())
+}
+
+#[test]
+fn compares_a_nested_root_by_its_tree_and_a_submodule_target_by_its_commit() -> TestResult {
+    let sources = tempfile::tempdir()?;
+    library(&sources.path().join("lib"))?;
+    let repository = Repository::new()?;
+    let nested = repository.nest(
+        &sources.path().join("lib"),
+        "vendor/lib",
+        Nesting::Submodule,
+    )?;
+    repository.write(b"src/main.rs", "fn main() {}\n")?;
+    repository.node("n", Some("vendor/lib"), None, &[])?;
+    repository.node("s", Some("src"), None, &["t"])?;
+    repository.node("t", Some("vendor/lib/a.rs"), None, &[])?;
+    repository.commit()?;
+    let nested_stamp = repository.verify("n")??;
+    let outer_stamp = repository.verify("s")??;
+    let kind = |directory: &Path, object: &str| git(directory, &["cat-file", "-t", object]);
+    // The gitlink names a commit of the submodule, which only it holds.
+    let tree = repository.recorded_object("n", "vendor/lib")?;
+    let gitlink = repository.recorded_object("s", "vendor/lib")?;
+    repository.rewrite_head()?;
+    let after_the_outer_rewrite = repository.flags_of("s")?;
+    git(&nested, &["commit", "-q", "--amend", "-m", "rewritten"])?;
+    let after_the_nested_rewrite = repository.flags_of("n")?;
+    let rewritten = (
+        repository.is_rewritten(&outer_stamp),
+        git(
+            &nested,
+            &["merge-base", "--is-ancestor", &nested_stamp, "HEAD"],
+        )
+        .is_err(),
+    );
+    repository.commit()?;
+    fs::write(nested.join("a.rs"), "fn a() { b() }\n")?;
+    commit_all(&nested)?;
+    repository.commit()?;
+
+    let after_a_move = (repository.flags_of("n")?, repository.flags_of("s")?);
+
+    assert_eq!(rewritten, (true, true));
+    assert_eq!(kind(&nested, &tree)?, "tree");
+    assert_eq!(kind(&nested, &gitlink)?, "commit");
+    assert_eq!(after_the_outer_rewrite, []);
+    assert_eq!(after_the_nested_rewrite, []);
+    assert_eq!(
+        after_a_move,
+        (
+            vec![Flag::UnknownStamp],
+            vec![Flag::Upstream {
+                kind: RelationKind::DependsOn,
+                target: "t".parse()?,
+                priority: Priority::Task,
+            }]
+        )
+    );
+    Ok(())
+}
+
+#[test]
+fn reads_a_rewritten_history_of_a_project_below_the_top_of_its_repository() -> TestResult {
+    let repository = Repository::with_project(Path::new("a/b"))?;
+    repository.write(b"crates/x/lib.rs", "fn a() {}\n")?;
+    repository.element(Some("crates/x"), None)?;
+    repository.commit()?;
+    let stamped = repository.verify("x")??;
+    repository.rewrite_head()?;
+    repository.commit()?;
+    let unchanged = repository.flags()?;
+    repository.write(b"crates/x/lib.rs", "fn a() { b() }\n")?;
+    repository.commit()?;
+
+    let changed_since = repository.flags()?;
+
+    assert!(repository.is_rewritten(&stamped));
+    assert_eq!(unchanged, []);
+    assert_eq!(changed_since, [Flag::UnknownStamp]);
+    Ok(())
+}
+
+#[test]
+fn never_hands_an_anchor_or_a_recorded_path_to_git_after_a_rewrite() -> TestResult {
+    let repository = Repository::new()?;
+    repository.write(b"--output=evil/a", "x\n")?;
+    repository.write(b"--output=evil2/a", "y\n")?;
+    repository.node("x", Some("--output=evil"), None, &["y"])?;
+    repository.node("y", Some("--output=evil2"), None, &[])?;
+    repository.commit()?;
+    let stamp = repository.verify("x")??;
+    repository.write(
+        b"abyme/elements/z.md",
+        &format!(
+            "---\nid: \"z\"\ntype: \"t\"\nname: \"Z\"\nverified: \"{stamp}\"\nverified_by: \"ai\"\n\
+             verified_content:\n  - {{path: \"--output=evil3\", object: \"{stamp}\"}}\n  \
+             - {{path: \"crates/unasked\"}}\n---\n"
+        ),
+    )?;
+    repository.rewrite_head()?;
+    repository.commit()?;
+    repository.write(b"--output=evil2/a", "z\n")?;
+    repository.commit()?;
+
+    let x = repository.flags_of("x")?;
+    let z = repository.flags_of("z")?;
+
+    assert!(repository.is_rewritten(&stamp));
+
+    for evil in ["evil", "evil2", "evil3"] {
+        assert!(!repository.project.join(evil).exists(), "{evil}");
+    }
+    assert_eq!(
+        x,
+        [Flag::Upstream {
+            kind: RelationKind::DependsOn,
+            target: "y".parse()?,
+            priority: Priority::Task,
+        }]
+    );
+    assert_eq!(z, []);
+    Ok(())
+}
+
+#[rstest]
+#[case::clean_filter(Hostile::Clean)]
+#[case::process_filter(Hostile::Process)]
+#[case::odd_driver_name(Hostile::OddDriverName)]
+#[case::included_filter(Hostile::Included)]
+#[case::work_tree_configuration(Hostile::WorkTreeConfig)]
+#[case::required_filter(Hostile::Required)]
+#[case::info_attributes(Hostile::InfoAttributes)]
+#[case::file_system_monitor(Hostile::Fsmonitor)]
+#[case::index_hook(Hostile::Hook)]
+fn runs_nothing_that_a_nested_repository_sets_up_while_judging_recorded_content(
+    #[case] case: Hostile,
+) -> TestResult {
+    let sources = tempfile::tempdir()?;
+    library(&sources.path().join("lib"))?;
+    let repository = Repository::new()?;
+    let nested = repository.nest(&sources.path().join("lib"), "vendor/lib", Nesting::Embedded)?;
+    let marker = sources.path().join("marker");
+    make_hostile(&nested, case, &marker, sources.path())?;
+    let tree = git(&nested, &["rev-parse", "HEAD:"])?;
+    repository.write(
+        b"abyme/elements/x.md",
+        &format!(
+            "---\nid: \"x\"\ntype: \"t\"\nname: \"X\"\nanchor: \"vendor/lib\"\nverified: \"{UNKNOWN}\"\n\
+             verified_by: \"ai\"\nverified_content:\n  - {{path: \"vendor/lib\", object: \"{tree}\"}}\n---\n"
+        ),
+    )?;
+
+    let flags = repository.flags()?;
+
+    assert!(!marker.exists());
+    assert_eq!(flags, []);
+    Ok(())
+}
+
+#[test]
+fn fetches_nothing_for_a_partial_clone_while_judging_recorded_content() -> TestResult {
+    let sources = tempfile::tempdir()?;
+    let repository = Repository::new()?;
+    let marker = sources.path().join("marker");
+    partial_clone(&repository, sources.path(), &marker)?;
+    repository.write(
+        b"abyme/elements/x.md",
+        &format!(
+            "---\nid: \"x\"\ntype: \"t\"\nname: \"X\"\nanchor: \"vendor/lib/a.rs\"\nverified: \"{UNKNOWN}\"\n\
+             verified_by: \"ai\"\nverified_content:\n  - {{path: \"vendor/lib/a.rs\", object: \"{UNKNOWN}\"}}\n---\n"
+        ),
+    )?;
+
+    let flags = repository.flags()?;
+
+    assert!(!marker.exists());
+    assert!(flags.contains(&Flag::UnknownStamp), "{flags:?}");
     Ok(())
 }

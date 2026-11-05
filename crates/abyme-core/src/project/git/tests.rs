@@ -224,3 +224,55 @@ fn reads_the_root_of_an_untracked_repository_without_its_final_slash() {
         Ok(StatusRecord::Repository(b"vendor/clone"))
     );
 }
+
+const TREE: &str = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+const BLOB: &str = "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391";
+
+fn object(value: &str) -> ObjectId {
+    ObjectId::try_from(value.to_owned()).unwrap()
+}
+
+#[test]
+fn reads_the_entries_of_ls_tree_without_the_folders_that_enclose_the_project() {
+    let output = format!(
+        "040000 tree {TREE}\t../\0040000 tree {TREE}\t../../\0040000 tree {TREE}\t.././\0\
+         040000 tree {TREE}\t./\0040000 tree {TREE}\tcrates\0100644 blob {BLOB}\tcrates/a b.rs\0\
+         100755 blob {BLOB}\trun\0120000 blob {BLOB}\tlink\0160000 commit {TREE}\tvendor/lib\0"
+    );
+
+    let entries = tree_entries(output.as_bytes()).unwrap();
+
+    assert_eq!(
+        entries,
+        BTreeMap::from([
+            (b"crates".as_slice(), object(TREE)),
+            (b"crates/a b.rs".as_slice(), object(BLOB)),
+            (b"link".as_slice(), object(BLOB)),
+            (b"run".as_slice(), object(BLOB)),
+            (b"vendor/lib".as_slice(), object(TREE)),
+        ])
+    );
+}
+
+#[rstest]
+#[case::path_twice(format!("100644 blob {BLOB}\ta\0100644 blob {TREE}\ta\0"))]
+#[case::blob_as_tree(format!("100644 tree {TREE}\ta\0"))]
+#[case::tree_as_blob(format!("040000 blob {BLOB}\ta\0"))]
+#[case::gitlink_as_blob(format!("160000 blob {BLOB}\ta\0"))]
+#[case::unknown_type(format!("100644 tag {BLOB}\ta\0"))]
+#[case::uppercase_object(format!("100644 blob {}\ta\0", BLOB.to_uppercase()))]
+#[case::thirty_nine_digits(format!("100644 blob {}\ta\0", &BLOB[..39]))]
+#[case::empty_path(format!("100644 blob {BLOB}\t\0"))]
+#[case::parent_segment(format!("100644 blob {BLOB}\ta/../b\0"))]
+#[case::stray_parent(format!("100644 blob {BLOB}\t..\0"))]
+#[case::stray_parent_tree(format!("040000 tree {TREE}\t..\0"))]
+#[case::dot_segment(format!("100644 blob {BLOB}\t./a\0"))]
+#[case::enclosing_folder_as_a_blob(format!("100644 blob {BLOB}\t../\0"))]
+#[case::enclosing_folder_with_a_file_mode(format!("100644 tree {TREE}\t../\0"))]
+#[case::git_segment(format!("100644 blob {BLOB}\ta/.git/b\0"))]
+#[case::empty_segment(format!("100644 blob {BLOB}\ta//b\0"))]
+#[case::no_tab(format!("100644 blob {BLOB} a\0"))]
+#[case::missing_nul(format!("100644 blob {BLOB}\ta"))]
+fn rejects_ls_tree_entries_it_does_not_expect(#[case] output: String) {
+    assert_eq!(tree_entries(output.as_bytes()), Err(Unavailable::GitFailed));
+}

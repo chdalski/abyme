@@ -49,6 +49,7 @@ fn facts(since: &[&str], uncommitted: &[&str]) -> GitFacts {
         known: paths(&["crates/x/lib.rs", "docs/a.md"]),
         uncommitted: paths(uncommitted),
         since: BTreeMap::from([(commit(STAMP), Since::Changed(paths(since)))]),
+        fallback: None,
     })
 }
 
@@ -238,6 +239,7 @@ fn target_changed() -> GitFacts {
         known: paths(&["crates/t/lib.rs", "crates/u/lib.rs", "crates/v/lib.rs"]),
         uncommitted: BTreeSet::new(),
         since: BTreeMap::from([(commit(STAMP), Since::Changed(paths(&["crates/t/lib.rs"])))]),
+        fallback: None,
     })
 }
 
@@ -407,6 +409,7 @@ fn repository(known: &[&str], changed: &[&str]) -> RepositoryFacts {
         known: paths(known),
         uncommitted: BTreeSet::new(),
         since: BTreeMap::from([(commit(STAMP), Since::Changed(paths(changed)))]),
+        fallback: None,
     }
 }
 
@@ -618,6 +621,9 @@ fn head(changed: &[&str]) -> HeadFacts {
     HeadFacts {
         commit: Some(commit(OTHER)),
         changed: paths(changed),
+        root: None,
+        roots: BTreeSet::new(),
+        objects: BTreeMap::new(),
     }
 }
 
@@ -638,7 +644,10 @@ fn stamps_an_element_whose_anchor_has_no_change(#[case] changed: &[&str]) {
         Some(&Verification {
             commit: self::commit(OTHER),
             by: Verifier::Ai,
-            content: None,
+            content: Some(RecordedContent::from([(
+                Anchor::try_from("crates/x".to_owned()).unwrap(),
+                None
+            )])),
         })
     );
     assert_eq!(
@@ -770,5 +779,266 @@ fn a_stamp_keeps_the_statement() {
     assert_eq!(
         stamped.statement(),
         Some(abyme_model::StatementKind::Question)
+    );
+}
+
+const TREE_X: &str = "1111111111111111111111111111111111111111";
+const TREE_Y: &str = "2222222222222222222222222222222222222222";
+
+/// The element `id`, anchored on `anchor` or on nothing, with a relation of
+/// each kind to each target of `targets`, and a stamp `STAMP` by the AI
+/// that recorded `content` lines.
+fn recorded_element(
+    id: &str,
+    anchor: Option<&str>,
+    content: &str,
+    targets: &[(&str, &str)],
+) -> Element {
+    let anchor = anchor.map_or(String::new(), |anchor| format!("anchor: \"{anchor}\"\n"));
+    let relations: String = targets
+        .iter()
+        .map(|(kind, target)| format!("  - {{kind: {kind}, to: {target}}}\n"))
+        .collect::<Vec<_>>()
+        .concat();
+    let relations = if relations.is_empty() {
+        relations
+    } else {
+        format!("relations:\n{relations}")
+    };
+    Element::from_markdown(
+        &element_id(id),
+        &format!(
+            "---\nid: {id}\ntype: t\nname: X\n{anchor}verified: \"{STAMP}\"\nverified_by: ai\n\
+             {content}{relations}---\n"
+        ),
+    )
+    .unwrap()
+}
+
+/// The element `y`, anchored on `crates/y`, without a stamp.
+fn target_y() -> Element {
+    Element::from_markdown(
+        &element_id("y"),
+        "---\nid: y\ntype: t\nname: Y\nanchor: crates/y\n---\n",
+    )
+    .unwrap()
+}
+
+/// Facts in which `STAMP` tells nothing and HEAD holds `crates/x` as
+/// `TREE_X` and `crates/y` as `TREE_Y`, with `staged` and `uncommitted`
+/// paths; without fallback facts when `fallback` is false.
+fn rewritten(staged: &[&str], uncommitted: &[&str], fallback: bool) -> GitFacts {
+    project_only(RepositoryFacts {
+        known: paths(&["crates/x/lib.rs", "crates/y/lib.rs"]),
+        uncommitted: paths(uncommitted),
+        since: BTreeMap::from([(commit(STAMP), Since::Unknown)]),
+        fallback: fallback.then(|| Fallback {
+            objects: BTreeMap::from([
+                (
+                    b"crates/x".to_vec(),
+                    ObjectId::try_from(TREE_X.to_owned()).unwrap(),
+                ),
+                (
+                    b"crates/y".to_vec(),
+                    ObjectId::try_from(TREE_Y.to_owned()).unwrap(),
+                ),
+            ]),
+            staged: paths(staged),
+        }),
+    })
+}
+
+fn flags_in(elements: Vec<Element>, facts: &GitFacts, id: &str) -> Vec<Flag> {
+    review(&snapshot_of(elements), facts)
+        .flags(&element_id(id))
+        .to_vec()
+}
+
+fn upstream_from_y() -> Flag {
+    Flag::Upstream {
+        kind: RelationKind::DependsOn,
+        target: element_id("y"),
+        priority: Priority::Task,
+    }
+}
+
+#[rstest]
+#[case::unchanged(&format!("verified_content:\n  - {{path: crates/x, object: \"{TREE_X}\"}}\n"), &[], &[], vec![])]
+#[case::staged(
+    &format!("verified_content:\n  - {{path: crates/x, object: \"{TREE_X}\"}}\n"),
+    &["crates/x/lib.rs"],
+    &[],
+    vec![Flag::Changed(vec![b"crates/x/lib.rs".to_vec()])]
+)]
+#[case::in_the_working_tree(
+    &format!("verified_content:\n  - {{path: crates/x, object: \"{TREE_X}\"}}\n"),
+    &[],
+    &["crates/x/new.rs"],
+    vec![Flag::Changed(vec![b"crates/x/new.rs".to_vec()])]
+)]
+#[case::another_object(
+    &format!("verified_content:\n  - {{path: crates/x, object: \"{TREE_Y}\"}}\n"),
+    &[],
+    &[],
+    vec![Flag::UnknownStamp]
+)]
+#[case::an_object_of_the_other_length(
+    &format!("verified_content:\n  - {{path: crates/x, object: \"{}\"}}\n", "1".repeat(64)),
+    &[],
+    &[],
+    vec![Flag::UnknownStamp]
+)]
+#[case::held_nothing_then(
+    "verified_content:\n  - {path: crates/x}\n",
+    &[],
+    &[],
+    vec![Flag::UnknownStamp]
+)]
+#[case::no_entry_for_the_anchor(
+    &format!("verified_content:\n  - {{path: crates/y, object: \"{TREE_Y}\"}}\n"),
+    &[],
+    &[],
+    vec![Flag::UnknownStamp]
+)]
+#[case::no_recorded_content("", &[], &[], vec![Flag::UnknownStamp])]
+fn judges_the_own_anchor_by_recorded_content_after_a_rewrite(
+    #[case] content: &str,
+    #[case] staged: &[&str],
+    #[case] uncommitted: &[&str],
+    #[case] expected: Vec<Flag>,
+) {
+    let element = recorded_element("x", Some("crates/x"), content, &[]);
+
+    assert_eq!(
+        flags_in(vec![element], &rewritten(staged, uncommitted, true), "x"),
+        expected
+    );
+}
+
+#[test]
+fn flags_an_unusable_stamp_with_recorded_content_when_the_facts_hold_no_content() {
+    let element = recorded_element(
+        "x",
+        Some("crates/x"),
+        &format!("verified_content:\n  - {{path: crates/x, object: \"{TREE_X}\"}}\n"),
+        &[],
+    );
+
+    assert_eq!(
+        flags_in(vec![element], &rewritten(&[], &[], false), "x"),
+        [Flag::UnknownStamp]
+    );
+}
+
+#[rstest]
+#[case::unchanged(&format!("  - {{path: crates/y, object: \"{TREE_Y}\"}}\n"), &[], &[], vec![])]
+#[case::another_object(&format!("  - {{path: crates/y, object: \"{TREE_X}\"}}\n"), &[], &[], vec![upstream_from_y()])]
+#[case::not_recorded("", &[], &[], vec![upstream_from_y()])]
+#[case::staged(
+    &format!("  - {{path: crates/y, object: \"{TREE_Y}\"}}\n"),
+    &["crates/y/lib.rs"],
+    &[],
+    vec![upstream_from_y()]
+)]
+#[case::in_the_working_tree(
+    &format!("  - {{path: crates/y, object: \"{TREE_Y}\"}}\n"),
+    &[],
+    &["crates/y/lib.rs"],
+    vec![upstream_from_y()]
+)]
+fn passes_a_flag_on_by_recorded_content_after_a_rewrite(
+    #[case] target_entry: &str,
+    #[case] staged: &[&str],
+    #[case] uncommitted: &[&str],
+    #[case] expected: Vec<Flag>,
+) {
+    let content = format!("verified_content:\n{target_entry}");
+    let content = if target_entry.is_empty() {
+        "verified_content: []\n".to_owned()
+    } else {
+        content
+    };
+    let source = recorded_element("x", None, &content, &[("depends_on", "y")]);
+
+    assert_eq!(
+        flags_in(
+            vec![source, target_y()],
+            &rewritten(staged, uncommitted, true),
+            "x"
+        ),
+        expected
+    );
+}
+
+#[test]
+fn passes_nothing_on_by_recorded_content_from_a_target_outside_the_source_s_repository() {
+    let source = recorded_element(
+        "x",
+        Some("sub/x"),
+        &format!("verified_content:\n  - {{path: sub/x, object: \"{TREE_X}\"}}\n"),
+        &[("depends_on", "y")],
+    );
+    let mut facts = rewritten(&[], &[], true);
+    facts.nested.insert(
+        b"sub".to_vec(),
+        RepositoryFacts {
+            known: paths(&["sub/x/lib.rs"]),
+            uncommitted: BTreeSet::new(),
+            since: BTreeMap::from([(commit(STAMP), Since::Unknown)]),
+            fallback: Some(Fallback {
+                objects: BTreeMap::from([(
+                    b"sub/x".to_vec(),
+                    ObjectId::try_from(TREE_X.to_owned()).unwrap(),
+                )]),
+                staged: BTreeSet::new(),
+            }),
+        },
+    );
+
+    assert_eq!(flags_in(vec![source, target_y()], &facts, "x"), []);
+}
+
+#[test]
+fn records_the_own_anchor_and_each_target_that_passes_something_on() {
+    let source = recorded_element(
+        "x",
+        Some("crates/x"),
+        "",
+        &[("depends_on", "y"), ("depends_on", "z"), ("see_also", "v")],
+    );
+    let not_anchored =
+        Element::from_markdown(&element_id("z"), "---\nid: z\ntype: t\nname: Z\n---\n").unwrap();
+    let seen_also = Element::from_markdown(
+        &element_id("v"),
+        "---\nid: v\ntype: t\nname: V\nanchor: crates/v\n---\n",
+    )
+    .unwrap();
+    let snapshot = snapshot_of(vec![source, target_y(), not_anchored, seen_also]);
+    let head = HeadFacts {
+        objects: BTreeMap::from([
+            (
+                b"crates/x".to_vec(),
+                ObjectId::try_from(TREE_X.to_owned()).unwrap(),
+            ),
+            (
+                b"crates/v".to_vec(),
+                ObjectId::try_from(TREE_Y.to_owned()).unwrap(),
+            ),
+        ]),
+        ..head(&[])
+    };
+
+    let (stamped, _) = stamped(&snapshot, &element_id("x"), &head, Verifier::Ai).unwrap();
+
+    let anchor = |path: &str| Anchor::try_from(path.to_owned()).unwrap();
+    assert_eq!(
+        stamped.verified().and_then(|stamp| stamp.content.clone()),
+        Some(RecordedContent::from([
+            (
+                anchor("crates/x"),
+                Some(ObjectId::try_from(TREE_X.to_owned()).unwrap())
+            ),
+            (anchor("crates/y"), None),
+        ]))
     );
 }

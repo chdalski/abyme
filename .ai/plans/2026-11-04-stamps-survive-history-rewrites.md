@@ -29,7 +29,7 @@ relation targets' anchors is unchanged, and is flagged when it changed.
 - [x] Review flags resolve a stamp's baseline and a relation target's path in one place each
 - [x] Element files read lists of flat mappings through one reader
 - [x] Element files carry the content a stamp vouches for
-- [ ] `verify` records the content, and review falls back to it after a rewrite
+- [x] `verify` records the content, and review falls back to it after a rewrite
 
 ## Tasks
 
@@ -92,14 +92,14 @@ elements unflagged.
 
 Review path: Security-Hybrid
 
-- [ ] `verify` records the element's own anchor and the path that stands for each relation target
+- [x] `verify` records the element's own anchor and the path that stands for each relation target
       whose kind passes something on, as Task 1's function decides it, each with its object ID at
       HEAD or as holding nothing.
-- [ ] With a stamp whose commit is known and an ancestor of HEAD, the flags are those of today: the
+- [x] With a stamp whose commit is known and an ancestor of HEAD, the flags are those of today: the
       existing tests of review, `verify`, and the MCP tools pass, every flag and result assertion
       unchanged; the only assertions edited are those on the stamped file's text that account for
       the recorded content, such as in `verify_stamps_head_by_ai_and_changes_nothing_else`.
-- [ ] Integration tests in temporary repositories show, for elements stamped by `verify` with a
+- [x] Integration tests in temporary repositories show, for elements stamped by `verify` with a
       relation between them:
       - after a rebase, a squash merge, and a cherry-pick that change nothing under their anchors,
         `status` reports no flag;
@@ -112,10 +112,10 @@ Review path: Security-Hybrid
       - after a rewrite, an element without an anchor whose stamp recorded no path is unflagged;
       - an element whose stamp recorded no content, with or without an anchor, is flagged
         `UnknownStamp` after a rewrite and passes nothing on, as today.
-- [ ] After a rewrite, an anchor that equals the root of a nested repository and a target inside a
+- [x] After a rewrite, an anchor that equals the root of a nested repository and a target inside a
       submodule are compared in the repository the rule of Task 1 names, each by a test.
-- [ ] No anchor or recorded path reaches Git's command line.
-- [ ] `docs/3 Reconciliation/Reconciliation.md`, `docs/3 Reconciliation/Checks.md`, and
+- [x] No anchor or recorded path reaches Git's command line.
+- [x] `docs/3 Reconciliation/Reconciliation.md`, `docs/3 Reconciliation/Checks.md`, and
       `docs/Decisions.md` tell a reader what a stamp records and how flags are computed after a
       rewrite; no doc says that a rewrite always makes an element be checked again from scratch.
 
@@ -150,6 +150,11 @@ Review path: Security-Hybrid
   escaped messages, bidi, zero-width, and control characters, `verify` writing no content yet,
   `apply` refusing the field and dropping it with the stamp, and a byte-for-byte round trip, so
   that the field Task 4 reads cannot hold a state the format does not define.
+- **Task 4 binds the recorded content to the stamp's commit and fails closed:** every Git query
+  after HEAD is resolved names that commit, `ls-tree` output is parsed strictly and its enclosing
+  folders are skipped only as trees, missing facts never count as unchanged, a target outside the
+  source's repository passes nothing on, and verify and review derive a target's path by one rule;
+  a test pins each, the hostile nested repositories and the partial clone included.
 - **The project format stays 1:** the new field is optional, and an older Abyme rejects only element
   files that carry it.
 

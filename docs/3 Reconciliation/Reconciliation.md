@@ -47,8 +47,8 @@ Changes in the repo are detected without source-specific code, through anchors a
 
 1. Every representation carries a [[Checks#Verification Stamp|verification stamp]], such as “verified against commit 3f2a9c1…”.
 2. Git lists the files that have changed since: those whose committed or staged state differs from the stamp's commit, those changed in the working tree, and new files Git does not track and does not ignore. A renamed file counts as removed at its old path and added at its new one.
-3. Abyme matches these paths against the anchors, byte for byte. If one lies under an anchor, the element gets a review flag, a task. So does an element with an anchor but no stamp, an element whose stamp names a commit the repository does not know or that is no ancestor of HEAD, and an element whose anchor matches no file Git tracks or lists as untracked. An element whose relation points to an element with an anchor is flagged too when what that anchor stands for may have changed since its own stamp, because files under it changed since then or, for a target in a [[#Nested Repositories|nested repository]], that repository's commit changed, one hop and by the relation's kind (see [[Relations]]).
-4. The AI rereads the affected places, updates the element, and calls `verify`, which stamps it with the commit HEAD names in the repository the anchor lies in. `verify` refuses while files under the anchor are not committed, so the stamp names a commit that holds what was checked.
+3. Abyme matches these paths against the anchors, byte for byte. If one lies under an anchor, the element gets a review flag, a task. So does an element with an anchor but no stamp, an element whose stamp names a commit the repository does not know or that is no ancestor of HEAD and that the stamp's recorded content does not vouch for (see [[#After a Rewrite]]), and an element whose anchor matches no file Git tracks or lists as untracked. An element whose relation points to an element with an anchor is flagged too when what that anchor stands for may have changed since its own stamp, because files under it changed since then or, for a target in a [[#Nested Repositories|nested repository]], that repository's commit changed, one hop and by the relation's kind (see [[Relations]]).
+4. The AI rereads the affected places, updates the element, and calls `verify`, which stamps it with the commit HEAD names in the repository the anchor lies in and records the Git object each path the stamp vouches for held in that commit: the element's own anchor and the path that stands for each relation target that passes something on. `verify` refuses while files under the anchor are not committed, so the stamp names a commit that holds what was checked.
 
 **Example:** Someone changes `crates/payment-service/src/refund.rs`. The file lies under the anchor `crates/payment-service`, so “Payment Service” is flagged.
 
@@ -61,11 +61,22 @@ Changes in the repo are detected without source-specific code, through anchors a
 **Limits:**
 
 - Folder anchors are coarse, because every change in the folder flags the element. File anchors are finer, for example only on `Cargo.toml` and `src/lib.rs`. Anchors on functions or lines would break with every refactoring. Another way is described in [[#Finer Review Flags]].
-- If the commit of the verification stamp is missing or no ancestor of HEAD, for example after a rebase, nothing tells what changed since: the element is checked again from scratch.
+- If the commit of the verification stamp is missing or no ancestor of HEAD and the stamp recorded no content, nothing tells what changed since: the element is checked again from scratch.
 - Git does not see changes outside the repo. For those there will later be [[Extensions#Fetchers|fetchers]].
 - Abyme finds a nested repository only where the outer repository's Git shows it: as a submodule, as a clone it tracks, or as a clone it lists as untracked. A clone in an ignored folder is not read, and neither is a nested repository that fails the [[Hexagonal Architecture#Security Baseline|security checks]]; anchors inside them match no file.
 
 **Parsers** are optional. Some things can be read exactly without the AI, such as crates and their dependencies from `Cargo.toml` (see [[Extensions#Parsers]]).
+
+### After a Rewrite
+
+A rebase, a squash merge, or a cherry-pick rewrites the commits a stamp names, so the stamp's commit is no longer an ancestor of HEAD although nothing under the anchors may have changed. Then Abyme judges the stamp by the content it recorded, compared with what each path holds in the commit HEAD names:
+
+- **The own anchor** is unflagged while it holds the recorded object; files under it that the index or the working tree changed since HEAD are flagged as in step 3. If it holds another object, or the stamp holds no entry for it, the element is flagged as a stamp whose commit is unknown: without the files that changed, it is checked from scratch.
+- **A relation target** passes its flag on when the path that stands for it holds another object, the index or the working tree changed it, or the stamp did not record it, for example because the target was anchored elsewhere after the stamp.
+- **An element without an anchor** that vouches for no path stays unflagged.
+- **A stamp without recorded content** is flagged as a stamp whose commit is unknown and passes nothing on.
+
+While the stamp's commit is an ancestor of HEAD, the recorded content plays no part.
 
 ### Nested Repositories
 

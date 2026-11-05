@@ -1,9 +1,10 @@
 //! What Git reports about the project's files, read through the `git`
 //! command line.
 //!
-//! Element files are untrusted, so no anchor ever reaches Git's command
-//! line: anchors are matched against the paths Git prints. Only a stamp's
-//! commit does, as a hex-checked [`CommitId`] after all options. Git runs
+//! Element files are untrusted, so no anchor, recorded path, or recorded
+//! object ever reaches Git's command line: they are matched against the
+//! paths and objects Git prints. Only a hex-checked [`CommitId`] does, a
+//! stamp's or the one HEAD names, after all options. Git runs
 //! without a shell, with every `GIT_` variable of the environment removed,
 //! without transports, and only with commands that leave the repository and
 //! its index as they are. It never uses a bare repository it finds on its
@@ -29,9 +30,11 @@ use std::os::unix::ffi::{OsStrExt as _, OsStringExt as _};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
-use abyme_model::{Anchor, CommitId};
+use abyme_model::{Anchor, CommitId, ObjectId};
 
-use crate::review::{GitFacts, HeadFacts, RepositoryFacts, Since, Unavailable, repository_root};
+use crate::review::{
+    Fallback, GitFacts, HeadFacts, RepositoryFacts, Since, Unavailable, repository_root,
+};
 
 /// The environment every Git command runs with, after every `GIT_`
 /// variable is removed: no index writes, no prompts, no fetches, no
@@ -48,11 +51,13 @@ const ENVIRONMENT: [(&str, &str); 5] = [
 /// configuration sets up, overridden so that the driver runs nothing.
 const FILTER_OVERRIDES: [(&str, &str); 3] = [("clean", ""), ("process", ""), ("required", "false")];
 
-/// What Git is asked about for one element: where its anchor lies, and
-/// which commit its stamp names.
+/// What Git is asked about for one element: where its anchor lies, which
+/// commit its stamp names, and whether the stamp recorded the content it
+/// vouches for.
 pub struct AnchorAndStamp<'a> {
     pub anchor: Option<&'a Anchor>,
     pub stamp: Option<&'a CommitId>,
+    pub recorded: bool,
 }
 
 /// The `git` program, found in a directory of `PATH` given as an absolute
@@ -138,18 +143,22 @@ pub fn head(root: &Path, anchor: Option<&Anchor>) -> Result<Option<HeadFacts>, U
     let git = Git::find()?;
     let project = Place::project(root);
     let prefix = git.prefix(&project)?;
-    let Some(anchor) = anchor else {
-        let Status { uncommitted, .. } = git.status(&project, &prefix)?;
-        return git.head_facts(&project, uncommitted).map(Some);
-    };
     let listing = git.listing(&project, &prefix)?;
-    if repository_root(&listing.repositories, Some(anchor)).is_none() {
-        return git.head_facts(&project, listing.uncommitted).map(Some);
-    }
+    let Some(anchor) =
+        anchor.filter(|anchor| repository_root(&listing.repositories, Some(anchor)).is_some())
+    else {
+        let roots = listing.repositories.clone();
+        return git
+            .head_facts(&project, listing.uncommitted, roots)
+            .map(Some);
+    };
     let store = git.store(&project)?;
+    let roots = listing.repositories.clone();
     Ok(Walk { git: &git, root }
-        .deepest(project, listing, store.as_deref(), anchor)
-        .and_then(|(place, listing)| git.head_facts(&place, listing.uncommitted).ok()))
+        .deepest(project, listing, store.as_deref(), anchor, roots)
+        .and_then(|(place, listing, roots)| {
+            git.head_facts(&place, listing.uncommitted, roots).ok()
+        }))
 }
 
 impl Walk<'_> {
@@ -191,22 +200,28 @@ impl Walk<'_> {
 
     /// The deepest repository on the chain of nested repositories that
     /// `anchor` lies in, starting at the one at `place` with its `listing`
-    /// and its `store` of submodules, with that repository's listing; `None`
-    /// when a repository on the chain is one Git may not run in, or in
-    /// which Git fails.
+    /// and its `store` of submodules, with that repository's listing and the
+    /// `roots` of nested repositories seen so far together with those its
+    /// listing shows; `None` when a repository on the chain is one Git may
+    /// not run in, or in which Git fails.
     fn deepest(
         &self,
         place: Place,
         listing: Listing,
         store: Option<&Path>,
         anchor: &Anchor,
-    ) -> Option<(Place, Listing)> {
+        roots: BTreeSet<Vec<u8>>,
+    ) -> Option<(Place, Listing, BTreeSet<Vec<u8>>)> {
         let Some(root) = repository_root(&listing.repositories, Some(anchor)) else {
-            return Some((place, listing));
+            return Some((place, listing, roots));
         };
         let (nested, own_store) = self.enter(root, store)?;
         let nested_listing = self.git.listing(&nested, b"").ok()?;
-        self.deepest(nested, nested_listing, own_store.as_deref(), anchor)
+        let roots = roots
+            .into_iter()
+            .chain(nested_listing.repositories.iter().cloned())
+            .collect();
+        self.deepest(nested, nested_listing, own_store.as_deref(), anchor, roots)
     }
 
     /// The place to run Git in the nested repository at `root`, and where
@@ -444,43 +459,107 @@ impl Git {
     }
 
     /// What `verify` needs to know of the repository at `place`, whose
-    /// working tree differs from its index in `uncommitted`: the commit HEAD
-    /// names, and the paths that differ from that commit.
+    /// working tree differs from its index in `uncommitted`, with the `roots`
+    /// of nested repositories seen on the way to it: the commit HEAD names,
+    /// the paths that differ from that commit, and the object each path held
+    /// in it. Every query names the commit, resolved once, never `HEAD`, so
+    /// that the objects belong to the commit the stamp names.
     fn head_facts(
         &self,
         place: &Place,
         uncommitted: BTreeSet<Vec<u8>>,
+        roots: BTreeSet<Vec<u8>>,
     ) -> Result<HeadFacts, Unavailable> {
         let Some(commit) = self.commit(place, "HEAD")? else {
             return Ok(HeadFacts {
                 commit: None,
                 changed: uncommitted,
+                root: place.root.clone(),
+                roots,
+                objects: BTreeMap::new(),
             });
         };
         let staged = self.changed_in_index(place, &commit)?;
+        let objects = self.objects(place, &commit)?;
         Ok(HeadFacts {
             commit: Some(commit),
             changed: staged.into_iter().chain(uncommitted).collect(),
+            root: place.root.clone(),
+            roots,
+            objects,
         })
     }
 
+    /// The object each path held in `commit` of the repository at `place`:
+    /// every file, folder, and nested repository below the project root,
+    /// and the repository's own root tree when it is nested. Git lists the
+    /// tree with the commit named after all options and no path, so nothing
+    /// from an element file reaches its command line.
+    fn objects(
+        &self,
+        place: &Place,
+        commit: &CommitId,
+    ) -> Result<BTreeMap<Vec<u8>, ObjectId>, Unavailable> {
+        let output = self.success(place, &["ls-tree", "-r", "-t", "-z", commit.as_str()])?;
+        let listed = tree_entries(&output)?
+            .into_iter()
+            .map(|(path, object)| Ok((place.path(path)?, object)));
+        let root = place
+            .root
+            .iter()
+            .map(|root| Ok((root.clone(), self.root_tree(place, commit)?)));
+        listed.chain(root).collect()
+    }
+
+    /// The tree of `commit` in the repository at `place`; anything but one
+    /// object ID fails.
+    fn root_tree(&self, place: &Place, commit: &CommitId) -> Result<ObjectId, Unavailable> {
+        let output = self.success(
+            place,
+            &[
+                "rev-parse",
+                "--verify",
+                "--quiet",
+                &format!("{commit}^{{tree}}"),
+            ],
+        )?;
+        output
+            .strip_suffix(b"\n")
+            .and_then(|id| String::from_utf8(id.to_vec()).ok())
+            .and_then(|id| ObjectId::try_from(id).ok())
+            .ok_or(Unavailable::GitFailed)
+    }
+
     /// The facts of the repository at `place` from its `listing`, with what
-    /// each of `stamps` tells there.
+    /// each of `stamps` tells there, and its content at HEAD when a stamp
+    /// that recorded content names a commit that tells nothing. `stamps`
+    /// maps each commit to whether a stamp naming it recorded content.
     fn repository_facts(
         &self,
         place: &Place,
         listing: Listing,
-        stamps: &BTreeSet<&CommitId>,
+        stamps: &BTreeMap<&CommitId, bool>,
     ) -> Result<RepositoryFacts, Unavailable> {
         let head = self.commit(place, "HEAD")?;
         let since = stamps
-            .iter()
+            .keys()
             .map(|stamp| Ok(((*stamp).clone(), self.since(place, stamp, head.as_ref())?)))
             .collect::<Result<BTreeMap<_, _>, Unavailable>>()?;
+        let needed = stamps
+            .iter()
+            .any(|(stamp, recorded)| *recorded && since.get(*stamp) == Some(&Since::Unknown));
+        let fallback = match head.filter(|_| needed) {
+            Some(head) => Some(Fallback {
+                objects: self.objects(place, &head)?,
+                staged: self.changed_in_index(place, &head)?,
+            }),
+            None => None,
+        };
         Ok(RepositoryFacts {
             known: listing.known,
             uncommitted: listing.uncommitted,
             since,
+            fallback,
         })
     }
 
@@ -625,20 +704,24 @@ fn wanted<'a>(
 
 /// The stamps of the elements whose repository is the one at `root`, or
 /// the project's for `None`: their anchor lies in it, and in none of the
-/// repositories `nested` below it.
+/// repositories `nested` below it. Each commit maps to whether a stamp
+/// naming it recorded content.
 fn stamps<'a>(
     root: Option<&[u8]>,
     nested: &BTreeMap<Vec<u8>, RepositoryFacts>,
     elements: &[AnchorAndStamp<'a>],
-) -> BTreeSet<&'a CommitId> {
+) -> BTreeMap<&'a CommitId, bool> {
     elements
         .iter()
         .filter(|element| {
             root.is_none_or(|root| element.anchor.is_some_and(|anchor| anchor.lies_in(root)))
                 && repository_root(nested.keys(), element.anchor).is_none()
         })
-        .filter_map(|element| element.stamp)
-        .collect()
+        .filter_map(|element| element.stamp.map(|stamp| (stamp, element.recorded)))
+        .fold(BTreeMap::new(), |mut stamps, (stamp, recorded)| {
+            *stamps.entry(stamp).or_insert(false) |= recorded;
+            stamps
+        })
 }
 
 /// The settings for Git in a nested repository below `ceiling`: Git looks
@@ -765,6 +848,66 @@ fn staged_entry(record: &[u8]) -> Result<(bool, &[u8]), Unavailable> {
         }
         _ => Err(Unavailable::GitFailed),
     }
+}
+
+/// The entries `git ls-tree -r -t -z` prints: each path relative to where
+/// Git ran with its object, without the folders that enclose that place,
+/// `./` and a chain of `../`. A mode that does not fit its type, an object
+/// that is not a full object ID, an empty path, a path with an empty, `.`,
+/// `..`, or `.git` segment, or a path printed twice is broken output, so
+/// that a crafted tree cannot choose which of two objects counts.
+fn tree_entries(output: &[u8]) -> Result<BTreeMap<&[u8], ObjectId>, Unavailable> {
+    let entries = records(output)?
+        .into_iter()
+        .filter_map(|record| tree_entry(record).transpose())
+        .collect::<Result<Vec<_>, Unavailable>>()?;
+    let count = entries.len();
+    let entries: BTreeMap<&[u8], ObjectId> = entries.into_iter().collect();
+    if entries.len() == count {
+        Ok(entries)
+    } else {
+        Err(Unavailable::GitFailed)
+    }
+}
+
+/// One entry of `git ls-tree`: `<mode> <type> <object>`, a tab, and the
+/// path; `None` for a folder that encloses the place Git ran in.
+fn tree_entry(record: &[u8]) -> Result<Option<(&[u8], ObjectId)>, Unavailable> {
+    let parts: Vec<&[u8]> = record.splitn(2, |byte| *byte == b'\t').collect();
+    let [fields, path] = parts.as_slice() else {
+        return Err(Unavailable::GitFailed);
+    };
+    let fields: Vec<&[u8]> = fields.split(|byte| *byte == b' ').collect();
+    let [mode, kind, object] = fields.as_slice() else {
+        return Err(Unavailable::GitFailed);
+    };
+    let fits = matches!(
+        (*mode, *kind),
+        (b"040000", b"tree")
+            | (b"160000", b"commit")
+            | (b"100644" | b"100755" | b"120000", b"blob")
+    );
+    let object = String::from_utf8(object.to_vec())
+        .ok()
+        .and_then(|object| ObjectId::try_from(object).ok());
+    match object {
+        Some(_) if fits && *kind == b"tree" && encloses(path) => Ok(None),
+        Some(object) if fits && path.split(|byte| *byte == b'/').all(is_plain_segment) => {
+            Ok(Some((path, object)))
+        }
+        _ => Err(Unavailable::GitFailed),
+    }
+}
+
+/// Whether `path` names a folder that encloses the place Git ran in, as
+/// `ls-tree` prints it below the top of the work tree: `./`, or one or more
+/// `../`, optionally followed by `./`.
+fn encloses(path: &[u8]) -> bool {
+    let mut rest = path;
+    while let Some(after) = rest.strip_prefix(b"../") {
+        rest = after;
+    }
+    (rest.is_empty() && rest.len() < path.len()) || rest == b"./"
 }
 
 /// Whether `mode` is six octal digits.
