@@ -505,7 +505,8 @@ When every task is committed:
    Task step 4, and commit both:
    `docs(<scope>): mark plan complete`. No Reviewer sees
    this commit, so under `abyme/` it changes nothing but
-   the stamps' `verified` and `verified_by` lines. An
+   the stamps' lines: `verified`, `verified_by`, and
+   `verified_content` with its entries. An
    element that needs more than a stamp was missed by the
    last task: add a task slice for it, as in step 1, before
    marking the plan complete.
