@@ -1,5 +1,5 @@
 **Repository:** root
-**Status:** NotStarted
+**Status:** InProgress
 **Created:** 2026-11-04
 
 ## Goal
@@ -26,7 +26,7 @@ relation targets' anchors is unchanged, and is flagged when it changed.
 
 ## Steps
 
-- [ ] Review flags resolve a stamp's baseline and a relation target's path in one place each
+- [x] Review flags resolve a stamp's baseline and a relation target's path in one place each
 - [ ] Element files read lists of flat mappings through one reader
 - [ ] Element files carry the content a stamp vouches for
 - [ ] `verify` records the content, and review falls back to it after a rewrite
@@ -41,13 +41,13 @@ target. Task 4 changes both rules, so each moves to one place first. Behavior is
 
 Review path: Reviewer-only
 
-- [ ] The baseline of an element's stamp, what changed since its commit or that the commit is
+- [x] The baseline of an element's stamp, what changed since its commit or that the commit is
       unusable, is resolved once per element and used by both the own flags and the flags relations
       pass on.
-- [ ] One function decides which path, if any, stands for a relation target in the source's
+- [x] One function decides which path, if any, stands for a relation target in the source's
       repository: the target's anchor in the same repository, the root of a nested repository the
       anchor lies in, or none.
-- [ ] The tests in `crates/abyme-core/src/review/tests.rs` and `crates/abyme-core/tests/review.rs`
+- [x] The tests in `crates/abyme-core/src/review/tests.rs` and `crates/abyme-core/tests/review.rs`
       pass with their assertions unchanged.
 
 ### Task 2: Element files read lists of flat mappings through one reader

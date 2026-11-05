@@ -85,7 +85,8 @@ pub struct GitFacts {
 }
 
 /// What Git reports about the files of one repository. Paths are bytes,
-/// relative to the project root, and lie inside the project.
+/// relative to the project root, and lie below the repository's root; a
+/// repository nested in it shows only as its root.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct RepositoryFacts {
     /// The paths that Git tracks or lists as untracked and not ignored.
@@ -224,9 +225,11 @@ pub fn review(snapshot: &Snapshot, facts: &GitFacts) -> Review {
             .iter()
             .filter_map(|(id, element)| {
                 let root = repository_root(facts.nested.keys(), element.anchor());
-                let flags: Vec<Flag> = own_flags(element, facts.repository(root))
+                let repository = facts.repository(root);
+                let baseline = baseline(element, repository);
+                let flags: Vec<Flag> = own_flags(element, baseline, repository)
                     .into_iter()
-                    .chain(passed_on(element, root, snapshot, facts))
+                    .chain(passed_on(element, baseline, root, snapshot, facts))
                     .collect();
                 (!flags.is_empty()).then(|| (id.clone(), flags))
             })
@@ -234,18 +237,40 @@ pub fn review(snapshot: &Snapshot, facts: &GitFacts) -> Review {
     )
 }
 
+/// What an element's stamp tells about the time since it, in the element's
+/// repository.
+#[derive(Debug, Clone, Copy)]
+enum Baseline<'a> {
+    /// The element has no stamp.
+    Unstamped,
+    /// The paths in which the index differs from the stamp's commit.
+    Since(&'a BTreeSet<Vec<u8>>),
+    /// The repository does not know the stamp's commit, it is no ancestor
+    /// of HEAD there, or the facts do not name it.
+    Unusable,
+}
+
+/// The baseline of `element`'s stamp, from the facts of its repository.
+fn baseline<'a>(element: &Element, facts: &'a RepositoryFacts) -> Baseline<'a> {
+    element.verified().map_or(Baseline::Unstamped, |stamp| {
+        match facts.since.get(&stamp.commit) {
+            Some(Since::Changed(paths)) => Baseline::Since(paths),
+            Some(Since::Unknown) | None => Baseline::Unusable,
+        }
+    })
+}
+
 /// The flags an element has because of what lies under its own anchor and
-/// of its own stamp, from the facts of its repository.
-fn own_flags(element: &Element, facts: &RepositoryFacts) -> Vec<Flag> {
-    let stamp = match (element.verified(), element.anchor()) {
-        (Some(stamp), anchor) => match facts.since.get(&stamp.commit) {
-            Some(Since::Changed(paths)) => {
-                anchor.and_then(|anchor| changed_under(anchor, paths, &facts.uncommitted))
-            }
-            Some(Since::Unknown) | None => Some(Flag::UnknownStamp),
-        },
-        (None, Some(_)) => Some(Flag::NeverVerified),
-        (None, None) => None,
+/// of its own stamp, whose baseline is `baseline`, from the facts of its
+/// repository.
+fn own_flags(element: &Element, baseline: Baseline<'_>, facts: &RepositoryFacts) -> Vec<Flag> {
+    let stamp = match (baseline, element.anchor()) {
+        (Baseline::Since(paths), anchor) => {
+            anchor.and_then(|anchor| changed_under(anchor, paths, &facts.uncommitted))
+        }
+        (Baseline::Unusable, _) => Some(Flag::UnknownStamp),
+        (Baseline::Unstamped, Some(_)) => Some(Flag::NeverVerified),
+        (Baseline::Unstamped, None) => None,
     };
     let missing = element
         .anchor()
@@ -306,41 +331,83 @@ pub fn stamped(
     Ok((element, commit))
 }
 
+/// The path by which a change of what a relation target's anchor stands for
+/// shows in the source's repository.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StandingPath<'a> {
+    /// The target belongs to the source's repository: every path under its
+    /// anchor.
+    Anchor(&'a Anchor),
+    /// The target lies in a repository nested in the source's: the root of
+    /// that repository, which the source's repository sees as one path.
+    NestedRoot(&'a [u8]),
+}
+
+impl StandingPath<'_> {
+    /// Whether a change of `path` in the source's repository is a change
+    /// of what the target stands for.
+    fn shows_in(self, path: &[u8]) -> bool {
+        match self {
+            Self::Anchor(anchor) => anchor.covers(path),
+            Self::NestedRoot(root) => path == root,
+        }
+    }
+}
+
+/// The path that stands for a relation target with `anchor` in the
+/// repository with the root `root`, the source's, among the repositories
+/// `nested` in the project: the anchor itself when the target belongs to
+/// that repository; otherwise, when the anchor lies in that repository, the
+/// root of the outermost repository nested in it that the anchor lies in;
+/// and `None` for a target outside the source's repository.
+fn standing_path<'a>(
+    anchor: &'a Anchor,
+    root: Option<&[u8]>,
+    nested: &'a BTreeMap<Vec<u8>, RepositoryFacts>,
+) -> Option<StandingPath<'a>> {
+    if repository_root(nested.keys(), Some(anchor)) == root {
+        return Some(StandingPath::Anchor(anchor));
+    }
+    if root.is_some_and(|root| !anchor.lies_in(root)) {
+        return None;
+    }
+    let depth = root.map_or(0, <[u8]>::len);
+    nested
+        .keys()
+        .filter(|inner| inner.len() > depth && anchor.lies_in(inner))
+        .min_by_key(|inner| inner.len())
+        .map(|inner| StandingPath::NestedRoot(inner))
+}
+
 /// The flags the element's relations pass on, one hop: for each relation
 /// whose kind passes something on, whether what the target's anchor stands
-/// for may have changed since this element's own stamp, measured in this
-/// element's repository, the one with the root `root`. A changed path
-/// counts when it lies under the target's anchor and the target belongs to
-/// the same repository, or when it is the root of a nested repository the
-/// target's anchor lies in. Only the target's anchor counts, never the
-/// target's flags, so nothing travels further.
+/// for may have changed since this element's own stamp, whose baseline is
+/// `baseline`, measured in this element's repository, the one with the
+/// root `root`, by the path that stands for the target there. Only the
+/// target's anchor counts, never the target's flags, so nothing travels
+/// further.
 fn passed_on(
     element: &Element,
+    baseline: Baseline<'_>,
     root: Option<&[u8]>,
     snapshot: &Snapshot,
     facts: &GitFacts,
 ) -> Vec<Flag> {
-    let repository = facts.repository(root);
-    let Some(Since::Changed(since)) = element
-        .verified()
-        .and_then(|stamp| repository.since.get(&stamp.commit))
-    else {
+    let Baseline::Since(since) = baseline else {
         return Vec::new();
     };
+    let repository = facts.repository(root);
     element
         .relations()
         .keys()
         .filter_map(|(kind, target)| {
             let priority = passes_on(*kind)?;
             let anchor = snapshot.elements.get(target)?.anchor()?;
-            let same_repository = repository_root(facts.nested.keys(), Some(anchor)) == root;
+            let standing = standing_path(anchor, root, &facts.nested)?;
             since
                 .iter()
                 .chain(&repository.uncommitted)
-                .any(|path| {
-                    (same_repository && anchor.covers(path))
-                        || (facts.nested.contains_key(path) && anchor.lies_in(path))
-                })
+                .any(|path| standing.shows_in(path))
                 .then(|| Flag::Upstream {
                     kind: *kind,
                     target: target.clone(),
