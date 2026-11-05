@@ -395,9 +395,11 @@ both paths.
    the fixes land in this last commit. Apply any message
    edits the user makes.
 8. **Commit.** Update the plan: mark all checkboxes for
-   the task. Add every finding the task leaves open — an
-   unfixed Low finding, a cleanup wish — to `.ai/backlog.md`
-   and stage that file too.
+   the task. Add every finding the task leaves open — a
+   pre-existing defect, a cleanup wish or other finding that
+   is no defect, an introduced defect the user accepted
+   (`introduced-defects.md`) — to `.ai/backlog.md` and stage
+   that file too.
    Stage the Reviewer's exact file list, which includes
    the element files step 4 stamped or updated, and the
    plan file
