@@ -374,3 +374,103 @@ button.element-pin {
 .board-surface-placing .react-flow__node {
   cursor: crosshair;
 }
+
+/* A note is a speech bubble: its tail leaves the side that `data-tail` names
+   (tail.ts), outside its border, so it covers none of its text, and follows the
+   note as its text grows. Two triangles draw it: the colour the note's border
+   has now, also when it is selected or highlighted, and over it the note's,
+   which also hides the border where the tail meets it. Clicks
+   pass through it to what lies below. */
+.element-note {
+  position: relative;
+}
+
+.element-note::before,
+.element-note::after {
+  position: absolute;
+  width: 0;
+  height: 0;
+  border: solid transparent;
+  content: "";
+  pointer-events: none;
+}
+
+.element-note::before {
+  border-width: 9px;
+}
+
+.element-note::after {
+  border-width: 8px;
+}
+
+[data-tail="bottom"] > .element-note::before,
+[data-tail="bottom"] > .element-note::after {
+  top: 100%;
+  left: 50%;
+}
+
+[data-tail="bottom"] > .element-note::before {
+  margin-left: -9px;
+  border-bottom-width: 0;
+  border-top-color: inherit;
+}
+
+[data-tail="bottom"] > .element-note::after {
+  margin-left: -8px;
+  border-bottom-width: 0;
+  border-top-color: #fff4b8;
+}
+
+[data-tail="top"] > .element-note::before,
+[data-tail="top"] > .element-note::after {
+  bottom: 100%;
+  left: 50%;
+}
+
+[data-tail="top"] > .element-note::before {
+  margin-left: -9px;
+  border-top-width: 0;
+  border-bottom-color: inherit;
+}
+
+[data-tail="top"] > .element-note::after {
+  margin-left: -8px;
+  border-top-width: 0;
+  border-bottom-color: #fff4b8;
+}
+
+[data-tail="left"] > .element-note::before,
+[data-tail="left"] > .element-note::after {
+  top: 50%;
+  right: 100%;
+}
+
+[data-tail="left"] > .element-note::before {
+  margin-top: -9px;
+  border-left-width: 0;
+  border-right-color: inherit;
+}
+
+[data-tail="left"] > .element-note::after {
+  margin-top: -8px;
+  border-left-width: 0;
+  border-right-color: #fff4b8;
+}
+
+[data-tail="right"] > .element-note::before,
+[data-tail="right"] > .element-note::after {
+  top: 50%;
+  left: 100%;
+}
+
+[data-tail="right"] > .element-note::before {
+  margin-top: -9px;
+  border-right-width: 0;
+  border-left-color: inherit;
+}
+
+[data-tail="right"] > .element-note::after {
+  margin-top: -8px;
+  border-right-width: 0;
+  border-left-color: #fff4b8;
+}

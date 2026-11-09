@@ -88,3 +88,6 @@ share a parent line with one sub-item each.
 ## Open decisions
 
 - Remaining MVP plan: the rlsp replay (MVP roadmap the user approved; plan D's Non-Goals).
+- Notes plan after package B, decided by the user at the review of package B's last task:
+  - A note shows only its speech-bubble icon once its text field is closed, since its full text covers what lies below; how the text opens again is open: `crates/abyme-canvas/ui/src/NoteContent.tsx`, `ElementBox.tsx` (user feedback, canvas arranging and notes Task 6).
+  - Every move of a note, a drag's release or each arrow-key press, whose centre lands on another box hangs it there and adds a `concerns` relation while the old one stays, so arrows pile up, between close boxes within a few pixels; an attached note also shows an arrow beside the tail to the same box: drop rule in `crates/abyme-canvas/ui/src/nodes.ts`, `attach_note` in `crates/abyme-core/src/apply.rs` (user's hand test, canvas arranging and notes Task 6).

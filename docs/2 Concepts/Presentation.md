@@ -28,7 +28,7 @@ Relations appear as arrows. Type packs define default presentations per type, e.
 
 ## Sticky Notes
 
-A sticky note is a native element of the type `note`, by which the canvas and the AI recognize it, so it looks the same on every board. The canvas shows its whole text in one fixed color.
+A sticky note is a native element of the type `note`, by which the canvas and the AI recognize it, so it looks the same on every board. The canvas shows it as a speech bubble with its whole text in one fixed color: an attached note points its tail toward its box, a free one points down.
 
 **Attaching:** Dragging a note onto a box attaches it there, and so does creating it on a box. Two things happen:
 

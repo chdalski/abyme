@@ -4,10 +4,10 @@ type: "docs/note"
 name: "Hexagonal Architecture"
 summary: "The core with ports and adapters, its API, the crates and runtime, and the security baseline"
 anchor: "docs/5 Architecture/Hexagonal Architecture.md"
-verified: "2e1ec0b8bc6d2d42088ac7020c2b39a01448063e"
+verified: "37ca96b88c99e4e19fd9ee8ee4bcbca491c54460"
 verified_by: "ai"
 verified_content:
-  - {path: "crates/abyme-canvas", object: "1fce14d288a143c7adedfd55f47499006e1830dd"}
+  - {path: "crates/abyme-canvas", object: "d72312507ca8b25b374918679c4458751ce944ae"}
   - {path: "crates/abyme-core", object: "0a469e1ed2190def5e59b153a1e2f8860ddf2570"}
   - {path: "crates/abyme-core/src/project", object: "fd281295d7e1ee21a7271f37e80f5167e2a75657"}
   - {path: "crates/abyme-index", object: "d66ee4eb756a692cd1fcb85506f1081b42df7b79"}

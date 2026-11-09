@@ -1891,6 +1891,68 @@ describe("arrows in a laid-out canvas", () => {
   });
 });
 
+describe("a note's tail", () => {
+  /** The side the tail of `element`'s note leaves from, or null on a box that is no note. */
+  const tailOf = (container: HTMLElement, element: string) =>
+    box(container, element)
+      .querySelector(".element-box")
+      ?.getAttribute("data-tail") ?? null;
+  const note = (element: string, x: number, y: number, attachedTo: string) =>
+    placedBox(element, {
+      x,
+      y,
+      shown: { kind: "note", name: element, body: "" },
+      attached_to: attachedTo,
+    });
+
+  it("points to the box the note hangs on", () => {
+    // `plain` lies at 300, 200 and is 180 by 90, as every note.
+    const { container } = render(
+      canvasOf(
+        boardView({
+          placements: [
+            placedElement("plain", { x: 300, y: 200 }),
+            note("left", 0, 210, "plain"),
+            note("right", 600, 190, "plain"),
+            note("above", 320, 0, "plain"),
+            note("below", 280, 400, "plain"),
+          ],
+        }),
+        () => Promise.resolve(),
+      ),
+    );
+
+    expect(
+      ["left", "right", "above", "below"].map((id) => tailOf(container, id)),
+    ).toEqual(["right", "left", "bottom", "top"]);
+    expect(tailOf(container, "plain")).toBeNull();
+  });
+
+  it("points down on a free note, on a new one, and on one whose box is gone", () => {
+    const { container } = render(
+      canvasOf(
+        boardView({
+          placements: [
+            placedElement("plain", { x: 300, y: 200 }),
+            placedBox("free", {
+              x: 0,
+              y: 200,
+              shown: { kind: "note", name: "Free", body: "" },
+            }),
+            note("orphan", 600, 200, "gone"),
+          ],
+        }),
+        () => Promise.resolve(),
+      ),
+    );
+    fireEvent.keyDown(window, { key: "n" });
+
+    expect(
+      ["free", "orphan", "+note-1"].map((id) => tailOf(container, id)),
+    ).toEqual(["bottom", "bottom", "bottom"]);
+  });
+});
+
 describe("moving a note with the arrow keys", () => {
   it("takes it off its box when its centre leaves the box, as a drag does", () => {
     const view = boardView({

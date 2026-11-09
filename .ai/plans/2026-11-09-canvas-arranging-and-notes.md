@@ -29,7 +29,7 @@ highlighting a selection keeps the notes on a selected box undimmed.
 - [x] One function finds the box a point lies on
 - [x] A new note created on a box hangs on it
 - [x] A note-mode button places a note where the user clicks
-- [ ] Notes look like speech bubbles pointing to their box
+- [x] Notes look like speech bubbles pointing to their box
 
 ## Tasks
 
@@ -134,13 +134,13 @@ note being created, or a note whose box is gone, the bottom.
 
 Review path: Security-Hybrid
 
-- [ ] A note hanging on a box shows its tail on the side the rule above names; every other note
+- [x] A note hanging on a box shows its tail on the side the rule above names; every other note
       shows it at the bottom.
-- [ ] The tail takes no clicks and covers no text of the note.
-- [ ] Unit tests cover a box whose centre lies above, right of, below, and left of the note's,
+- [x] The tail takes no clicks and covers no text of the note.
+- [x] Unit tests cover a box whose centre lies above, right of, below, and left of the note's,
       overlapping rects, a diagonal tie, and equal centres; tests through `BoardCanvas` show the
       tail of an attached and of a free note.
-- [ ] `docs/5 Architecture/Canvas.md` and `docs/2 Concepts/Presentation.md` describe the look.
+- [x] `docs/5 Architecture/Canvas.md` and `docs/2 Concepts/Presentation.md` describe the look.
 
 ## Decisions
 

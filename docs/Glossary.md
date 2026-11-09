@@ -34,6 +34,7 @@ The docs, the UI, and the code use these terms alike. The type names are in [[Da
 | [[Presentation#Sticky Notes\|Sticky note]] | native element of the type `note`, free or attached |
 | [[Presentation#Sticky Notes\|Attach]] | hang a note on an element that is no note, so it moves along with it on that board; layout, not content |
 | [[Canvas#Editing\|Note mode]] | state of the canvas that its toolbar's speech-bubble button switches on: the next primary press on the board places a sticky note there and ends it |
+| [[Canvas#Projecting a Board\|Tail]] | the point of a sticky note's speech bubble: toward the box the note hangs on, or down on a free note |
 | [[Data Model\|Placement]] | where and how an element lies on a board: rectangle, presentation, home or reference |
 | [[Placement and Layout#Layered Layout\|Auto-layout]] | the operation `layout_board`: arranges a board as a layered diagram from its elements and relations, and leaves pinned boxes where they are |
 | [[Placement and Layout#Rules\|Pin]] | marks a placement a person made by hand: moving it needs `pinned` in the request, and a layout leaves it where it is; a convention, set by a move in the canvas and released by a click on the box's marker |

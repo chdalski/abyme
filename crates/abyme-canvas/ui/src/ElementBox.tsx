@@ -2,6 +2,8 @@ import {
   Handle,
   type NodeProps,
   Position,
+  type Rect,
+  useInternalNode,
   type XYPosition,
 } from "@xyflow/react";
 import { createContext, useContext } from "react";
@@ -11,6 +13,7 @@ import type { Shown } from "./bindings";
 import { type BoxRole, type Focus, NO_FOCUS, boxRoleOf } from "./edges";
 import type { ElementData, ElementNode } from "./nodes";
 import { NoteContent } from "./NoteContent";
+import { type TailSide, tailSide } from "./tail";
 
 /** Opens a board: how a box reaches the app's choice of the open board. */
 export const OpenBoard = createContext<(board: string) => void>(() => {});
@@ -108,21 +111,56 @@ function PinMarker({
 }
 
 /**
+ * The side of a note's tail, from where the note and the box it hangs on lie
+ * now, also while one of them is dragged; a note that hangs on no box points
+ * down.
+ */
+function useTailSide(note: Rect, hangsOn: string | undefined): TailSide {
+  // An ID no node has, for a note that hangs on nothing: hooks run on every render.
+  const box = useInternalNode<ElementNode>(hangsOn ?? "");
+  return tailSide(
+    note,
+    box === undefined
+      ? undefined
+      : {
+          ...box.internals.positionAbsolute,
+          width: box.width ?? Number.NaN,
+          height: box.height ?? Number.NaN,
+        },
+  );
+}
+
+/**
  * The box of an element on the canvas. Its handles are hidden and connect
  * nothing: React Flow measures them, and without them it forgets where arrows
  * start and end after it measures the box. A release of its pin goes by where
  * the box lies now, so it follows a drag still on its way to the board file.
  * Its parts share one wrapper that lays out nothing of its own and carries the
- * box's role under the selection.
+ * box's role under the selection and, on a note, the side of its tail.
  */
 export function ElementBox({
   data,
+  parentId,
+  width,
+  height,
   positionAbsoluteX,
   positionAbsoluteY,
 }: NodeProps<ElementNode>) {
   const role = boxRoleOf(useContext(Highlight), data.element, data.editing);
+  const tail = useTailSide(
+    {
+      x: positionAbsoluteX,
+      y: positionAbsoluteY,
+      width: width ?? Number.NaN,
+      height: height ?? Number.NaN,
+    },
+    parentId,
+  );
   return (
-    <div className={BOX_CLASSES[role]}>
+    <div
+      className={BOX_CLASSES[role]}
+      data-tail={data.shown.kind === "note" ? tail : undefined}
+    >
       <Handle
         type="target"
         position={Position.Top}
