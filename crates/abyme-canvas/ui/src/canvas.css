@@ -37,6 +37,20 @@ main > nav button[aria-current="page"] {
   background: #e3e8f2;
 }
 
+/* A row of the tree: the toggle of its branch, or a gap as wide, then the
+   button that opens the board. */
+main > nav li {
+  display: flex;
+  align-items: baseline;
+}
+
+main > nav .branch-toggle {
+  flex: none;
+  width: 1.25rem;
+  padding: 0;
+  text-align: center;
+}
+
 /* A title or a chain from a file can be any length, and must leave the canvas
    its room. */
 .breadcrumb {

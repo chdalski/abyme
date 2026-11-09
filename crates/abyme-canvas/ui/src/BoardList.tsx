@@ -1,4 +1,10 @@
+import { useState } from "react";
+
+import { pathTo, visibleRows } from "./boardTree";
 import type { BoardsState } from "./boards";
+
+/** A branch the user opened or closed, and when, by the count of opened boards. */
+type Toggle = { readonly open: boolean; readonly at: number };
 
 /**
  * How many levels the list indents at most: a deeper board, which a long chain
@@ -13,8 +19,12 @@ function indentOf(depth: number): string {
 
 /**
  * The project's boards as a tree, as `overview` lists them: each board below
- * the board it lies inside, indented by its depth; a click opens one. Titles
- * and messages come from the repository and are rendered as text only.
+ * the board it lies inside, indented by its depth; a click opens one. A board
+ * with boards below it has a toggle for its branch. Branches are closed but
+ * those on the way to the open board, and opening a board opens its way again,
+ * also a branch the user closed; what the user opened or closed stays so for
+ * the session, also when the list loads again. Titles and messages come from
+ * the repository and are rendered as text only.
  */
 export function BoardList({
   state,
@@ -25,6 +35,17 @@ export function BoardList({
   open: string | null;
   onOpen: (board: string) => void;
 }) {
+  // Kept above the list's states, so a failed reload keeps the user's toggles.
+  const [toggles, setToggles] = useState<ReadonlyMap<string, Toggle>>(
+    () => new Map(),
+  );
+  // Counts the boards opened, so that a toggle from before an opening gives
+  // way to the way to the open board.
+  const [opened, setOpened] = useState({ board: open, count: 0 });
+  if (opened.board !== open) {
+    setOpened({ board: open, count: opened.count + 1 });
+  }
+
   switch (state.kind) {
     case "loading":
       return <p>Loading the boards…</p>;
@@ -34,23 +55,55 @@ export function BoardList({
       if (state.boards.length === 0) {
         return <p>This project has no boards yet.</p>;
       }
-      return (
-        <ul aria-label="Boards">
-          {state.boards.map((board) => (
-            <li
-              key={board.id}
-              style={{ paddingInlineStart: indentOf(board.depth) }}
-            >
-              <button
-                type="button"
-                aria-current={board.id === open ? "page" : undefined}
-                onClick={() => onOpen(board.id)}
+      {
+        const onTheWay = pathTo(state.boards, open);
+        const isOpen = (board: string) => {
+          const toggle = toggles.get(board);
+          if (onTheWay.has(board) && (toggle?.at ?? -1) < opened.count) {
+            return true;
+          }
+          return toggle?.open ?? false;
+        };
+        const toggle = (board: string) => {
+          setToggles((current) =>
+            new Map(current).set(board, {
+              open: !isOpen(board),
+              at: opened.count,
+            }),
+          );
+        };
+        return (
+          <ul aria-label="Boards">
+            {visibleRows(state.boards, isOpen).map(({ row, inner }, index) => (
+              <li
+                // A list from broken files can name a board twice.
+                key={`${index}:${row.id}`}
+                style={{ paddingInlineStart: indentOf(row.depth) }}
               >
-                {board.title}
-              </button>
-            </li>
-          ))}
-        </ul>
-      );
+                {inner ? (
+                  <button
+                    type="button"
+                    className="branch-toggle"
+                    aria-expanded={isOpen(row.id)}
+                    aria-label={isOpen(row.id) ? "Close branch" : "Open branch"}
+                    onClick={() => toggle(row.id)}
+                  >
+                    {isOpen(row.id) ? "▾" : "▸"}
+                  </button>
+                ) : (
+                  <span className="branch-toggle" aria-hidden="true" />
+                )}
+                <button
+                  type="button"
+                  aria-current={row.id === open ? "page" : undefined}
+                  onClick={() => onOpen(row.id)}
+                >
+                  {row.title}
+                </button>
+              </li>
+            ))}
+          </ul>
+        );
+      }
   }
 }

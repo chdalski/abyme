@@ -66,6 +66,10 @@ share a parent line with one sub-item each.
 - Three reads in the apply tests take a board's placements through `before.boards[&board_id(..)].placements`, the read-only twin of `placements_on`; a second helper for three reads did not pay: `crates/abyme-core/src/apply/tests/` (`layout.rs`, `hierarchy.rs`, `placement.rs`) (Reviewer, consolidate tests Task 3, Low).
 - Three imports of the server test root are used by one module each, `TcpListener` by `environment.rs` and `ErrorCode` and `JsonObject` by `protocol.rs`; they could move into those modules: `crates/abyme-mcp/tests/server/main.rs` (Reviewer, consolidate tests Task 7, Low).
 - The two loops that fill `ends` in `focusOf` could be one declarative `Map` whose later entries win; about the same size: `crates/abyme-canvas/ui/src/edges.ts` (Reviewer, canvas usability Task 3, Low).
+- The board list's row keys take the index of the visible row, so a toggle remounts every row after the branch; the index in the full list would stay stable: `crates/abyme-canvas/ui/src/BoardList.tsx` with `visibleRows` in `boardTree.ts` (Reviewer, canvas usability Task 6, Low).
+- `hasInner`'s check `index + 1 < rows.length` is redundant, since a missing row counts as level 0: `crates/abyme-canvas/ui/src/boardTree.ts` (Reviewer, canvas usability Task 6, Low).
+- The bare block after the `if` in the `loaded` case could be a `case "loaded": { … }` block: `crates/abyme-canvas/ui/src/BoardList.tsx` (Reviewer, canvas usability Task 6, Low).
+- Two assertions in "gives a toggle only to a board with boards below it" check nothing, since `getByRole` throws already: `crates/abyme-canvas/ui/src/App.test.tsx` (Reviewer, canvas usability Task 6, Low).
 
 ## Documentation
 

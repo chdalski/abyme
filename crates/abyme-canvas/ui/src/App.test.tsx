@@ -1187,11 +1187,13 @@ describe("App", () => {
       />,
     );
 
+    fireEvent.click(await screen.findByRole("button", { name: "Open branch" }));
+
     const items = await screen.findAllByRole("listitem");
     expect(
       items.map((item) => [item.textContent, item.style.paddingInlineStart]),
     ).toEqual([
-      ["Context", "0rem"],
+      ["▾Context", "0rem"],
       ["Containers", "1rem"],
       ["Docs", "0rem"],
     ]);
@@ -1568,6 +1570,9 @@ describe("App", () => {
     it("shows a title in the breadcrumb as text", async () => {
       const title = "<img src=x onerror=alert(1)>";
       render(<App client={nestedClient(title)} />);
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Open branch" }),
+      );
       fireEvent.click(await screen.findByRole("button", { name: "Inner" }));
 
       const breadcrumb = await screen.findByRole("navigation", {
@@ -1581,6 +1586,9 @@ describe("App", () => {
     it("shows the core's message for a board that has gone and keeps the list", async () => {
       const client = nestedClient();
       render(<App client={client} />);
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Open branch" }),
+      );
       fireEvent.click(await screen.findByRole("button", { name: "Inner" }));
       await screen.findByRole("heading", { name: "Inner" });
       delete client.views["outer"];
@@ -1594,5 +1602,277 @@ describe("App", () => {
       expect((await screen.findByRole("alert")).textContent).toContain("outer");
       expect(screen.getByRole("list", { name: "Boards" })).toBeDefined();
     });
+  });
+});
+
+describe("the board tree's branches", () => {
+  /**
+   * `context` > `containers` > `components`, and `docs` > `notes`; each board
+   * a view whose box owns the board below it, with the trail back.
+   */
+  function treeClient(
+    ids: { top: string; middle: string } = {
+      top: "context",
+      middle: "containers",
+    },
+    topTitle = "Context",
+  ): FakeClient {
+    const { top, middle } = ids;
+    const client = new FakeClient([
+      { id: top, title: topTitle, depth: 0 },
+      { id: middle, title: "Containers", depth: 1 },
+      { id: "components", title: "Components", depth: 2 },
+      { id: "docs", title: "Docs", depth: 0 },
+      { id: "notes", title: "Notes", depth: 1 },
+    ]);
+    const owning = (board: string, inner: string, title: string) =>
+      placedBox(`${board}-box`, { inner_boards: [{ id: inner, title }] });
+    client.views = {
+      [top]: boardView({
+        id: top,
+        title: topTitle,
+        placements: [owning(top, middle, "Containers")],
+      }),
+      [middle]: boardView({
+        id: middle,
+        title: "Containers",
+        placements: [owning(middle, "components", "Components")],
+        trail: [{ id: top, title: topTitle }],
+      }),
+      components: boardView({
+        id: "components",
+        title: "Components",
+        trail: [
+          { id: top, title: topTitle },
+          { id: middle, title: "Containers" },
+        ],
+      }),
+      docs: boardView({ id: "docs", title: "Docs" }),
+      notes: boardView({ id: "notes", title: "Notes" }),
+    };
+    return client;
+  }
+
+  /** The titles the list shows, top to bottom. */
+  function shownTitles(): (string | null | undefined)[] {
+    return within(screen.getByRole("list", { name: "Boards" }))
+      .getAllByRole("listitem")
+      .map((item) => within(item).getAllByRole("button").at(-1)?.textContent);
+  }
+
+  /** The toggle of the row of the board titled `title`. */
+  function toggleOf(title: string): HTMLElement {
+    const row = within(screen.getByRole("list", { name: "Boards" }))
+      .getByRole("button", { name: title })
+      .closest("li");
+    if (row === null) {
+      throw new Error(`no row for ${title}`);
+    }
+    return within(row).getByRole("button", { name: /branch$/ });
+  }
+
+  /** Opens the board titled `title` from the list. */
+  function openFromList(title: string) {
+    fireEvent.click(
+      within(screen.getByRole("list", { name: "Boards" })).getByRole("button", {
+        name: title,
+      }),
+    );
+  }
+
+  it("shows only the top-level boards when the canvas starts", async () => {
+    render(<App client={treeClient()} />);
+
+    await screen.findByRole("button", { name: "Context" });
+
+    expect(shownTitles()).toEqual(["Context", "Docs"]);
+    expect(toggleOf("Context").getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("gives a toggle only to a board with boards below it", async () => {
+    render(<App client={treeClient()} />);
+    await screen.findByRole("button", { name: "Context" });
+
+    fireEvent.click(toggleOf("Context"));
+
+    const containers = screen.getByRole("button", { name: "Containers" });
+    expect(toggleOf("Containers")).toBeDefined();
+    fireEvent.click(toggleOf("Containers"));
+    const components = screen
+      .getByRole("button", { name: "Components" })
+      .closest("li");
+    expect(containers).toBeDefined();
+    expect(
+      within(components as HTMLElement).queryByRole("button", {
+        name: /branch$/,
+      }),
+    ).toBeNull();
+  });
+
+  it("opens and closes a branch with its toggle, writing and opening nothing", async () => {
+    const client = treeClient();
+    render(<App client={client} />);
+    await screen.findByRole("button", { name: "Context" });
+
+    fireEvent.click(toggleOf("Context"));
+    expect(shownTitles()).toEqual(["Context", "Containers", "Docs"]);
+    expect(toggleOf("Context").getAttribute("aria-expanded")).toBe("true");
+    expect(toggleOf("Context").getAttribute("aria-label")).toBe("Close branch");
+
+    fireEvent.click(toggleOf("Context"));
+    expect(shownTitles()).toEqual(["Context", "Docs"]);
+
+    expect(client.openCalls).toEqual([]);
+    expect(client.applied).toEqual([]);
+    expect(
+      screen
+        .getByRole("list", { name: "Boards" })
+        .querySelector('[aria-current="page"]'),
+    ).toBeNull();
+  });
+
+  it("opens every branch on the way to a board opened from a box, also one the user closed", async () => {
+    render(<App client={treeClient()} />);
+    await screen.findByRole("button", { name: "Context" });
+    fireEvent.click(toggleOf("Context"));
+    openFromList("Containers");
+    await screen.findByRole("heading", { name: "Containers" });
+    fireEvent.click(toggleOf("Context"));
+    expect(shownTitles()).toEqual(["Context", "Docs"]);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "▸ Components" }),
+    );
+
+    await screen.findByRole("heading", { name: "Components" });
+    expect(shownTitles()).toEqual([
+      "Context",
+      "Containers",
+      "Components",
+      "Docs",
+    ]);
+  });
+
+  it("opens the way to a board opened with the breadcrumb", async () => {
+    render(<App client={treeClient()} />);
+    await screen.findByRole("button", { name: "Context" });
+    fireEvent.click(toggleOf("Context"));
+    fireEvent.click(toggleOf("Containers"));
+    openFromList("Components");
+    await screen.findByRole("heading", { name: "Components" });
+    fireEvent.click(toggleOf("Context"));
+    expect(shownTitles()).toEqual(["Context", "Docs"]);
+
+    fireEvent.click(
+      within(
+        screen.getByRole("navigation", { name: "Boards above" }),
+      ).getByRole("button", { name: "Containers" }),
+    );
+
+    await screen.findByRole("heading", { name: "Containers" });
+    expect(shownTitles()).toEqual([
+      "Context",
+      "Containers",
+      "Components",
+      "Docs",
+    ]);
+  });
+
+  it("keeps the user's toggles when the list loads again after a change of the files", async () => {
+    const client = treeClient();
+    render(<App client={client} />);
+    await screen.findByRole("button", { name: "Context" });
+    await waitFor(() => expect(client.listening).toBe(2));
+    fireEvent.click(toggleOf("Docs"));
+    expect(shownTitles()).toEqual(["Context", "Docs", "Notes"]);
+    const calls = client.listCalls;
+
+    client.change();
+
+    await waitFor(() => expect(client.listCalls).toBeGreaterThan(calls));
+    await waitFor(() =>
+      expect(shownTitles()).toEqual(["Context", "Docs", "Notes"]),
+    );
+  });
+
+  it("keeps the user's toggles through a reload that fails", async () => {
+    const client = treeClient();
+    render(<App client={client} />);
+    await screen.findByRole("button", { name: "Context" });
+    await waitFor(() => expect(client.listening).toBe(2));
+    fireEvent.click(toggleOf("Docs"));
+    const boards = client.boards;
+
+    client.boards = "the board files cannot be read";
+    client.change();
+    await screen.findByText("the board files cannot be read");
+    client.boards = boards;
+    client.change();
+
+    await waitFor(() =>
+      expect(shownTitles()).toEqual(["Context", "Docs", "Notes"]),
+    );
+  });
+
+  it("shows the list after a reload that no longer holds the open board or the board above it", async () => {
+    const client = treeClient();
+    render(<App client={client} />);
+    await screen.findByRole("button", { name: "Context" });
+    await waitFor(() => expect(client.listening).toBe(2));
+    fireEvent.click(toggleOf("Context"));
+    openFromList("Containers");
+    await screen.findByRole("heading", { name: "Containers" });
+
+    client.boards = [
+      { id: "docs", title: "Docs", depth: 0 },
+      { id: "notes", title: "Notes", depth: 1 },
+    ];
+    client.change();
+
+    await waitFor(() => expect(shownTitles()).toEqual(["Docs"]));
+  });
+
+  it("shows a title with markup on a board with boards below it as text, with a toggle of fixed name", async () => {
+    const title = "<img src=x onerror=alert(1)>";
+    const { container } = render(<App client={treeClient(undefined, title)} />);
+    await screen.findByRole("button", { name: title });
+
+    expect(toggleOf(title).getAttribute("aria-label")).toBe("Open branch");
+    expect(toggleOf(title).textContent).toBe("▸");
+    expect(container.querySelector("nav img")).toBeNull();
+  });
+
+  it("treats boards named __proto__ and constructor like any other", async () => {
+    render(
+      <App
+        client={treeClient(
+          { top: "__proto__", middle: "constructor" },
+          "Proto",
+        )}
+      />,
+    );
+    await screen.findByRole("button", { name: "Proto" });
+
+    fireEvent.click(toggleOf("Proto"));
+    expect(shownTitles()).toEqual(["Proto", "Containers", "Docs"]);
+    fireEvent.click(toggleOf("Containers"));
+    openFromList("Components");
+    await screen.findByRole("heading", { name: "Components" });
+    fireEvent.click(toggleOf("Proto"));
+    expect(shownTitles()).toEqual(["Proto", "Docs"]);
+
+    fireEvent.click(
+      within(
+        screen.getByRole("navigation", { name: "Boards above" }),
+      ).getByRole("button", { name: "Containers" }),
+    );
+
+    await screen.findByRole("heading", { name: "Containers" });
+    expect(shownTitles()).toEqual([
+      "Proto",
+      "Containers",
+      "Components",
+      "Docs",
+    ]);
   });
 });

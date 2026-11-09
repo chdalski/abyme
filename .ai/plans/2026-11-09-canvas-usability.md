@@ -29,7 +29,7 @@ recorded in `docs/Ideas.md`.
 - [x] The relations of the selected boxes stand out
 - [x] One helper builds a board's list entry
 - [x] The board list shows the hierarchy
-- [ ] The board tree opens along the open board
+- [x] The board tree opens along the open board
 - [ ] The sidebar can be resized and collapsed
 
 ## Tasks
@@ -130,15 +130,15 @@ board.
 
 Review path: Security-Hybrid
 
-- [ ] A board with boards below it shows a toggle that opens and closes its branch; a board
+- [x] A board with boards below it shows a toggle that opens and closes its branch; a board
       without shows none.
-- [ ] When the canvas starts, only top-level boards show; when a board opens, by the list, a `▸`
+- [x] When the canvas starts, only top-level boards show; when a board opens, by the list, a `▸`
       button, or the breadcrumb, every branch on the way to it opens, also one the user closed.
-- [ ] A branch the user opened or closed stays so until the canvas closes or opening a board
+- [x] A branch the user opened or closed stays so until the canvas closes or opening a board
       reopens it, also when the list reloads after a change of the project's files.
-- [ ] Tests through `App` cover the start, opening a board deep in the tree, the user's toggles,
+- [x] Tests through `App` cover the start, opening a board deep in the tree, the user's toggles,
       and a reload.
-- [ ] `docs/5 Architecture/Canvas.md` describes the tree's branches.
+- [x] `docs/5 Architecture/Canvas.md` describes the tree's branches.
 
 ### Task 7: The sidebar can be resized and collapsed
 

@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { BoardList, INDENT_LEVELS } from "./BoardList";
@@ -94,13 +100,15 @@ describe("the board list as a tree", () => {
             { id: "docs", title: "Docs", depth: 0 },
           ],
         }}
-        open={null}
+        open="components"
         onOpen={ignore}
       />,
     );
 
     expect(
-      screen.getAllByRole("listitem").map((item) => item.textContent),
+      screen
+        .getAllByRole("listitem")
+        .map((item) => within(item).getAllByRole("button").at(-1)?.textContent),
     ).toEqual(["Context", "Containers", "Components", "Docs"]);
     expect(
       ["Context", "Containers", "Components", "Docs"].map(indentOf),
@@ -117,7 +125,7 @@ describe("the board list as a tree", () => {
             { id: "deep", title: "Deep", depth: 10_000 },
           ],
         }}
-        open={null}
+        open="deep"
         onOpen={ignore}
       />,
     );

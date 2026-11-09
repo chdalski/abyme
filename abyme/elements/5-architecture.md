@@ -4,8 +4,8 @@ type: "docs/folder"
 name: "5 Architecture"
 summary: "How Abyme is built: crates, data model, storage in Git, canvas, and the first slice"
 anchor: "docs/5 Architecture"
-verified: "251ff57d52c21e0578cbdfe7dc1a1340f65f4678"
+verified: "032c51a82c809c558fc3c0b576a62f150778cf27"
 verified_by: "ai"
 verified_content:
-  - {path: "docs/5 Architecture", object: "02911a4b3f22c5229ea27f2d49f96393a6ae11c6"}
+  - {path: "docs/5 Architecture", object: "ebce1c53715f4815c911522e9aa3f51383eddb8b"}
 ---
