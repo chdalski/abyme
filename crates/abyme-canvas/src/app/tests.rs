@@ -160,8 +160,8 @@ fn list_boards_returns_the_titles_of_the_project_s_boards() {
     assert_eq!(
         list_boards_from(&window),
         Ok(json!([
-            {"id": "containers", "title": "Containers"},
-            {"id": "context", "title": "Context"},
+            {"id": "containers", "title": "Containers", "depth": 0},
+            {"id": "context", "title": "Context", "depth": 0},
         ]))
     );
 }

@@ -40,8 +40,8 @@ function view(id: string, title: string, names: string[] = []): BoardView {
 
 function clientWithBoards(): FakeClient {
   const client = new FakeClient([
-    { id: "containers", title: "Containers" },
-    { id: "context", title: "Context" },
+    { id: "containers", title: "Containers", depth: 0 },
+    { id: "context", title: "Context", depth: 0 },
   ]);
   client.views = {
     containers: view("containers", "Containers", ["Orders"]),
@@ -1174,15 +1174,40 @@ describe("App", () => {
     ]);
   });
 
+  it("shows the boards as the tree the canvas lists, each indented by its depth", async () => {
+    render(
+      <App
+        client={
+          new FakeClient([
+            { id: "context", title: "Context", depth: 0 },
+            { id: "containers", title: "Containers", depth: 1 },
+            { id: "docs", title: "Docs", depth: 0 },
+          ])
+        }
+      />,
+    );
+
+    const items = await screen.findAllByRole("listitem");
+    expect(
+      items.map((item) => [item.textContent, item.style.paddingInlineStart]),
+    ).toEqual([
+      ["Context", "0rem"],
+      ["Containers", "1rem"],
+      ["Docs", "0rem"],
+    ]);
+  });
+
   it("shows the new list after the project's files change", async () => {
-    const client = new FakeClient([{ id: "context", title: "Context" }]);
+    const client = new FakeClient([
+      { id: "context", title: "Context", depth: 0 },
+    ]);
     render(<App client={client} />);
     await screen.findByText("Context");
     await waitFor(() => expect(client.listening).toBe(2));
 
     client.boards = [
-      { id: "containers", title: "Containers" },
-      { id: "context", title: "Context" },
+      { id: "containers", title: "Containers", depth: 0 },
+      { id: "context", title: "Context", depth: 0 },
     ];
     client.change();
 
@@ -1254,7 +1279,7 @@ describe("App", () => {
 
   it("shows markup in a board's title as text", async () => {
     const title = "<img src=x onerror=alert(1)>";
-    const client = new FakeClient([{ id: "board", title }]);
+    const client = new FakeClient([{ id: "board", title, depth: 0 }]);
     client.views = { board: view("board", title) };
     const { container } = render(<App client={client} />);
 
@@ -1328,8 +1353,8 @@ describe("App", () => {
     /** The board `outer` whose box owns `inner`, with a trail back on `inner`. */
     function nestedClient(title = "Outer"): FakeClient {
       const client = new FakeClient([
-        { id: "inner", title: "Inner" },
-        { id: "outer", title },
+        { id: "outer", title, depth: 0 },
+        { id: "inner", title: "Inner", depth: 1 },
       ]);
       client.views = {
         outer: boardView({
@@ -1389,9 +1414,9 @@ describe("App", () => {
        */
       function threeLevels(mode: BoardView["mode"]): FakeClient {
         const client = new FakeClient([
-          { id: "deeper", title: "Deeper" },
-          { id: "inner", title: "Inner" },
-          { id: "outer", title: "Outer" },
+          { id: "outer", title: "Outer", depth: 0 },
+          { id: "inner", title: "Inner", depth: 1 },
+          { id: "deeper", title: "Deeper", depth: 2 },
         ]);
         const owning = (element: string, id: string, title: string) =>
           placedBox(element, {

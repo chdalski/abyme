@@ -52,6 +52,20 @@ priority: FlagPriority, };
 
 export type FlagPriority = "task" | "hint";
 
+export type ListedBoard = { 
+/**
+ * How many boards lie above it.
+ */
+depth: number, 
+/**
+ * The board's ID.
+ */
+id: string, 
+/**
+ * The title shown for the board, as the board file holds it.
+ */
+title: string, };
+
 export type Mode = "free" | "mirrored";
 
 export type Placement = { 

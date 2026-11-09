@@ -8,8 +8,8 @@ import { FakeClient } from "./fakeClient";
 // since Vitest runs every test file in a process of its own.
 const shop = vi.hoisted(() => ({
   boards: [
-    { id: "online-shop", title: "Online Shop" },
-    { id: "arrows", title: "Arrows" },
+    { id: "online-shop", title: "Online Shop", depth: 0 },
+    { id: "arrows", title: "Arrows", depth: 0 },
   ],
   arrows: {
     id: "arrows",

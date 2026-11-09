@@ -28,7 +28,7 @@ recorded in `docs/Ideas.md`.
 - [x] A zoom bar shows and changes the zoom
 - [x] The relations of the selected boxes stand out
 - [x] One helper builds a board's list entry
-- [ ] The board list shows the hierarchy
+- [x] The board list shows the hierarchy
 - [ ] The board tree opens along the open board
 - [ ] The sidebar can be resized and collapsed
 
@@ -113,13 +113,13 @@ are the UI's `boards.ts` and `BoardList.tsx` and the test client `fakeClient.ts`
 
 Review path: Security-Hybrid
 
-- [ ] `list_boards` returns every board once, in the depth-first order of `overview`, each with its
+- [x] `list_boards` returns every board once, in the depth-first order of `overview`, each with its
       ID, title, and depth; a board out of the tree has depth 0, as `overview` places it.
-- [ ] The entries of the breadcrumb and of the inner-board buttons keep the shape they have.
-- [ ] The sidebar shows each board indented by its depth, below the board it lies under.
-- [ ] Rust tests of `list_boards` cover a nested hierarchy and an owner without an element file;
+- [x] The entries of the breadcrumb and of the inner-board buttons keep the shape they have.
+- [x] The sidebar shows each board indented by its depth, below the board it lies under.
+- [x] Rust tests of `list_boards` cover a nested hierarchy and an owner without an element file;
       UI tests show the indentation.
-- [ ] `ui/src/bindings.ts` matches the Rust types, `docs/5 Architecture/Canvas.md` and the
+- [x] `ui/src/bindings.ts` matches the Rust types, `docs/5 Architecture/Canvas.md` and the
       `abyme-canvas` row of the root `CLAUDE.md` describe the list as a tree, and no comment still
       gives the list's old order.
 

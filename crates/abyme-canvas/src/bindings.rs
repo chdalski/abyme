@@ -8,7 +8,7 @@ use std::path::Path;
 use abyme_model::{Mode, RelationKind};
 use ts_rs::{Config, TS};
 
-use crate::boards::BoardEntry;
+use crate::boards::{BoardEntry, ListedBoard};
 use crate::flags::{ElementFlag, FlagPriority};
 use crate::projection::{BoardView, Placement, Relation, Shown};
 
@@ -35,6 +35,7 @@ fn bindings() -> String {
         exported::<BoardView>(&config),
         exported::<ElementFlag>(&config),
         exported::<FlagPriority>(&config),
+        exported::<ListedBoard>(&config),
         exported::<Mode>(&config),
         exported::<Placement>(&config),
         exported::<Relation>(&config),

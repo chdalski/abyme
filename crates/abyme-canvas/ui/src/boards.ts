@@ -1,10 +1,10 @@
-import type { BoardEntry, BoardView } from "./bindings";
+import type { BoardView, ListedBoard } from "./bindings";
 import type { AbymeClient } from "./client";
 
 /** What the board list shows. */
 export type BoardsState =
   | { kind: "loading" }
-  | { kind: "loaded"; boards: BoardEntry[] }
+  | { kind: "loaded"; boards: ListedBoard[] }
   | { kind: "failed"; message: string };
 
 /**

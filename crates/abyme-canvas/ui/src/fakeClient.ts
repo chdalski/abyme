@@ -1,4 +1,4 @@
-import type { BoardEntry, BoardView, ElementFlag } from "./bindings";
+import type { BoardView, ElementFlag, ListedBoard } from "./bindings";
 import type { AbymeClient, AdmittedRequest } from "./client";
 
 /**
@@ -12,7 +12,7 @@ import type { AbymeClient, AdmittedRequest } from "./client";
 export class FakeClient implements AbymeClient {
   /** What `hold` and `release` take for the answers on review flags; no board can have this ID. */
   static readonly FLAGS = "review_flags";
-  boards: BoardEntry[] | string;
+  boards: ListedBoard[] | string;
   views: Record<string, BoardView | string> = {};
   applied: AdmittedRequest[] = [];
   /** What a request that creates a note answers. */
@@ -25,11 +25,11 @@ export class FakeClient implements AbymeClient {
   private listeners: (() => void)[] = [];
   private held = new Map<string, (() => void)[]>();
 
-  constructor(boards: BoardEntry[] | string) {
+  constructor(boards: ListedBoard[] | string) {
     this.boards = boards;
   }
 
-  listBoards(): Promise<BoardEntry[]> {
+  listBoards(): Promise<ListedBoard[]> {
     this.listCalls += 1;
     return answer(this.boards);
   }

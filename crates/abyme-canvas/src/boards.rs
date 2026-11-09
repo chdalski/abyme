@@ -1,13 +1,13 @@
 //! The list of a project's boards, as the UI shows it.
 
-use abyme_core::Snapshot;
+use abyme_core::{BoardTree, Snapshot};
 use abyme_model::BoardId;
 use serde::Serialize;
 
 #[cfg(test)]
 mod tests;
 
-/// A board in the list: its ID and the title shown for it.
+/// A board as the UI names it: its ID and the title shown for it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 pub struct BoardEntry {
@@ -17,12 +17,30 @@ pub struct BoardEntry {
     pub title: String,
 }
 
-/// The boards of `snapshot`, in board-ID order.
-pub fn board_list(snapshot: &Snapshot) -> Vec<BoardEntry> {
-    snapshot
-        .boards
-        .keys()
-        .filter_map(|board| entry(snapshot, board))
+/// A board in the sidebar's list: its entry and how deep it lies in the tree
+/// of inner boards, 0 for a board at the top level.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+pub struct ListedBoard {
+    /// The board's ID and title.
+    #[serde(flatten)]
+    #[cfg_attr(test, ts(flatten))]
+    pub entry: BoardEntry,
+    /// How many boards lie above it.
+    pub depth: usize,
+}
+
+/// The boards of `snapshot` as `overview` lists them: depth first, each
+/// board followed by the boards inside it, every board once. A board whose
+/// chain is broken, by a cycle or an owner without an element file, stands at
+/// the top level.
+pub fn board_list(snapshot: &Snapshot) -> Vec<ListedBoard> {
+    BoardTree::of(&snapshot.boards)
+        .depth_first(|owner| snapshot.elements.contains_key(owner))
+        .into_iter()
+        .filter_map(|(depth, board)| {
+            entry(snapshot, board).map(|entry| ListedBoard { entry, depth })
+        })
         .collect()
 }
 

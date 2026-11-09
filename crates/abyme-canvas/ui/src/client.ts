@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
-import type { BoardEntry, BoardView, ElementFlag } from "./bindings";
+import type { BoardView, ElementFlag, ListedBoard } from "./bindings";
 
 /**
  * Moving and pinning an element that exists on a board that exists, to integer
@@ -105,8 +105,8 @@ export type AdmittedRequest = AdmittedOperation[] | NewNote;
  * this interface, so tests give the UI a fake one.
  */
 export interface AbymeClient {
-  /** The project's boards in board-ID order; rejects with the core's message. */
-  listBoards(): Promise<BoardEntry[]>;
+  /** The project's boards as `overview` lists them, each with its depth; rejects with the core's message. */
+  listBoards(): Promise<ListedBoard[]>;
   /** What the board `board` shows; rejects with the core's message. */
   openBoard(board: string): Promise<BoardView>;
   /**
@@ -128,7 +128,7 @@ export interface AbymeClient {
 
 /** The client over Tauri's IPC, with the command and the event of `src/app.rs`. */
 export const tauriClient: AbymeClient = {
-  listBoards: () => invoke<BoardEntry[]>("list_boards"),
+  listBoards: () => invoke<ListedBoard[]>("list_boards"),
   openBoard: (board) => invoke<BoardView>("open_board", { board }),
   apply: (operations) => invoke<string[]>("apply", { operations }),
   reviewFlags: () => invoke<ElementFlag[]>("review_flags"),

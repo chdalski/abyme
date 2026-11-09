@@ -17,7 +17,7 @@ use tauri::webview::NewWindowResponse;
 use tauri::{App, Builder, Emitter as _, Manager as _, Runtime, State, WebviewWindowBuilder};
 
 use crate::admission::{admit, check_board_files};
-use crate::boards::{BoardEntry, board_list};
+use crate::boards::{ListedBoard, board_list};
 use crate::flags::{ElementFlag, element_flags};
 use crate::projection::{BoardView, project};
 use crate::{pages, watcher};
@@ -94,10 +94,10 @@ fn watch_project<R: Runtime>(app: &App<R>) {
     }
 }
 
-/// The boards of the project, in board-ID order, or the core's message
-/// when there is no project or it cannot be read.
+/// The boards of the project as `overview` lists them, each with its depth,
+/// or the core's message when there is no project or it cannot be read.
 #[tauri::command]
-async fn list_boards(start: State<'_, Start>) -> Result<Vec<BoardEntry>, String> {
+async fn list_boards(start: State<'_, Start>) -> Result<Vec<ListedBoard>, String> {
     let start = start.0.clone();
     on_core(move || Ok(board_list(&snapshot(&start)?))).await
 }
