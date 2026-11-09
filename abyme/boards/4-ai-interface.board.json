@@ -1,0 +1,15 @@
+{
+  "format": 1,
+  "id": "4-ai-interface",
+  "title": "4 AI Interface",
+  "owner": "4-ai-interface",
+  "summary": "The notes on how the AI reads and writes Abyme",
+  "zone": {"mode": "mirrored", "statement": "current"},
+  "placements": [
+    {"element": "example-c4-for-a-repo", "x": 0, "y": 0, "width": 180, "height": 120},
+    {"element": "mcp-server", "x": 220, "y": 0, "width": 180, "height": 120},
+    {"element": "placement-and-layout", "x": 440, "y": 0, "width": 180, "height": 120},
+    {"element": "project-knowledge-and-ai-memory", "x": 660, "y": 0, "width": 180, "height": 150},
+    {"element": "search-and-index", "x": 0, "y": 190, "width": 180, "height": 135}
+  ]
+}

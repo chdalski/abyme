@@ -1,0 +1,15 @@
+{
+  "format": 1,
+  "id": "2-concepts",
+  "title": "2 Concepts",
+  "owner": "2-concepts",
+  "summary": "The notes on the concepts of boards, zones, elements, relations, and presentation",
+  "zone": {"mode": "mirrored", "statement": "current"},
+  "placements": [
+    {"element": "board-graph", "x": 0, "y": 0, "width": 180, "height": 150},
+    {"element": "boards-and-zones", "x": 220, "y": 0, "width": 180, "height": 165},
+    {"element": "elements", "x": 440, "y": 0, "width": 180, "height": 165},
+    {"element": "presentation", "x": 660, "y": 0, "width": 180, "height": 105},
+    {"element": "relations", "x": 0, "y": 205, "width": 180, "height": 120}
+  ]
+}

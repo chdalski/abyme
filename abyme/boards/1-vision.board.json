@@ -1,0 +1,12 @@
+{
+  "format": 1,
+  "id": "1-vision",
+  "title": "1 Vision",
+  "owner": "1-vision",
+  "summary": "The notes on why Abyme exists and the principles it follows",
+  "zone": {"mode": "mirrored", "statement": "current"},
+  "placements": [
+    {"element": "guiding-principles", "x": 0, "y": 0, "width": 180, "height": 135},
+    {"element": "vision", "x": 220, "y": 0, "width": 180, "height": 165}
+  ]
+}

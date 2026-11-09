@@ -1,0 +1,14 @@
+{
+  "format": 1,
+  "id": "3-reconciliation",
+  "title": "3 Reconciliation",
+  "owner": "3-reconciliation",
+  "summary": "The notes on how Abyme detects and reports where boards no longer match the code",
+  "zone": {"mode": "mirrored", "statement": "current"},
+  "placements": [
+    {"element": "change-requests", "x": 0, "y": 0, "width": 180, "height": 120},
+    {"element": "checks", "x": 220, "y": 0, "width": 180, "height": 135},
+    {"element": "current-and-target", "x": 440, "y": 0, "width": 180, "height": 120},
+    {"element": "reconciliation", "x": 660, "y": 0, "width": 180, "height": 180}
+  ]
+}

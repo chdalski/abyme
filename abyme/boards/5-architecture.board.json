@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "id": "5-architecture",
+  "title": "5 Architecture",
+  "owner": "5-architecture",
+  "summary": "The notes on how Abyme is built",
+  "zone": {"mode": "mirrored", "statement": "current"},
+  "placements": [
+    {"element": "architecture-overview", "x": 0, "y": 0, "width": 180, "height": 120},
+    {"element": "canvas", "x": 220, "y": 0, "width": 180, "height": 150},
+    {"element": "data-model", "x": 440, "y": 0, "width": 180, "height": 105},
+    {"element": "extensions", "x": 660, "y": 0, "width": 180, "height": 120},
+    {"element": "first-slice", "x": 0, "y": 190, "width": 180, "height": 120},
+    {"element": "hexagonal-architecture", "x": 220, "y": 190, "width": 180, "height": 120},
+    {"element": "hourglass", "x": 440, "y": 190, "width": 180, "height": 135},
+    {"element": "storage-in-git", "x": 660, "y": 190, "width": 180, "height": 135}
+  ]
+}

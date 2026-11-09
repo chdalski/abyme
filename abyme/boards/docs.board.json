@@ -1,0 +1,14 @@
+{
+  "format": 1,
+  "id": "docs",
+  "title": "Docs",
+  "summary": "The notes in docs/ that describe Abyme, one folder per box with its notes inside",
+  "zone": {"mode": "mirrored", "statement": "current"},
+  "placements": [
+    {"element": "1-vision", "x": 0, "y": 0, "width": 180, "height": 105},
+    {"element": "2-concepts", "x": 220, "y": 0, "width": 180, "height": 135},
+    {"element": "3-reconciliation", "x": 440, "y": 0, "width": 180, "height": 135},
+    {"element": "4-ai-interface", "x": 660, "y": 0, "width": 180, "height": 120},
+    {"element": "5-architecture", "x": 0, "y": 175, "width": 180, "height": 120}
+  ]
+}
