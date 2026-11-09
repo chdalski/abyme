@@ -79,7 +79,8 @@ export type BoxRole =
 /**
  * What the selection highlights: nothing, or the arrows that leave and enter
  * it, the boxes at their other ends, and the boxes kept as they are, the
- * selection and the boxes its notes hang on; everything else is dimmed.
+ * selection, the boxes its notes hang on, and the notes hanging on it;
+ * everything else is dimmed.
  */
 export type Focus =
   | { readonly kind: "none" }
@@ -88,7 +89,7 @@ export type Focus =
       readonly edges: ReadonlyMap<string, EdgeRole>;
       readonly selected: ReadonlySet<string>;
       readonly ends: ReadonlyMap<string, "leaving" | "entering">;
-      readonly hosts: ReadonlySet<string>;
+      readonly kept: ReadonlySet<string>;
     };
 
 /** A focus that highlights nothing. */
@@ -98,8 +99,9 @@ export const NO_FOCUS: Focus = { kind: "none" };
  * What the boxes `selected` highlight among the arrows `edges` drawn on `view`:
  * an arrow from a selected box leaves, one to a selected box enters, and one
  * between two selected boxes leaves; a box at both kinds of ends takes the
- * leaving color. A selected note's box, which it hangs on visibly without an
- * arrow, stays undimmed. A selected ID the view does not hold is ignored.
+ * leaving color. A selected note's box, and the notes hanging on a selected
+ * box, which hang together visibly without an arrow, stay undimmed. A selected
+ * ID the view does not hold is ignored.
  */
 export function focusOf(
   view: BoardView,
@@ -141,12 +143,17 @@ export function focusOf(
     const host = hangsOn.get(id);
     return host === null || host === undefined ? [] : [host];
   });
+  const notesOnTheSelection = [...hangsOn]
+    .filter(
+      ([, host]) => host !== null && host !== undefined && chosen.has(host),
+    )
+    .map(([note]) => note);
   return {
     kind: "focus",
     edges: roles,
     selected: chosen,
     ends,
-    hosts: new Set(hosts),
+    kept: new Set([...hosts, ...notesOnTheSelection]),
   };
 }
 
@@ -189,7 +196,7 @@ export function focusedEdges(edges: Edge[], focus: Focus): Edge[] {
 
 /**
  * The role of the box of `element` under `focus`: the selection first, then an
- * end of a highlighted arrow, then the box a selected note hangs on. A box
+ * end of a highlighted arrow, then a box or note kept with the selection. A box
  * whose text field is open, `editing`, is never dimmed, so a note being typed
  * stays readable while another box is selected.
  */
@@ -205,6 +212,6 @@ export function boxRoleOf(
     return "selected";
   }
   const role =
-    focus.ends.get(element) ?? (focus.hosts.has(element) ? "kept" : "dimmed");
+    focus.ends.get(element) ?? (focus.kept.has(element) ? "kept" : "dimmed");
   return editing && role === "dimmed" ? "kept" : role;
 }

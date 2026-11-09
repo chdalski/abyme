@@ -1,5 +1,5 @@
 **Repository:** root
-**Status:** NotStarted
+**Status:** InProgress
 **Created:** 2026-11-09
 
 ## Goal
@@ -24,7 +24,7 @@ highlighting a selection keeps the notes on a selected box undimmed.
 
 ## Steps
 
-- [ ] Notes on a selected box stay undimmed
+- [x] Notes on a selected box stay undimmed
 - [ ] Mirrored boards are arranged like free ones
 - [ ] One function finds the box a point lies on
 - [ ] A new note created on a box hangs on it
@@ -40,10 +40,10 @@ undimmed.
 
 Review path: Reviewer-only
 
-- [ ] With a box selected, every note hanging on it on the board is undimmed; with a note selected,
+- [x] With a box selected, every note hanging on it on the board is undimmed; with a note selected,
       its box stays undimmed as before.
-- [ ] Tests through `BoardCanvas` show both directions.
-- [ ] `docs/5 Architecture/Canvas.md` says which boxes and notes a selection keeps undimmed.
+- [x] Tests through `BoardCanvas` show both directions.
+- [x] `docs/5 Architecture/Canvas.md` says which boxes and notes a selection keeps undimmed.
 
 ### Task 2: Mirrored boards are arranged like free ones
 

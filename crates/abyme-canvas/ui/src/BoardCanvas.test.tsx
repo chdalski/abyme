@@ -2046,6 +2046,16 @@ describe("highlighting a selection", () => {
     );
   });
 
+  it("keeps the notes hanging on a selected box undimmed", async () => {
+    const { container } = highlightCanvas(linkedBoard());
+
+    await select(container, "ledger");
+
+    expect(roleOf(container, "ledger")).toContain("box-selected");
+    expect(roleOf(container, "ask")).toContain("box-kept");
+    expect(roleOf(container, "shop")).toContain("box-dimmed");
+  });
+
   it("keeps a new note's text field undimmed while a box stays selected", async () => {
     const { container } = highlightCanvas(linkedBoard());
     await select(container, "orders");
