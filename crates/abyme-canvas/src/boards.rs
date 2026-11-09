@@ -21,10 +21,16 @@ pub struct BoardEntry {
 pub fn board_list(snapshot: &Snapshot) -> Vec<BoardEntry> {
     snapshot
         .boards
-        .values()
-        .map(|board| BoardEntry {
-            id: board.id.clone(),
-            title: board.title.clone(),
-        })
+        .keys()
+        .filter_map(|board| entry(snapshot, board))
         .collect()
+}
+
+/// The ID and the title of `board`, and nothing else of it: what the UI may
+/// see of a board in the list, in the breadcrumb, and on a box's buttons.
+pub fn entry(snapshot: &Snapshot, board: &BoardId) -> Option<BoardEntry> {
+    snapshot.boards.get(board).map(|found| BoardEntry {
+        id: found.id.clone(),
+        title: found.title.clone(),
+    })
 }

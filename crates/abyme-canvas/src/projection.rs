@@ -11,7 +11,7 @@ use abyme_core::{BoardTree, ShownRelation, Snapshot, UnknownBoard, relations_on}
 use abyme_model::{Board, BoardId, Element, ElementId, Mode, Rect, RelationKind};
 use serde::Serialize;
 
-use crate::boards::BoardEntry;
+use crate::boards::{BoardEntry, entry};
 
 #[cfg(test)]
 mod tests;
@@ -139,14 +139,6 @@ fn trail(snapshot: &Snapshot, tree: &BoardTree, board: &BoardId) -> Vec<BoardEnt
     .collect();
     entries.reverse();
     entries
-}
-
-/// The ID and the title of `board`, and nothing else of it.
-fn entry(snapshot: &Snapshot, board: &BoardId) -> Option<BoardEntry> {
-    snapshot.boards.get(board).map(|found| BoardEntry {
-        id: found.id.clone(),
-        title: found.title.clone(),
-    })
 }
 
 fn relation(shown: ShownRelation<'_>) -> Relation {

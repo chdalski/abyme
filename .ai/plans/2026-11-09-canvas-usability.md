@@ -27,7 +27,7 @@ recorded in `docs/Ideas.md`.
 - [x] The ideas from trying the canvas are recorded
 - [x] A zoom bar shows and changes the zoom
 - [x] The relations of the selected boxes stand out
-- [ ] One helper builds a board's list entry
+- [x] One helper builds a board's list entry
 - [ ] The board list shows the hierarchy
 - [ ] The board tree opens along the open board
 - [ ] The sidebar can be resized and collapsed
@@ -100,9 +100,9 @@ Behavior is unchanged.
 
 Review path: Reviewer-only
 
-- [ ] One function builds the entry of a board for the list, the breadcrumb, and the inner-board
+- [x] One function builds the entry of a board for the list, the breadcrumb, and the inner-board
       buttons.
-- [ ] The tests of the board list, the breadcrumb, the inner-board buttons, and the command
+- [x] The tests of the board list, the breadcrumb, the inner-board buttons, and the command
       `list_boards` pass with their assertions unchanged.
 
 ### Task 5: The board list shows the hierarchy
