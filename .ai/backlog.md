@@ -29,6 +29,7 @@ share a parent line with one sub-item each.
 - A view that lists an open note's ID as anything but a note closes its field, and the typed text goes without a message: a hand deletion of the note's file, which the board still places, shows it `missing`, and one view can carry the deletion and a non-note element under its ID: `crates/abyme-canvas/ui/src/nodes.ts`, `keepUiState` (Reviewer, backlog bugs Task 13, Low).
 - The user's own new note whose ID equals a held note's counts as listed, so it vanishes until the held note's field closes and the latest view brings it back; nothing wrong is written: `crates/abyme-canvas/ui/src/boardNodes.ts`, `draftWritten`, and `keepUiState` (security engineer and Reviewer, backlog bugs Task 13, Low).
 - A note a view lists afresh but hanging on a held note's ID is held back with that box, so if its own field was open, its field and text go: `crates/abyme-canvas/ui/src/nodes.ts`, `keepUiState` (Reviewer, backlog bugs Task 13, Low).
+- The anchors of the components `project-store` (`crates/abyme-core/src/project`) and `layout` (`crates/abyme-core/src/layout`) leave out their module roots `project.rs` and `layout.rs`, so a change there flags only `abyme-core`, not the component or the notes that describe it; one anchor per element cannot cover both: `abyme/elements/project-store.md`, `abyme/elements/layout.md` (lead and Reviewer, docs map Task 2).
 
 ## Tests
 
