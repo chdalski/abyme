@@ -4,8 +4,8 @@ type: "docs/folder"
 name: "2 Concepts"
 summary: "The concepts users and the AI work with: boards, zones, elements, relations, presentation"
 anchor: "docs/2 Concepts"
-verified: "2e1ec0b8bc6d2d42088ac7020c2b39a01448063e"
+verified: "6f04878aa5f420c67b44d992c99e1347ffe04397"
 verified_by: "ai"
 verified_content:
-  - {path: "docs/2 Concepts", object: "d4753754f8d1ce35a523ad7414dc4bb602fed469"}
+  - {path: "docs/2 Concepts", object: "3758f712adf6d47ba9e662a742c622e11c8eb5b8"}
 ---
