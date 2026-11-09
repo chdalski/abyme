@@ -4,11 +4,11 @@ type: "docs/note"
 name: "Boards and Zones"
 summary: "Boards, frames, and zones: the four modes, of which free and mirrored exist so far, statement kinds, zone presets, and how elements inherit a kind"
 anchor: "docs/2 Concepts/Boards and Zones.md"
-verified: "1a669e364d5496fe5a85bcdf32783592ba3092c4"
+verified: "97f1d48b754f8b923dab09452c30b474ec4c7fe9"
 verified_by: "ai"
 verified_content:
   - {path: "crates/abyme-canvas/src/admission.rs", object: "7634e1b108a4c5b27810e5199345bee9c8243771"}
-  - {path: "crates/abyme-canvas/ui", object: "b2342663f7e0830a4ed8529a41a9b838079f498b"}
+  - {path: "crates/abyme-canvas/ui", object: "dbe8fe56d2a85a4f742e1b321ebe5775d3250254"}
   - {path: "crates/abyme-core", object: "0a469e1ed2190def5e59b153a1e2f8860ddf2570"}
   - {path: "crates/abyme-core/src/outline.rs", object: "7fa7d1a4bc56c757f07a7ef338ff26939ff6c3c2"}
   - {path: "crates/abyme-index", object: "d66ee4eb756a692cd1fcb85506f1081b42df7b79"}

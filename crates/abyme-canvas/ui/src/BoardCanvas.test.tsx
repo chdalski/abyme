@@ -1831,3 +1831,411 @@ describe("the zoom bar", () => {
     ).toContain("right");
   });
 });
+
+describe("highlighting a selection", () => {
+  /**
+   * `orders` uses `payments` and is used by `shop`; `payments` uses `ledger`,
+   * which has nothing to do with `orders`; the note `ask` hangs on `ledger`.
+   */
+  function linkedBoard(mode: BoardView["mode"] = "free"): BoardView {
+    return boardView({
+      mode,
+      placements: [
+        placedElement("orders"),
+        placedElement("payments", { x: 300 }),
+        placedElement("shop", { y: 300 }),
+        placedElement("ledger", { x: 300, y: 300 }),
+        placedBox("ask", {
+          x: 10,
+          y: -40,
+          shown: { kind: "note", name: "Ask", body: "" },
+          attached_to: "ledger",
+        }),
+      ],
+      relations: [
+        { from: "ask", kind: "concerns", to: "ledger", label: null },
+        { from: "orders", kind: "uses", to: "payments", label: null },
+        { from: "payments", kind: "uses", to: "ledger", label: null },
+        { from: "shop", kind: "see_also", to: "orders", label: null },
+      ],
+    });
+  }
+
+  /** The spies of every call a canvas makes that writes something. */
+  function writes() {
+    return {
+      move: vi.fn(() => Promise.resolve()),
+      release: vi.fn(),
+      writeNote: vi.fn(() => Promise.resolve(true)),
+      createNote: vi.fn(() => Promise.resolve("new-note")),
+      deleteNotes: vi.fn(),
+    };
+  }
+
+  function highlightCanvas(
+    view: BoardView,
+    spies: ReturnType<typeof writes> = writes(),
+  ) {
+    return render(
+      canvasOf(
+        view,
+        spies.move,
+        () => {},
+        spies.release,
+        spies.writeNote,
+        spies.createNote,
+        spies.deleteNotes,
+      ),
+    );
+  }
+
+  /** Selects the box of `element` from the keyboard, as a person can. */
+  async function select(container: HTMLElement, element: string) {
+    const node = box(container, element);
+    fireEvent.keyDown(node, { key: "Enter" });
+    fireEvent.keyUp(node, { key: "Enter" });
+    await waitFor(() => expect(node.classList.contains("selected")).toBe(true));
+  }
+
+  /** Adds the box of `element` to the selection, with the multi-select key held. */
+  async function addToSelection(container: HTMLElement, element: string) {
+    const held = navigator.userAgent.includes("Mac") ? "Meta" : "Control";
+    fireEvent.keyDown(window, { key: held });
+    await select(container, element);
+    fireEvent.keyUp(window, { key: held });
+  }
+
+  function arrow(
+    container: HTMLElement,
+    from: string,
+    kind: string,
+    to: string,
+  ) {
+    const found = container.querySelector(
+      `[data-testid="rf__edge-${from}|${kind}|${to}"]`,
+    );
+    if (!(found instanceof SVGElement)) {
+      throw new Error(`no arrow ${from} ${kind} ${to}`);
+    }
+    return found;
+  }
+
+  function roleOf(container: HTMLElement, element: string): string[] {
+    const wrapper = box(container, element).querySelector(".element-box");
+    return [...(wrapper?.classList ?? [])];
+  }
+
+  function strokeOf(edge: SVGElement): string {
+    return (
+      edge.querySelector<SVGPathElement>(".react-flow__edge-path")?.style
+        .stroke ?? ""
+    );
+  }
+
+  it("looks as today with nothing selected", () => {
+    const { container } = highlightCanvas(linkedBoard());
+
+    for (const element of ["orders", "payments", "shop", "ledger", "ask"]) {
+      expect(roleOf(container, element)).toEqual(["element-box"]);
+    }
+    for (const edge of container.querySelectorAll(".react-flow__edge")) {
+      expect(edge.classList.contains("edge-dimmed")).toBe(false);
+      expect(edge.classList.contains("edge-leaving")).toBe(false);
+      expect(edge.classList.contains("edge-entering")).toBe(false);
+    }
+  });
+
+  it("colors the arrows leaving and entering a selected box and the boxes at their ends", async () => {
+    const { container } = highlightCanvas(linkedBoard());
+
+    await select(container, "orders");
+
+    const leaving = arrow(container, "orders", "uses", "payments");
+    const entering = arrow(container, "shop", "see_also", "orders");
+    expect(leaving.classList).toContain("edge-leaving");
+    expect(strokeOf(leaving)).toBe("rgb(217, 72, 15)");
+    expect(
+      leaving
+        .querySelector(".react-flow__edge-path")
+        ?.getAttribute("marker-end"),
+    ).toContain("d9480f");
+    expect(entering.classList).toContain("edge-entering");
+    expect(strokeOf(entering)).toBe("rgb(43, 138, 62)");
+    expect(
+      entering
+        .querySelector(".react-flow__edge-path")
+        ?.getAttribute("marker-end"),
+    ).toContain("2b8a3e");
+    for (const edge of [leaving, entering]) {
+      expect(
+        edge.querySelector<SVGPathElement>(".react-flow__edge-path")?.style
+          .strokeWidth,
+      ).toBe("2.5");
+    }
+    // The dash of a see_also stays.
+    expect(
+      entering.querySelector<SVGPathElement>(".react-flow__edge-path")?.style
+        .strokeDasharray,
+    ).toBe("6 4");
+    expect(roleOf(container, "orders")).toContain("box-selected");
+    expect(roleOf(container, "payments")).toContain("box-leaving");
+    expect(roleOf(container, "shop")).toContain("box-entering");
+  });
+
+  it("dims every other arrow and box", async () => {
+    const { container } = highlightCanvas(linkedBoard());
+
+    await select(container, "orders");
+
+    expect(arrow(container, "payments", "uses", "ledger").classList).toContain(
+      "edge-dimmed",
+    );
+    expect(roleOf(container, "ledger")).toContain("box-dimmed");
+    expect(roleOf(container, "ask")).toContain("box-dimmed");
+  });
+
+  it("counts an arrow between two selected boxes as leaving, and joins their arrows", async () => {
+    const { container } = highlightCanvas(linkedBoard());
+
+    await select(container, "orders");
+    await addToSelection(container, "payments");
+
+    expect(arrow(container, "orders", "uses", "payments").classList).toContain(
+      "edge-leaving",
+    );
+    expect(arrow(container, "payments", "uses", "ledger").classList).toContain(
+      "edge-leaving",
+    );
+    expect(arrow(container, "shop", "see_also", "orders").classList).toContain(
+      "edge-entering",
+    );
+    expect(roleOf(container, "orders")).toContain("box-selected");
+    expect(roleOf(container, "payments")).toContain("box-selected");
+    expect(roleOf(container, "ledger")).toContain("box-leaving");
+    expect(roleOf(container, "shop")).toContain("box-entering");
+  });
+
+  it("gives a box at both kinds of ends the leaving color", async () => {
+    const view = linkedBoard();
+    const { container } = highlightCanvas({
+      ...view,
+      relations: [
+        ...view.relations,
+        { from: "payments", kind: "depends_on", to: "orders", label: null },
+      ],
+    });
+
+    await select(container, "orders");
+
+    expect(roleOf(container, "payments")).toContain("box-leaving");
+    expect(
+      arrow(container, "payments", "depends_on", "orders").classList,
+    ).toContain("edge-entering");
+  });
+
+  it("keeps the box a selected note hangs on undimmed", async () => {
+    const { container } = highlightCanvas(linkedBoard());
+
+    await select(container, "ask");
+
+    expect(roleOf(container, "ask")).toContain("box-selected");
+    expect(roleOf(container, "ledger")).toContain("box-kept");
+    expect(roleOf(container, "orders")).toContain("box-dimmed");
+    expect(arrow(container, "payments", "uses", "ledger").classList).toContain(
+      "edge-dimmed",
+    );
+  });
+
+  it("keeps a new note's text field undimmed while a box stays selected", async () => {
+    const { container } = highlightCanvas(linkedBoard());
+    await select(container, "orders");
+
+    fireEvent.click(screen.getByRole("button", { name: "New note" }));
+
+    const field = screen.getByRole("textbox", { name: "Text of the note" });
+    expect(document.activeElement).toBe(field);
+    expect(box(container, "orders").classList).toContain("selected");
+    const wrapper = field.closest(".element-box");
+    expect(wrapper?.classList).not.toContain("box-dimmed");
+    expect(roleOf(container, "ledger")).toContain("box-dimmed");
+  });
+
+  it("keeps highlighted arrows in their layer below the boxes", async () => {
+    const { container } = highlightCanvas(linkedBoard());
+
+    await select(container, "orders");
+
+    const edges = [...container.querySelectorAll(".react-flow__edge")];
+    expect(
+      edges.filter((edge) => edge.classList.contains("edge-leaving")),
+    ).toHaveLength(1);
+    for (const edge of edges) {
+      const layer = edge.closest("svg");
+      expect(["", "0"]).toContain(layer?.style.zIndex);
+    }
+  });
+
+  it("ends the highlighting on a click on an empty spot", async () => {
+    const { container } = highlightCanvas(linkedBoard());
+    await select(container, "orders");
+
+    const pane = container.querySelector(".react-flow__pane");
+    if (pane === null) {
+      throw new Error("no pane");
+    }
+    fireEvent.click(pane);
+
+    await waitFor(() =>
+      expect(roleOf(container, "ledger")).toEqual(["element-box"]),
+    );
+    expect(
+      arrow(container, "payments", "uses", "ledger").classList.contains(
+        "edge-dimmed",
+      ),
+    ).toBe(false);
+  });
+
+  it("leaves every arrow locked: not selectable, focusable, deletable, or reconnectable", async () => {
+    const { container } = highlightCanvas(linkedBoard());
+
+    await select(container, "orders");
+
+    const edges = [...container.querySelectorAll(".react-flow__edge")];
+    expect(edges.length).toBe(3);
+    for (const edge of edges) {
+      expect(edge.classList.contains("selectable")).toBe(false);
+      expect(edge.getAttribute("tabindex")).toBeNull();
+      expect(edge.querySelector(".react-flow__edge-interaction")).toBeNull();
+      expect(edge.querySelector(".react-flow__edgeupdater")).toBeNull();
+    }
+  });
+
+  it.each([
+    ["a free board", "free"],
+    ["a mirrored board", "mirrored"],
+  ] as const)(
+    "writes nothing while selecting and deselecting on %s",
+    async (_board, mode) => {
+      const spies = writes();
+      const { container } = highlightCanvas(linkedBoard(mode), spies);
+
+      await select(container, "orders");
+      await addToSelection(container, "ask");
+      await select(container, "payments");
+      const pane = container.querySelector(".react-flow__pane");
+      if (pane !== null) {
+        fireEvent.click(pane);
+      }
+      await waitFor(() =>
+        expect(roleOf(container, "orders")).toEqual(["element-box"]),
+      );
+
+      for (const spy of Object.values(spies)) {
+        expect(spy).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it("puts no text from the repository into a class or a style", async () => {
+    const hostile = 'x" ; } <b> y';
+    const { container } = highlightCanvas(
+      boardView({
+        placements: [
+          placedElement("orders", {
+            shown: {
+              kind: "element",
+              type_ref: hostile,
+              name: hostile,
+              summary: hostile,
+            },
+          }),
+          placedElement("payments", { x: 300 }),
+        ],
+        relations: [
+          {
+            from: "orders",
+            kind: "uses",
+            to: "payments",
+            label: "<img src=x onerror=alert(1)>",
+          },
+        ],
+      }),
+    );
+
+    await select(container, "orders");
+
+    const roles = new Set([
+      "element-box",
+      "box-selected",
+      "box-kept",
+      "box-leaving",
+      "box-entering",
+      "box-dimmed",
+    ]);
+    for (const wrapper of container.querySelectorAll(".element-box")) {
+      const classes = [...wrapper.classList];
+      expect(classes.filter((name) => !roles.has(name))).toEqual([]);
+      expect(classes.filter((name) => name !== "element-box")).toHaveLength(1);
+    }
+    for (const element of container.querySelectorAll("[class], [style]")) {
+      expect(element.getAttribute("class") ?? "").not.toContain("<b>");
+      expect(element.getAttribute("style") ?? "").not.toContain("<b>");
+      expect(element.getAttribute("style") ?? "").not.toContain("onerror");
+    }
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.textContent).toContain("<img src=x onerror=alert(1)>");
+  });
+
+  it("drops a selected box the next view no longer holds without failing", async () => {
+    const { container, rerender } = highlightCanvas(linkedBoard());
+    await select(container, "orders");
+    await addToSelection(container, "payments");
+
+    const view = linkedBoard();
+    rerender(
+      canvasOf(
+        {
+          ...view,
+          placements: view.placements.filter(
+            (placement) => placement.element !== "orders",
+          ),
+          relations: view.relations.filter(
+            (relation) =>
+              relation.from !== "orders" &&
+              relation.to !== "orders" &&
+              relation.from !== "shop",
+          ),
+        },
+        () => Promise.resolve(),
+      ),
+    );
+
+    await waitFor(() =>
+      expect(container.querySelector('[data-id="orders"]')).toBeNull(),
+    );
+    expect(arrow(container, "payments", "uses", "ledger").classList).toContain(
+      "edge-leaving",
+    );
+    expect(roleOf(container, "ledger")).toContain("box-leaving");
+  });
+
+  it("selects a note whose box is missing from the board without failing", async () => {
+    const { container } = highlightCanvas(
+      boardView({
+        placements: [
+          placedElement("orders"),
+          placedBox("ask", {
+            x: 300,
+            shown: { kind: "note", name: "Ask", body: "" },
+            attached_to: "ghost",
+          }),
+        ],
+      }),
+    );
+
+    await select(container, "ask");
+
+    expect(roleOf(container, "ask")).toContain("box-selected");
+    expect(roleOf(container, "orders")).toContain("box-dimmed");
+  });
+});

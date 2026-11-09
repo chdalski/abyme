@@ -26,7 +26,7 @@ recorded in `docs/Ideas.md`.
 
 - [x] The ideas from trying the canvas are recorded
 - [x] A zoom bar shows and changes the zoom
-- [ ] The relations of the selected boxes stand out
+- [x] The relations of the selected boxes stand out
 - [ ] One helper builds a board's list entry
 - [ ] The board list shows the hierarchy
 - [ ] The board tree opens along the open board
@@ -76,19 +76,20 @@ other ends, and the selection stand out, and the rest of the board is dimmed.
 
 Review path: Security-Hybrid
 
-- [ ] An arrow drawn from a selected element shows in one color and thicker, an arrow drawn to a
+- [x] An arrow drawn from a selected element shows in one color and thicker, an arrow drawn to a
       selected element in a second color and thicker, its arrowhead in the same color; an arrow
       between two selected elements counts as leaving.
-- [ ] A box at the other end of a highlighted arrow gets a border in that arrow's color, the
+- [x] A box at the other end of a highlighted arrow gets a border in that arrow's color, the
       leaving color when it is at both kinds of ends.
-- [ ] Every other arrow and box is dimmed, except the box a selected note hangs on.
-- [ ] With nothing selected, the board looks as it does today; a click on an empty spot ends the
+- [x] Every other arrow and box is dimmed, except the box a selected note hangs on and a box
+      whose text field is open.
+- [x] With nothing selected, the board looks as it does today; a click on an empty spot ends the
       highlighting.
-- [ ] Moving, pinning, creating, editing, and deleting notes and boxes behave as before, with the
+- [x] Moving, pinning, creating, editing, and deleting notes and boxes behave as before, with the
       existing tests passing unchanged.
-- [ ] Tests through `BoardCanvas` show the colors, borders, and dimming for a single selection, a
+- [x] Tests through `BoardCanvas` show the colors, borders, and dimming for a single selection, a
       multiple selection, a selected note, and an empty selection.
-- [ ] `docs/5 Architecture/Canvas.md` tells a reader what a selection highlights, and its Scope
+- [x] `docs/5 Architecture/Canvas.md` tells a reader what a selection highlights, and its Scope
       section agrees with that.
 
 ### Task 4: One helper builds a board's list entry
@@ -184,6 +185,9 @@ Review path: Security-Hybrid
 - **Board tree branches:** closed except those on the path to the open board; opening a board
   reveals it in the list, also through a branch the user closed; the user's toggles last for the
   session only.
+- **No box with an open text field is dimmed, and highlighted arrows keep their layer below the
+  boxes:** a note being typed stays readable while another box is selected, and a highlighted
+  arrow's label never lies over a box and takes its clicks.
 - **The board tree in two tasks:** the list's new shape and its fixtures apart from the branches'
   behavior, so each diff can be judged on its own.
 - **Zoom keys and a click on the percentage for 100 %:** they come with the zoom bar as the usual

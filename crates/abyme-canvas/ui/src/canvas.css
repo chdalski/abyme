@@ -268,3 +268,30 @@ button.element-pin {
   min-width: 3.5rem;
   font-variant-numeric: tabular-nums;
 }
+
+/* A box's parts share one wrapper that lays out nothing of its own, so the
+   marks on its edges stay placed against React Flow's node. */
+.element-box {
+  display: contents;
+}
+
+/* Under a selection: the boxes at the other end of a highlighted arrow take its
+   color, as arrows leaving or entering the selection do in edges.ts, and the
+   boxes outside it are dimmed with their marks. */
+.box-leaving > .element {
+  border-color: #d9480f;
+  box-shadow: 0 0 0 2px #d9480f;
+}
+
+.box-entering > .element {
+  border-color: #2b8a3e;
+  box-shadow: 0 0 0 2px #2b8a3e;
+}
+
+.box-dimmed > * {
+  opacity: 0.35;
+}
+
+.react-flow__edge.edge-dimmed {
+  opacity: 0.25;
+}

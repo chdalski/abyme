@@ -4,10 +4,10 @@ type: "docs/note"
 name: "Checks"
 summary: "The structural and content checks, the verification stamp, and how reports reach the AI"
 anchor: "docs/3 Reconciliation/Checks.md"
-verified: "1a669e364d5496fe5a85bcdf32783592ba3092c4"
+verified: "97f1d48b754f8b923dab09452c30b474ec4c7fe9"
 verified_by: "ai"
 verified_content:
-  - {path: "crates/abyme-canvas/ui", object: "b2342663f7e0830a4ed8529a41a9b838079f498b"}
+  - {path: "crates/abyme-canvas/ui", object: "dbe8fe56d2a85a4f742e1b321ebe5775d3250254"}
   - {path: "crates/abyme-core/src/apply.rs", object: "3c10e50ed7beb9b1cf685498296e6874ca98338c"}
   - {path: "crates/abyme-core/src/outline.rs", object: "7fa7d1a4bc56c757f07a7ef338ff26939ff6c3c2"}
   - {path: "crates/abyme-core/src/project", object: "fd281295d7e1ee21a7271f37e80f5167e2a75657"}

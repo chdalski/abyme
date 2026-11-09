@@ -65,6 +65,7 @@ share a parent line with one sub-item each.
 - `ElementContent` takes `editing` as optional, defaulting to false, only for the standalone tests in `ElementBox.test.tsx`; making it required keeps the prop with one source: `crates/abyme-canvas/ui/src/ElementBox.tsx` (Reviewer, backlog bugs Task 12).
 - Three reads in the apply tests take a board's placements through `before.boards[&board_id(..)].placements`, the read-only twin of `placements_on`; a second helper for three reads did not pay: `crates/abyme-core/src/apply/tests/` (`layout.rs`, `hierarchy.rs`, `placement.rs`) (Reviewer, consolidate tests Task 3, Low).
 - Three imports of the server test root are used by one module each, `TcpListener` by `environment.rs` and `ErrorCode` and `JsonObject` by `protocol.rs`; they could move into those modules: `crates/abyme-mcp/tests/server/main.rs` (Reviewer, consolidate tests Task 7, Low).
+- The two loops that fill `ends` in `focusOf` could be one declarative `Map` whose later entries win; about the same size: `crates/abyme-canvas/ui/src/edges.ts` (Reviewer, canvas usability Task 3, Low).
 
 ## Documentation
 

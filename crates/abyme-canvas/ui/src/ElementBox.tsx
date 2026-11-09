@@ -8,6 +8,7 @@ import { createContext, useContext } from "react";
 
 import { type FlagMarks, NO_MARKS } from "./flags";
 import type { Shown } from "./bindings";
+import { type BoxRole, type Focus, NO_FOCUS, boxRoleOf } from "./edges";
 import type { ElementData, ElementNode } from "./nodes";
 import { NoteContent } from "./NoteContent";
 
@@ -24,6 +25,19 @@ export const ReleasePin = createContext<
 
 /** The levels of the review flags the boxes show. */
 export const ReviewMarks = createContext<FlagMarks>(NO_MARKS);
+
+/** What the selection highlights, which each box reads its role from. */
+export const Highlight = createContext<Focus>(NO_FOCUS);
+
+/** The class of each role a box takes under the selection. */
+const BOX_CLASSES: Record<BoxRole, string> = {
+  none: "element-box",
+  selected: "element-box box-selected",
+  kept: "element-box box-kept",
+  leaving: "element-box box-leaving",
+  entering: "element-box box-entering",
+  dimmed: "element-box box-dimmed",
+};
 
 /**
  * The mark of an element's review flag: its level in words, and no reason. It
@@ -101,14 +115,17 @@ function PinMarker({
  * nothing: React Flow measures them, and without them it forgets where arrows
  * start and end after it measures the box. A release of its pin goes by where
  * the box lies now, so it follows a drag still on its way to the board file.
+ * Its parts share one wrapper that lays out nothing of its own and carries the
+ * box's role under the selection.
  */
 export function ElementBox({
   data,
   positionAbsoluteX,
   positionAbsoluteY,
 }: NodeProps<ElementNode>) {
+  const role = boxRoleOf(useContext(Highlight), data.element, data.editing);
   return (
-    <>
+    <div className={BOX_CLASSES[role]}>
       <Handle
         type="target"
         position={Position.Top}
@@ -137,7 +154,7 @@ export function ElementBox({
         isConnectable={false}
         className="element-handle"
       />
-    </>
+    </div>
   );
 }
 

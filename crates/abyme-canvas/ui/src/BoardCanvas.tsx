@@ -19,8 +19,8 @@ import {
 
 import type { BoardView } from "./bindings";
 import { useBoardNodes } from "./boardNodes";
-import { toEdges } from "./edges";
-import { ElementBox, OpenBoard, ReleasePin } from "./ElementBox";
+import { focusOf, focusedEdges, toEdges } from "./edges";
+import { ElementBox, Highlight, OpenBoard, ReleasePin } from "./ElementBox";
 import type { ElementNode, Move } from "./nodes";
 import { NewNotes, NoteFields, WriteNote } from "./NoteContent";
 import type { NoteParts } from "./notes";
@@ -59,7 +59,9 @@ type BoardCanvasProps = {
  * mirrored board offers no release of a pin, and a move only of a note. The key
  * `N`, a double-click on an empty spot, and the toolbar start a new note, on
  * every board. The zoom bar shows and changes the zoom, from `MIN_ZOOM` to
- * `MAX_ZOOM`, which fitting the board into view keeps to as well.
+ * `MAX_ZOOM`, which fitting the board into view keeps to as well. A selection
+ * highlights the arrows that leave and enter it and the boxes at their other
+ * ends, and dims the rest.
  */
 export function BoardCanvas(props: BoardCanvasProps) {
   return (
@@ -89,7 +91,24 @@ function Flow({
     draftWritten,
     noteFields,
   } = useBoardNodes(view, askedAt, move, onMoveFailed, deleteNotes);
-  const edges = useMemo(() => toEdges(view), [view]);
+  const drawn = useMemo(() => toEdges(view), [view]);
+  // Keyed on the selected IDs, not on the nodes, which change on every frame
+  // of a drag: the highlight changes only with the selection or the view.
+  const selectedKey = nodes
+    .filter((node) => node.selected === true)
+    .map((node) => node.id)
+    .sort()
+    .join("|");
+  const focus = useMemo(
+    () =>
+      focusOf(
+        view,
+        drawn,
+        new Set(selectedKey === "" ? [] : selectedKey.split("|")),
+      ),
+    [view, drawn, selectedKey],
+  );
+  const edges = useMemo(() => focusedEdges(drawn, focus), [drawn, focus]);
   const { screenToFlowPosition } = useReactFlow();
   const surface = useRef<HTMLDivElement>(null);
   const mouse = useRef<XYPosition | null>(null);
@@ -177,48 +196,50 @@ function Flow({
   );
 
   return (
-    <OpenBoard.Provider value={onOpen}>
-      <ReleasePin.Provider value={view.mode === "mirrored" ? null : release}>
-        <WriteNote.Provider value={writeNote}>
-          <NewNotes.Provider value={newNotes}>
-            <NoteFields.Provider value={fields}>
-              <div
-                ref={surface}
-                className="board-surface"
-                onMouseMove={(event) => {
-                  mouse.current = { x: event.clientX, y: event.clientY };
-                }}
-                onMouseLeave={() => {
-                  mouse.current = null;
-                }}
-                onDoubleClick={onDoubleClick}
-              >
-                <ReactFlow
-                  nodes={nodes}
-                  edges={edges}
-                  nodeTypes={NODE_TYPES}
-                  onNodesChange={onNodesChange}
-                  onNodeDoubleClick={openFirstInnerBoard}
-                  nodesConnectable={false}
-                  deleteKeyCode={DELETE_KEYS}
-                  zoomOnDoubleClick={false}
-                  minZoom={MIN_ZOOM}
-                  maxZoom={MAX_ZOOM}
-                  attributionPosition="bottom-left"
-                  fitView
+    <Highlight.Provider value={focus}>
+      <OpenBoard.Provider value={onOpen}>
+        <ReleasePin.Provider value={view.mode === "mirrored" ? null : release}>
+          <WriteNote.Provider value={writeNote}>
+            <NewNotes.Provider value={newNotes}>
+              <NoteFields.Provider value={fields}>
+                <div
+                  ref={surface}
+                  className="board-surface"
+                  onMouseMove={(event) => {
+                    mouse.current = { x: event.clientX, y: event.clientY };
+                  }}
+                  onMouseLeave={() => {
+                    mouse.current = null;
+                  }}
+                  onDoubleClick={onDoubleClick}
                 >
-                  <Panel position="top-left">
-                    <button type="button" onClick={addAtTheMiddle}>
-                      New note
-                    </button>
-                  </Panel>
-                  <ZoomBar />
-                </ReactFlow>
-              </div>
-            </NoteFields.Provider>
-          </NewNotes.Provider>
-        </WriteNote.Provider>
-      </ReleasePin.Provider>
-    </OpenBoard.Provider>
+                  <ReactFlow
+                    nodes={nodes}
+                    edges={edges}
+                    nodeTypes={NODE_TYPES}
+                    onNodesChange={onNodesChange}
+                    onNodeDoubleClick={openFirstInnerBoard}
+                    nodesConnectable={false}
+                    deleteKeyCode={DELETE_KEYS}
+                    zoomOnDoubleClick={false}
+                    minZoom={MIN_ZOOM}
+                    maxZoom={MAX_ZOOM}
+                    attributionPosition="bottom-left"
+                    fitView
+                  >
+                    <Panel position="top-left">
+                      <button type="button" onClick={addAtTheMiddle}>
+                        New note
+                      </button>
+                    </Panel>
+                    <ZoomBar />
+                  </ReactFlow>
+                </div>
+              </NoteFields.Provider>
+            </NewNotes.Provider>
+          </WriteNote.Provider>
+        </ReleasePin.Provider>
+      </OpenBoard.Provider>
+    </Highlight.Provider>
   );
 }
