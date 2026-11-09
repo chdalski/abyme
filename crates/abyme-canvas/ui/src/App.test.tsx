@@ -1876,3 +1876,250 @@ describe("the board tree's branches", () => {
     ]);
   });
 });
+
+describe("the sidebar", () => {
+  function sidebarClient(title = "Context"): FakeClient {
+    const client = new FakeClient([
+      { id: "context", title, depth: 0 },
+      { id: "containers", title: "Containers", depth: 1 },
+    ]);
+    client.views = {
+      context: boardView({ id: "context", title }),
+      containers: boardView({ id: "containers", title: "Containers" }),
+    };
+    return client;
+  }
+
+  async function renderSidebar(title?: string) {
+    const rendered = render(<App client={sidebarClient(title)} />);
+    // Also while the sidebar is collapsed, which hides the list.
+    await screen.findByRole("list", { name: "Boards", hidden: true });
+    return rendered;
+  }
+
+  function navOf(container: HTMLElement): HTMLElement {
+    const nav = container.querySelector<HTMLElement>(".sidebar > nav");
+    if (nav === null) {
+      throw new Error("no sidebar");
+    }
+    return nav;
+  }
+
+  const handle = () =>
+    screen.getByRole("separator", { name: "Width of the sidebar" });
+
+  /** Drags the handle by `pixels`, a rem being 16 pixels in jsdom. */
+  function drag(pixels: number) {
+    fireEvent.mouseDown(handle(), { button: 0, clientX: 100 });
+    fireEvent.mouseMove(window, { clientX: 100 + pixels });
+    fireEvent.mouseUp(window, { clientX: 100 + pixels });
+  }
+
+  it("starts at the default width, expanded, with nothing stored", async () => {
+    const { container } = await renderSidebar();
+
+    expect(navOf(container).style.width).toBe("16rem");
+    expect(handle().getAttribute("aria-valuenow")).toBe("16");
+    expect(navOf(container).hidden).toBe(false);
+  });
+
+  it("changes its width with a drag of the handle and stores it", async () => {
+    const { container } = await renderSidebar();
+
+    drag(64);
+
+    expect(navOf(container).style.width).toBe("20rem");
+    expect(handle().getAttribute("aria-valuenow")).toBe("20");
+    expect(window.localStorage.getItem("abyme.sidebar.width")).toBe("20");
+  });
+
+  it("keeps its width between the bounds however far the handle is dragged", async () => {
+    const { container } = await renderSidebar();
+
+    drag(10_000);
+    expect(navOf(container).style.width).toBe("40rem");
+    expect(window.localStorage.getItem("abyme.sidebar.width")).toBe("40");
+
+    drag(-10_000);
+    expect(navOf(container).style.width).toBe("10rem");
+    expect(window.localStorage.getItem("abyme.sidebar.width")).toBe("10");
+  });
+
+  it("changes its width with the arrow keys on the handle, within the bounds", async () => {
+    const { container } = await renderSidebar();
+
+    fireEvent.keyDown(handle(), { key: "ArrowRight" });
+    expect(navOf(container).style.width).toBe("17rem");
+    for (let step = 0; step < 20; step += 1) {
+      fireEvent.keyDown(handle(), { key: "ArrowLeft" });
+    }
+    expect(navOf(container).style.width).toBe("10rem");
+    expect(window.localStorage.getItem("abyme.sidebar.width")).toBe("10");
+  });
+
+  it("goes back to the default width on a double-click on the handle", async () => {
+    const { container } = await renderSidebar();
+    drag(64);
+
+    fireEvent.doubleClick(handle());
+
+    expect(navOf(container).style.width).toBe("16rem");
+    expect(window.localStorage.getItem("abyme.sidebar.width")).toBe("16");
+  });
+
+  it("collapses and expands, keeping the tree's branches", async () => {
+    const { container } = await renderSidebar();
+    fireEvent.click(screen.getByRole("button", { name: "Open branch" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Collapse sidebar" }));
+
+    expect(navOf(container).hidden).toBe(true);
+    expect(screen.queryByRole("separator")).toBeNull();
+    expect(window.localStorage.getItem("abyme.sidebar.collapsed")).toBe(
+      "collapsed",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand sidebar" }));
+
+    expect(navOf(container).hidden).toBe(false);
+    expect(screen.getByRole("button", { name: "Containers" })).toBeDefined();
+    expect(window.localStorage.getItem("abyme.sidebar.collapsed")).toBe("");
+  });
+
+  it("moves the focus to the button that undoes a collapse or an expansion", async () => {
+    await renderSidebar();
+    const collapse = screen.getByRole("button", { name: "Collapse sidebar" });
+    collapse.focus();
+
+    fireEvent.click(collapse);
+
+    const expand = screen.getByRole("button", { name: "Expand sidebar" });
+    expect(document.activeElement).toBe(expand);
+
+    fireEvent.click(expand);
+
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: "Collapse sidebar" }),
+    );
+  });
+
+  it("takes no focus when it starts collapsed", async () => {
+    window.localStorage.setItem("abyme.sidebar.collapsed", "collapsed");
+
+    await renderSidebar();
+
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it("starts as the user left it, from the webview's storage", async () => {
+    window.localStorage.setItem("abyme.sidebar.width", "24");
+    window.localStorage.setItem("abyme.sidebar.collapsed", "collapsed");
+
+    const { container } = await renderSidebar();
+
+    expect(navOf(container).style.width).toBe("24rem");
+    expect(navOf(container).hidden).toBe(true);
+    expect(
+      screen.getByRole("button", { name: "Expand sidebar" }),
+    ).toBeDefined();
+  });
+
+  it.each([
+    ["abc", "16rem"],
+    ["NaN", "16rem"],
+    ["Infinity", "16rem"],
+    ["-Infinity", "16rem"],
+    ["1e400", "16rem"],
+    ["", "16rem"],
+    ["  ", "16rem"],
+    ["16rem", "16rem"],
+    ["</style><img src=x>", "16rem"],
+    ["5", "10rem"],
+    ["100", "40rem"],
+    ["12.5", "12.5rem"],
+  ])("starts at %j stored as %s", async (stored, shown) => {
+    window.localStorage.setItem("abyme.sidebar.width", stored);
+
+    const { container } = await renderSidebar();
+
+    expect(navOf(container).style.width).toBe(shown);
+    expect(handle().getAttribute("aria-valuenow")).toBe(
+      shown.replace("rem", ""),
+    );
+    expect(container.querySelector("img")).toBeNull();
+  });
+
+  it.each(["TRUE", "1", " collapsed", "{}"])(
+    "starts expanded with %j stored as its state",
+    async (stored) => {
+      window.localStorage.setItem("abyme.sidebar.collapsed", stored);
+
+      const { container } = await renderSidebar();
+
+      expect(navOf(container).hidden).toBe(false);
+    },
+  );
+
+  it("starts at the default width and expanded when the storage cannot be read", async () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new DOMException("denied", "SecurityError");
+    });
+
+    const { container } = await renderSidebar();
+
+    expect(navOf(container).style.width).toBe("16rem");
+    expect(navOf(container).hidden).toBe(false);
+  });
+
+  it("keeps working when the storage refuses a write", async () => {
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("full", "QuotaExceededError");
+    });
+    const { container } = await renderSidebar();
+
+    drag(64);
+    fireEvent.click(screen.getByRole("button", { name: "Collapse sidebar" }));
+
+    expect(navOf(container).style.width).toBe("20rem");
+    expect(navOf(container).hidden).toBe(true);
+  });
+
+  it("stores nothing but its width and its state", async () => {
+    await renderSidebar();
+
+    drag(64);
+    fireEvent.click(screen.getByRole("button", { name: "Collapse sidebar" }));
+
+    const keys = Array.from(
+      { length: window.localStorage.length },
+      (_, index) => window.localStorage.key(index),
+    );
+    expect(keys.sort()).toEqual([
+      "abyme.sidebar.collapsed",
+      "abyme.sidebar.width",
+    ]);
+  });
+
+  it("stops a drag when the window loses the mouse", async () => {
+    const { container } = await renderSidebar();
+    fireEvent.mouseDown(handle(), { button: 0, clientX: 100 });
+    fireEvent.mouseMove(window, { clientX: 164 });
+
+    fireEvent.blur(window);
+    fireEvent.mouseMove(window, { clientX: 400 });
+
+    expect(navOf(container).style.width).toBe("20rem");
+    expect(window.localStorage.getItem("abyme.sidebar.width")).toBe("20");
+  });
+
+  it("shows a title in full as the tooltip of its button, as text", async () => {
+    const title = "<img src=x onerror=alert(1)>";
+    const { container } = await renderSidebar(title);
+
+    const button = screen.getByRole("button", { name: title });
+
+    expect(button.textContent).toBe(title);
+    expect(button.getAttribute("title")).toBe(title);
+    expect(container.querySelector("img")).toBeNull();
+  });
+});

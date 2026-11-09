@@ -10,6 +10,7 @@ import { ReviewMarks } from "./ElementBox";
 import { type FlagsState, NO_MARKS, loadFlags, whileVisible } from "./flags";
 import { useLive } from "./live";
 import { RestOfOpeningPress } from "./press";
+import { Sidebar } from "./Sidebar";
 
 /** Listened for on the window before any handler of the page sees the event. */
 const BEFORE_ALL = { capture: true, passive: true } as const;
@@ -163,10 +164,9 @@ export function App({ client }: { client: AbymeClient }) {
   return (
     <RestOfOpeningPress.Provider value={isRestOfOpeningPress}>
       <main>
-        <nav>
-          <h1>Boards</h1>
+        <Sidebar>
           <BoardList state={boards} open={open} onOpen={openBoard} />
-        </nav>
+        </Sidebar>
         <section className="board">
           {open === null ? (
             <p>Open a board from the list.</p>

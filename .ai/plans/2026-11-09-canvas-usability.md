@@ -30,7 +30,7 @@ recorded in `docs/Ideas.md`.
 - [x] One helper builds a board's list entry
 - [x] The board list shows the hierarchy
 - [x] The board tree opens along the open board
-- [ ] The sidebar can be resized and collapsed
+- [x] The sidebar can be resized and collapsed
 
 ## Tasks
 
@@ -150,18 +150,18 @@ configured (`tauri` 2.12.5, `src/manager/webview.rs`, and `wry` 0.57.1,
 
 Review path: Security-Hybrid
 
-- [ ] Dragging the handle on the sidebar's edge changes its width between 10rem and 40rem; a
+- [x] Dragging the handle on the sidebar's edge changes its width between 10rem and 40rem; a
       double-click on the handle sets the default width, 16rem, the sidebar's width today.
-- [ ] A button collapses the sidebar so the board takes the whole width, and expands it again.
-- [ ] Width and collapsed state are kept in the webview's storage and restored at the next start. A
+- [x] A button collapses the sidebar so the board takes the whole width, and expands it again.
+- [x] Width and collapsed state are kept in the webview's storage and restored at the next start. A
       stored width that is a finite number is clamped to 10rem–40rem, and any other stored width,
       or none, gives 16rem; the sidebar starts collapsed only when the stored state is exactly the
       value the canvas writes for collapsed.
-- [ ] A title too long for the sidebar is cut with an ellipsis and shown in full as a tooltip,
+- [x] A title too long for the sidebar is cut with an ellipsis and shown in full as a tooltip,
       still as text only.
-- [ ] Tests through `App` cover resizing, the reset, collapsing, restoring, and invalid stored
+- [x] Tests through `App` cover resizing, the reset, collapsing, restoring, and invalid stored
       values, and no test depends on what an earlier test stored.
-- [ ] `docs/5 Architecture/Canvas.md` describes the sidebar.
+- [x] `docs/5 Architecture/Canvas.md` describes the sidebar.
 
 ## Decisions
 

@@ -24,7 +24,8 @@ function indentOf(depth: number): string {
  * those on the way to the open board, and opening a board opens its way again,
  * also a branch the user closed; what the user opened or closed stays so for
  * the session, also when the list loads again. Titles and messages come from
- * the repository and are rendered as text only.
+ * the repository and are rendered as text only; a title too long for the
+ * sidebar is cut, and shown in full as its button's tooltip.
  */
 export function BoardList({
   state,
@@ -95,7 +96,9 @@ export function BoardList({
                 )}
                 <button
                   type="button"
+                  className="board-link"
                   aria-current={row.id === open ? "page" : undefined}
+                  title={row.title}
                   onClick={() => onOpen(row.id)}
                 >
                   {row.title}

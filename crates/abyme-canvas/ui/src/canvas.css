@@ -8,22 +8,62 @@ body,
 
 main {
   display: grid;
-  grid-template-columns: 16rem 1fr;
+  grid-template-columns: auto 1fr;
   height: 100%;
 }
 
-main > nav {
-  overflow: auto;
-  padding: 0 1rem;
+/* The sidebar: the list at the width the user gave it, then the handle that
+   changes it; collapsed, only the button that expands it. */
+.sidebar {
+  display: flex;
+  min-height: 0;
   border-right: 1px solid #d0d4dc;
 }
 
-main > nav ul {
+.sidebar > nav {
+  box-sizing: border-box;
+  overflow: auto;
+  padding: 0 1rem;
+}
+
+.sidebar > nav[hidden] {
+  display: none;
+}
+
+.sidebar-handle {
+  flex: none;
+  width: 5px;
+  cursor: col-resize;
+}
+
+.sidebar-handle:hover,
+.sidebar-handle:focus-visible {
+  background: #b9cff5;
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sidebar > nav .sidebar-collapse,
+.sidebar-expand {
+  flex: none;
+  width: auto;
+  padding: 0.25rem 0.5rem;
+  border: none;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.sidebar > nav ul {
   list-style: none;
   padding: 0;
 }
 
-main > nav button {
+.sidebar > nav button {
   width: 100%;
   padding: 0.25rem 0.5rem;
   border: none;
@@ -33,18 +73,25 @@ main > nav button {
   cursor: pointer;
 }
 
-main > nav button[aria-current="page"] {
+.sidebar > nav button[aria-current="page"] {
   background: #e3e8f2;
 }
 
 /* A row of the tree: the toggle of its branch, or a gap as wide, then the
-   button that opens the board. */
-main > nav li {
+   button that opens the board, whose title is cut where the sidebar ends. */
+.sidebar > nav li {
   display: flex;
   align-items: baseline;
 }
 
-main > nav .branch-toggle {
+.sidebar > nav .board-link {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.sidebar > nav .branch-toggle {
   flex: none;
   width: 1.25rem;
   padding: 0;

@@ -70,6 +70,8 @@ share a parent line with one sub-item each.
 - `hasInner`'s check `index + 1 < rows.length` is redundant, since a missing row counts as level 0: `crates/abyme-canvas/ui/src/boardTree.ts` (Reviewer, canvas usability Task 6, Low).
 - The bare block after the `if` in the `loaded` case could be a `case "loaded": { … }` block: `crates/abyme-canvas/ui/src/BoardList.tsx` (Reviewer, canvas usability Task 6, Low).
 - Two assertions in "gives a toggle only to a board with boards below it" check nothing, since `getByRole` throws already: `crates/abyme-canvas/ui/src/App.test.tsx` (Reviewer, canvas usability Task 6, Low).
+- At the sidebar's minimum width of 10rem, a board at depth 7 or 8 gets nearly all of it as indent, so its title shrinks to nothing and the list scrolls sideways: `crates/abyme-canvas/ui/src/canvas.css` with `INDENT_LEVELS` in `BoardList.tsx` (Reviewer, canvas usability Task 7, Low).
+- A note hanging on a selected box is dimmed, since no drawn arrow joins it to the box, while the box a selected note hangs on stays undimmed; for the note work of canvas package B: `boxRoleOf` in `crates/abyme-canvas/ui/src/edges.ts` (Reviewer, canvas usability Task 3; kept for later by the user).
 
 ## Documentation
 
