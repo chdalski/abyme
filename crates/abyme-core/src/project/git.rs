@@ -30,6 +30,7 @@ use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::io::Write as _;
 use std::iter;
+use std::ops::Bound;
 use std::os::unix::ffi::{OsStrExt as _, OsStringExt as _};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
@@ -148,6 +149,66 @@ struct Walk<'a> {
     root: &'a Path,
 }
 
+/// The paths review looks up in a repository's content after a rewrite:
+/// the anchors of all elements and every folder above one. They must cover
+/// every path review looks up through `recorded_matches`, an own anchor or
+/// the path that stands for a relation target, its anchor or the root of a
+/// nested repository above it: a stamp that recorded a path as holding
+/// nothing would match a path left out, and a change would go unflagged.
+/// Only the anchors are held, borrowed, so the set grows with their bytes
+/// and not with the folders above them.
+struct Lookups<'a> {
+    anchors: BTreeSet<&'a [u8]>,
+}
+
+impl<'a> Lookups<'a> {
+    /// The paths review looks up for the `elements`.
+    fn new(elements: &[AnchorAndStamp<'a>]) -> Self {
+        Self {
+            anchors: elements
+                .iter()
+                .filter_map(|element| element.anchor)
+                .map(|anchor| anchor.as_str().as_bytes())
+                .collect(),
+        }
+    }
+
+    /// Whether `path`, relative to the project root, is an anchor or a
+    /// folder above one. The anchors below a folder sort together right
+    /// from the folder's path with a `/`, so the first anchor from there
+    /// tells.
+    fn keep(&self, path: &[u8]) -> bool {
+        if self.anchors.contains(path) {
+            return true;
+        }
+        let folder = [path, b"/"].concat();
+        self.anchors
+            .range::<[u8], _>((Bound::Included(folder.as_slice()), Bound::Unbounded))
+            .next()
+            .is_some_and(|anchor| anchor.starts_with(&folder))
+    }
+}
+
+/// Which entries of a tree listing are kept.
+#[derive(Clone, Copy)]
+enum Kept<'a> {
+    /// Every entry, as `verify` needs them to record what a stamp vouches
+    /// for.
+    All,
+    /// The entries review looks up after a rewrite.
+    Lookups(&'a Lookups<'a>),
+}
+
+impl Kept<'_> {
+    /// Whether the entry at `path`, relative to the project root, is kept.
+    fn keeps(self, path: &[u8]) -> bool {
+        match self {
+            Self::All => true,
+            Self::Lookups(lookups) => lookups.keep(path),
+        }
+    }
+}
+
 /// What Git reports about the files of the project at `root`, of the
 /// repositories nested in it in which an element's anchor lies, and about
 /// each element's stamp, in the element's repository.
@@ -157,15 +218,16 @@ pub fn facts(root: &Path, elements: &[AnchorAndStamp<'_>]) -> Result<GitFacts, U
     let prefix = git.prefix(&project)?;
     let listing = git.listing(&project, &prefix)?;
     let wanted = wanted(&listing.repositories, elements);
+    let lookups = Lookups::new(elements);
     let nested = if wanted.is_empty() {
         BTreeMap::new()
     } else {
         let store = git.store(&project)?;
-        Walk { git: &git, root }.nested(&wanted, store.as_deref(), elements)
+        Walk { git: &git, root }.nested(&wanted, store.as_deref(), elements, &lookups)
     };
     let members = members(None, &nested, elements);
     Ok(GitFacts {
-        project: git.repository_facts(&project, listing, &members)?,
+        project: git.repository_facts(&project, listing, &members, &lookups)?,
         nested,
     })
 }
@@ -205,16 +267,18 @@ impl Walk<'_> {
     /// in them in which an anchor of the `elements` lies, by root. `store` is
     /// where their outer repository keeps the Git directories of its
     /// submodules. A repository that Git may not run in, or in which Git
-    /// fails, is left out with everything nested in it.
+    /// fails, is left out with everything nested in it. `lookups` are the
+    /// paths review looks up after a rewrite, for every element.
     fn nested(
         &self,
         roots: &[&Vec<u8>],
         store: Option<&Path>,
         elements: &[AnchorAndStamp<'_>],
+        lookups: &Lookups<'_>,
     ) -> BTreeMap<Vec<u8>, RepositoryFacts> {
         roots
             .iter()
-            .filter_map(|root| self.repository(root, store, elements))
+            .filter_map(|root| self.repository(root, store, elements, lookups))
             .flatten()
             .collect()
     }
@@ -226,13 +290,17 @@ impl Walk<'_> {
         root: &[u8],
         store: Option<&Path>,
         elements: &[AnchorAndStamp<'_>],
+        lookups: &Lookups<'_>,
     ) -> Option<BTreeMap<Vec<u8>, RepositoryFacts>> {
         let (place, own_store) = self.enter(root, store)?;
         let listing = self.git.listing(&place, b"").ok()?;
         let wanted = wanted(&listing.repositories, elements);
-        let mut nested = self.nested(&wanted, own_store.as_deref(), elements);
+        let mut nested = self.nested(&wanted, own_store.as_deref(), elements, lookups);
         let members = members(Some(root), &nested, elements);
-        let facts = self.git.repository_facts(&place, listing, &members).ok()?;
+        let facts = self
+            .git
+            .repository_facts(&place, listing, &members, lookups)
+            .ok()?;
         nested.insert(root.to_vec(), facts);
         Some(nested)
     }
@@ -566,30 +634,30 @@ impl Git {
         commit: &CommitId,
     ) -> Result<BTreeMap<Vec<u8>, ObjectId>, Unavailable> {
         Ok(self
-            .typed_objects(place, commit)?
+            .typed_objects(place, commit, Kept::All)?
             .into_iter()
             .map(|(path, (_, object))| (path, object))
             .collect())
     }
 
-    /// The object each path held in `commit` of the repository at `place`,
-    /// as [`Git::objects`] reads them, each with its type.
+    /// The object each path that `kept` keeps held in `commit` of the
+    /// repository at `place`, as [`Git::objects`] reads them, each with its
+    /// type. Every entry Git prints is checked, kept or not.
     fn typed_objects(
         &self,
         place: &Place,
         commit: &CommitId,
+        kept: Kept<'_>,
     ) -> Result<BTreeMap<Vec<u8>, TreeEntry>, Unavailable> {
         let output = self.success(place, &["ls-tree", "-r", "-t", "-z", commit.as_str()])?;
-        let listed = tree_entries(&output)?
-            .into_iter()
-            .map(|(path, entry)| Ok((place.path(path)?, entry)));
-        let root = place.root.iter().map(|root| {
-            Ok((
+        let mut objects = tree_objects(&output, place.root.as_deref(), kept)?;
+        if let Some(root) = place.root.as_ref().filter(|root| kept.keeps(root)) {
+            objects.insert(
                 root.clone(),
                 (ObjectKind::Tree, self.root_tree(place, commit)?),
-            ))
-        });
-        listed.chain(root).collect()
+            );
+        }
+        Ok(objects)
     }
 
     /// The tree of `commit` in the repository at `place`; anything but one
@@ -620,6 +688,7 @@ impl Git {
         place: &Place,
         listing: Listing,
         members: &[&AnchorAndStamp<'_>],
+        lookups: &Lookups<'_>,
     ) -> Result<RepositoryFacts, Unavailable> {
         let head = self.commit(place, "HEAD")?;
         let stamps = stamps(members);
@@ -632,7 +701,7 @@ impl Git {
             .any(|(stamp, recorded)| *recorded && since.get(*stamp) == Some(&Since::Unknown));
         let fallback = match head.filter(|_| needed) {
             Some(head) => {
-                let objects = self.typed_objects(place, &head)?;
+                let objects = self.typed_objects(place, &head, Kept::Lookups(lookups))?;
                 let rewritten = rewritten(members, &since, &objects);
                 let differing = self.differing(place, &rewritten);
                 Some(Fallback {
@@ -1200,6 +1269,29 @@ fn diff_paths(output: &[u8]) -> Option<Vec<Vec<u8>>> {
             .iter()
             .all(|path| path.split(|byte| *byte == b'/').all(is_plain_segment));
     fits.then(|| paths.iter().map(|path| path.to_vec()).collect())
+}
+
+/// The entries of `git ls-tree -r -t -z` `output`, printed in the repository
+/// at `root` (the project's for `None`), with paths relative to the project
+/// root, those that `kept` keeps. Every entry is checked first, as
+/// [`tree_entries`] does, and its path made relative to the project root,
+/// so a broken entry fails wherever it lies.
+fn tree_objects(
+    output: &[u8],
+    root: Option<&[u8]>,
+    kept: Kept<'_>,
+) -> Result<BTreeMap<Vec<u8>, TreeEntry>, Unavailable> {
+    let entries = tree_entries(output)?
+        .into_iter()
+        .map(|(path, entry)| {
+            let path = root.map_or_else(|| Ok(path.to_vec()), |root| nested_path(root, path))?;
+            Ok((path, entry))
+        })
+        .collect::<Result<Vec<_>, Unavailable>>()?;
+    Ok(entries
+        .into_iter()
+        .filter(|(path, _)| kept.keeps(path))
+        .collect())
 }
 
 /// Whether `path` names a folder that encloses the place Git ran in, as

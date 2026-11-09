@@ -44,7 +44,10 @@ share a parent line with one sub-item each.
 
 ## Cleanup
 
-- After a rewrite, every review runs a whole-tree `ls-tree -r -t` and keeps every entry, also on the canvas's focus and interval reviews; keeping only the paths review computes would bound it: `crates/abyme-core/src/project/git.rs` (Reviewer, stamps survive history rewrites Task 4).
+- The doc of `Fallback::objects` ends "review looks up only the former", which makes the reader work out what "the former" is; "A looked-up path that is missing held nothing; every other path is left out." says it directly: `crates/abyme-core/src/review.rs` (Reviewer, file lists after a rewrite Task 3).
+- The doc of `recorded_matches` has one line past the comment's wrap width: `crates/abyme-core/src/review.rs` (Reviewer, file lists after a rewrite Task 3).
+- `tree_objects` collects every entry into an owned `Vec` before filtering; mapping and filtering in one `Result` pipeline still fails on any broken entry without the copy: `crates/abyme-core/src/project/git.rs` (Reviewer, file lists after a rewrite Task 3).
+- `fails_on_a_broken_entry_kept_or_not` picks each case's record by a string label in a `match` with a catch-all arm; a builder function per case would keep the cases and the records together: `crates/abyme-core/src/project/git/tests.rs` (Reviewer, file lists after a rewrite Task 3).
 - The test "asks no more once the app is gone" repeats the focus and interval steps of the StrictMode test "...and stops when the app closes"; only turning visible is new, and could join that test: `crates/abyme-canvas/ui/src/App.test.tsx` (Reviewer, backlog bugs Task 7).
 - `canvas.css` has two rules for the marks on a box's top edge, `.element-pin, .element-flag` and `.element-mark`; the shared properties could move to `.element-mark`: `crates/abyme-canvas/ui/src/canvas.css` (Reviewer, backlog bugs Task 6).
 - `apply` requests accept `RelationKind` in the object form (`"kind": {"uses": null}`), unlike `Mode` and `StatementKind`; files read only the string and get the normal form, so this is about consistency: `crates/abyme-model/src/relation.rs` (security engineer, plan D Task 1, rated Low; fix with a later change there).

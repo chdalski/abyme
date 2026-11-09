@@ -30,7 +30,7 @@ cleanups of the same code are done: one path argument in `recorded_matches`, the
 - [x] Recorded content is compared by one path argument, and one rule assigns an element to a
       repository
 - [x] A flag after a rewrite names the files that changed under the anchor
-- [ ] Review keeps only the tree entries it needs
+- [x] Review keeps only the tree entries it needs
 
 ## Tasks
 
@@ -105,18 +105,18 @@ that are an anchor of an element or a folder above one; the objects `verify` rea
 
 Review path: Security-Hybrid
 
-- [ ] The objects review keeps hold no path that is neither an anchor nor a folder above one, by a
+- [x] The objects review keeps hold no path that is neither an anchor nor a folder above one, by a
       unit test on literal `ls-tree` output.
-- [ ] A malformed entry anywhere in the output still fails as today, inside and outside the kept
+- [x] A malformed entry anywhere in the output still fails as today, inside and outside the kept
       paths, by a test.
-- [ ] Every flag of the tests in `crates/abyme-core/src/review/tests.rs` and
+- [x] Every flag of the tests in `crates/abyme-core/src/review/tests.rs` and
       `crates/abyme-core/tests/review.rs` is as before this task.
-- [ ] The content `verify` records is as before: `verify_records_the_content_of_the_anchor_and_of_
+- [x] The content `verify` records is as before: `verify_records_the_content_of_the_anchor_and_of_
       each_target` and `compares_a_nested_root_by_its_tree_and_a_submodule_target_by_its_commit`
       pass with their assertions unchanged.
-- [ ] The doc comments of `Fallback::objects`, `HeadFacts::objects`, and the function that reads
+- [x] The doc comments of `Fallback::objects`, `HeadFacts::objects`, and the function that reads
       the objects state what each holds.
-- [ ] The backlog entry about the whole-tree `ls-tree` in every review is gone.
+- [x] The backlog entry about the whole-tree `ls-tree` in every review is gone.
 
 ## Decisions
 
@@ -146,5 +146,9 @@ Review path: Security-Hybrid
   only when Git echoes exactly its ID as a tree; every failure leaves `UnknownStamp`; and the
   partial clones assert their flags exactly. The literal `ls-tree` test also checks each entry's
   type, which the file lists need.
+- **Task 3 holds the anchors it keeps by as borrowed paths and finds the folders above them by a
+  range lookup:** a copy of every folder above an anchor would grow with the square of an anchor's
+  length, which element files from a clone control; `verify` reads its objects through a separate,
+  complete path, and the set of kept paths is passed to the review's walk, never stored in it.
 - **Restamping unchanged elements after a rewrite stays out:** it would end the fallback's cost at
   its cause, but it adds a write path and commits nobody asked for.

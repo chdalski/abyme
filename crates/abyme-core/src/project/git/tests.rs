@@ -3,6 +3,7 @@
 use rstest::rstest;
 
 use super::*;
+use abyme_model::MAX_ANCHOR_BYTES;
 
 fn set(values: &[&[u8]]) -> BTreeSet<Vec<u8>> {
     values.iter().map(|value| value.to_vec()).collect()
@@ -442,4 +443,159 @@ fn writes_much_input_and_reads_much_output_without_waiting_on_a_full_pipe() {
 
     assert!(output.status.success());
     assert_eq!(output.stdout.split(|byte| *byte == b'\n').count(), 5001);
+}
+
+/// A tree listing entry: mode, type, object, path.
+fn tree_record(mode: &str, kind: &str, path: &str) -> String {
+    let object = if kind == "blob" { BLOB } else { TREE };
+    format!("{mode} {kind} {object}\t{path}\0")
+}
+
+/// The `anchors`, as elements without a stamp.
+fn anchored(anchors: &[Anchor]) -> Vec<AnchorAndStamp<'_>> {
+    anchors
+        .iter()
+        .map(|anchor| AnchorAndStamp {
+            anchor: Some(anchor),
+            stamp: None,
+            content: None,
+        })
+        .collect()
+}
+
+#[test]
+fn keeps_only_the_anchors_and_the_folders_above_them() {
+    let anchors = [anchor("crates/x"), anchor("vendor/lib/a.rs")];
+    let elements = anchored(&anchors);
+    let lookups = Lookups::new(&elements);
+    let output = [
+        tree_record("040000", "tree", "crates"),
+        tree_record("040000", "tree", "crates/x"),
+        tree_record("100644", "blob", "crates/x/lib.rs"),
+        tree_record("040000", "tree", "crates/xy"),
+        tree_record("100644", "blob", "crates/x-y"),
+        tree_record("040000", "tree", "vendor"),
+        tree_record("160000", "commit", "vendor/lib"),
+        tree_record("100644", "blob", "docs/readme.md"),
+    ]
+    .concat();
+
+    let kept = tree_objects(output.as_bytes(), None, Kept::Lookups(&lookups)).unwrap();
+
+    assert_eq!(
+        kept,
+        BTreeMap::from([
+            (b"crates".to_vec(), (ObjectKind::Tree, object(TREE))),
+            (b"crates/x".to_vec(), (ObjectKind::Tree, object(TREE))),
+            (b"vendor".to_vec(), (ObjectKind::Tree, object(TREE))),
+            (b"vendor/lib".to_vec(), (ObjectKind::Gitlink, object(TREE))),
+        ])
+    );
+}
+
+#[test]
+fn keeps_the_entries_of_a_nested_repository_by_their_paths_in_the_project() {
+    let anchors = [anchor("vendor/lib"), anchor("vendor/lib/src/a.rs")];
+    let elements = anchored(&anchors);
+    let lookups = Lookups::new(&elements);
+    let output = [
+        tree_record("040000", "tree", "src"),
+        tree_record("100644", "blob", "src/a.rs"),
+        tree_record("100644", "blob", "src/b.rs"),
+        tree_record("100644", "blob", "README.md"),
+    ]
+    .concat();
+
+    let kept = tree_objects(
+        output.as_bytes(),
+        Some(b"vendor/lib"),
+        Kept::Lookups(&lookups),
+    )
+    .unwrap();
+
+    assert_eq!(
+        kept.keys().collect::<Vec<_>>(),
+        [
+            &b"vendor/lib/src".to_vec(),
+            &b"vendor/lib/src/a.rs".to_vec()
+        ]
+    );
+    assert!(lookups.keep(b"vendor/lib"));
+}
+
+#[test]
+fn keeps_every_entry_for_verify() {
+    let output = [
+        tree_record("040000", "tree", "crates"),
+        tree_record("100644", "blob", "docs/readme.md"),
+    ]
+    .concat();
+
+    let kept = tree_objects(output.as_bytes(), None, Kept::All).unwrap();
+
+    assert_eq!(kept.len(), 2);
+}
+
+#[rstest]
+#[case::bad_mode_and_type("100644 tree")]
+#[case::short_object("short")]
+#[case::parent_segment("parent")]
+#[case::git_segment("git")]
+#[case::path_twice("twice")]
+fn fails_on_a_broken_entry_kept_or_not(#[case] broken: &str) {
+    let anchors = [anchor("crates/x")];
+    let elements = anchored(&anchors);
+    let lookups = Lookups::new(&elements);
+    let none = Lookups::new(&[]);
+    for path in ["crates/x", "docs/a.rs"] {
+        let record = match broken {
+            "100644 tree" => format!("100644 tree {TREE}\t{path}\0"),
+            "short" => format!("100644 blob {}\t{path}\0", &BLOB[..39]),
+            "parent" => format!("100644 blob {BLOB}\t{path}/../b\0"),
+            "git" => format!("100644 blob {BLOB}\t{path}/.git/b\0"),
+            _ => [
+                tree_record("100644", "blob", path),
+                tree_record("100644", "blob", path),
+            ]
+            .concat(),
+        };
+        for kept in [Kept::Lookups(&lookups), Kept::Lookups(&none)] {
+            assert_eq!(
+                tree_objects(record.as_bytes(), None, kept),
+                Err(Unavailable::GitFailed),
+                "{broken} at {path}"
+            );
+        }
+    }
+}
+
+#[test]
+fn keeps_nothing_without_anchors() {
+    let lookups = Lookups::new(&[]);
+    let output = tree_record("040000", "tree", "crates");
+
+    let kept = tree_objects(output.as_bytes(), None, Kept::Lookups(&lookups)).unwrap();
+
+    assert!(kept.is_empty());
+}
+
+#[test]
+fn holds_the_anchors_borrowed_however_deep_they_are() {
+    let deep = vec!["a"; MAX_ANCHOR_BYTES / 2].join("/");
+    let anchors: Vec<Anchor> = (0..100)
+        .map(|index| anchor(&format!("{index}/{}", &deep[..deep.len() - 4])))
+        .collect();
+    let elements = anchored(&anchors);
+
+    let lookups = Lookups::new(&elements);
+
+    assert_eq!(lookups.anchors.len(), 100);
+    let owned: BTreeSet<*const u8> = anchors
+        .iter()
+        .map(|anchor| anchor.as_str().as_ptr())
+        .collect();
+    let held: &BTreeSet<&[u8]> = &lookups.anchors;
+    assert!(held.iter().all(|held| owned.contains(&held.as_ptr())));
+    assert!(lookups.keep(b"0/a/a/a"));
+    assert!(!lookups.keep(b"0/a/b"));
 }

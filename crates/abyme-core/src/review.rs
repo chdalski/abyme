@@ -114,9 +114,11 @@ pub struct RepositoryFacts {
 /// project root.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Fallback {
-    /// The object each path held at that commit: every file, folder, and
-    /// nested repository below the project root, and the repository's own
-    /// root when it is nested. A path that is missing held nothing.
+    /// The object each path held at that commit, for the paths review looks
+    /// up: the anchors of the elements and the folders above them, the
+    /// repository's own root included when it is nested. A path that is
+    /// missing held nothing or is no such path; review looks up only the
+    /// former.
     pub objects: BTreeMap<Vec<u8>, ObjectId>,
     /// The paths in which the index differs from that commit.
     pub staged: BTreeSet<Vec<u8>>,
@@ -143,8 +145,9 @@ pub struct HeadFacts {
     /// on the way to this one, so that a relation target's path in it can be
     /// told.
     pub roots: BTreeSet<Vec<u8>>,
-    /// The object each path held at that commit, as [`Fallback::objects`]
-    /// names it.
+    /// The object each path held at that commit: every file, folder, and
+    /// nested repository below the project root, and the repository's own
+    /// root when it is nested. A path that is missing held nothing.
     pub objects: BTreeMap<Vec<u8>, ObjectId>,
 }
 
@@ -341,7 +344,9 @@ fn own_flags(element: &Element, baseline: Baseline<'_>, facts: &RepositoryFacts)
 }
 
 /// Whether the content recorded for `path` equals what the path, as Git
-/// prints it, holds at HEAD. A path the stamp did not record never
+/// prints it, holds at HEAD. `path` is an own anchor or the path that
+/// stands for a target, which the Git adapter keeps in the fallback's
+/// objects; a path it left out would read as holding nothing. A path the stamp did not record never
 /// matches, and an object of another length than HEAD's differs.
 fn recorded_matches(recorded: &RecordedContent, path: &Anchor, head: &Fallback) -> bool {
     recorded
