@@ -62,6 +62,12 @@ In spec-driven development, a specification comes before the code: requirements 
 - **Tasks** do not have to live in Abyme (see [[Current and Target#Plans]]). They can point to a task list or to tickets as representations.
 - **Not a goal:** generating code from the specification alone, without ever touching it. The code is written by the user's AI.
 
+## Finding Your Way Through the Boards
+
+- **Folders for boards:** Boards are sorted into folders that need no element, as notes are in Obsidian, such as a folder “Team” with a board “Onboarding”. Today a board lies below another only when an element owns it (see [[Board Graph]]); folders let a person build a hierarchy that stands for nothing outside, without inventing an element for each level.
+- **Graph view of the boards:** One picture of all boards, each a node, with the inner-board hierarchy and the relations between elements on different boards summed up per pair of boards, such as “6 × describes” from a docs board to a components board. It shows how the boards hang together at a glance, also where no board draws those relations because they cross board boundaries (see [[Board Graph#Relations Across Boards]]). Elements stay out, since a graph of every element would be too crowded to read.
+- **Animated data flows:** Arrows that stand for a flow of data animate along their direction, and a flow can play step by step like a sequence diagram. A reader sees how a request travels through the system instead of reading it from labels. It needs a way to tell which relations are flows and what flows along them, which today's relation kinds do not say (see [[Relations]]).
+
 ## More
 
 - **Navigation instead of a dump:** MCP tools such as `look`, `enter`, `zoom_in`, and `follow_link`. The AI moves through the boards like through a text adventure and loads only what it needs.

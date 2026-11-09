@@ -1,5 +1,5 @@
 **Repository:** root
-**Status:** NotStarted
+**Status:** InProgress
 **Created:** 2026-11-09
 
 ## Goal
@@ -24,7 +24,7 @@ recorded in `docs/Ideas.md`.
 
 ## Steps
 
-- [ ] The ideas from trying the canvas are recorded
+- [x] The ideas from trying the canvas are recorded
 - [ ] A zoom bar shows and changes the zoom
 - [ ] The relations of the selected boxes stand out
 - [ ] One helper builds a board's list entry
@@ -40,11 +40,11 @@ recorded in `docs/Ideas.md`.
 
 Review path: Reviewer-only
 
-- [ ] A reader of `docs/Ideas.md` finds three ideas, each with what it would give the user: folders
+- [x] A reader of `docs/Ideas.md` finds three ideas, each with what it would give the user: folders
       for boards that need no element, as in Obsidian; a graph view of the boards with their
       hierarchy and the relations between elements on different boards, summed up per pair of
       boards; and animated data flows on the arrows.
-- [ ] No other note changes.
+- [x] No other note changes.
 
 ### Task 2: A zoom bar shows and changes the zoom
 
