@@ -8,7 +8,7 @@
 use std::iter::successors;
 
 use abyme_core::{BoardTree, ShownRelation, Snapshot, UnknownBoard, relations_on};
-use abyme_model::{Board, BoardId, Element, ElementId, Mode, Rect, RelationKind};
+use abyme_model::{Board, BoardId, Element, ElementId, Rect, RelationKind};
 use serde::Serialize;
 
 use crate::boards::{BoardEntry, entry};
@@ -24,9 +24,6 @@ pub struct BoardView {
     pub id: BoardId,
     /// The title shown for the board.
     pub title: String,
-    /// The board's mode, if it is a zone. On a mirrored board, the UI offers a
-    /// drag only on a note.
-    pub mode: Option<Mode>,
     /// One entry per element on the board, in element-ID order.
     pub placements: Vec<Placement>,
     /// One entry per relation the board shows, as `read_board` shows them.
@@ -118,7 +115,6 @@ pub fn project(snapshot: &Snapshot, board: &BoardId) -> Result<BoardView, Unknow
     Ok(BoardView {
         id: found.id.clone(),
         title: found.title.clone(),
-        mode: found.zone.map(|zone| zone.mode),
         placements: found
             .placed()
             .map(|(element, placed, rect)| placement(snapshot, &tree, found, element, placed, rect))

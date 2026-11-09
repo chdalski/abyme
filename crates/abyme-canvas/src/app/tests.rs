@@ -710,31 +710,35 @@ const MIRRORED: &str = r#"{"mode": "mirrored", "statement": "current"}"#;
 const FREE: &str = r#"{"mode": "free", "statement": "idea"}"#;
 
 #[test]
-fn a_move_on_a_mirrored_board_is_refused_and_writes_nothing() {
+fn a_move_on_a_mirrored_board_pins_the_box_and_changes_only_its_line() {
     let root = tempfile::tempdir().unwrap();
     project_with_a_board(root.path());
     make_context_a_zone(root.path(), MIRRORED);
-    let before = project_files(root.path());
+    let context = PathBuf::from("abyme/boards/context.board.json");
+    let mut others = project_files(root.path());
+    let before = String::from_utf8(others.remove(&context).unwrap()).unwrap();
     let (_app, window) = canvas(root.path());
 
-    let applied = apply_from(&window, &json!([a_move(400, 200)]));
+    apply_from(&window, &json!([a_move(400, 200)])).unwrap();
 
+    let mut files = project_files(root.path());
+    let after = String::from_utf8(files.remove(&context).unwrap()).unwrap();
+    assert_eq!(files, others);
     assert_eq!(
-        applied,
-        Err(json!(
-            "operation 1: board context is mirrored, so the canvas may only create a note there, or move one and keep it pinned, attach, or detach one on which nothing hangs"
-        ))
+        new_lines(&before, &after),
+        [
+            r#"    {"element": "payment-service", "x": 400, "y": 200, "width": 180, "height": 90, "pinned": true}"#
+        ]
     );
-    assert_eq!(project_files(root.path()), before);
+    assert!(after.contains(MIRRORED), "{after}");
 }
 
 #[test]
-fn a_request_that_also_moves_on_a_mirrored_board_writes_nothing() {
+fn a_request_that_moves_on_a_free_and_a_mirrored_board_writes_both() {
     let root = tempfile::tempdir().unwrap();
     project_with_a_board(root.path());
     make_context_a_zone(root.path(), MIRRORED);
     add_a_free_board(root.path());
-    let before = project_files(root.path());
     let (_app, window) = canvas(root.path());
     let on_the_free_board = json!({
         "op": "move_element",
@@ -745,15 +749,18 @@ fn a_request_that_also_moves_on_a_mirrored_board_writes_nothing() {
         "pinned": true
     });
 
-    let applied = apply_from(&window, &json!([on_the_free_board, a_move(400, 200)]));
+    apply_from(&window, &json!([on_the_free_board, a_move(400, 200)])).unwrap();
 
-    assert_eq!(
-        applied,
-        Err(json!(
-            "operation 2: board context is mirrored, so the canvas may only create a note there, or move one and keep it pinned, attach, or detach one on which nothing hangs"
-        ))
+    let free = fs::read_to_string(root.path().join("abyme/boards/free-board.board.json")).unwrap();
+    assert!(
+        free.contains(r#""x": 1, "y": 2, "width": 180, "height": 90, "pinned": true"#),
+        "{free}"
     );
-    assert_eq!(project_files(root.path()), before);
+    let context = context_file(root.path());
+    assert!(
+        context.contains(r#""x": 400, "y": 200, "width": 180, "height": 90, "pinned": true"#),
+        "{context}"
+    );
 }
 
 #[test]
@@ -887,23 +894,29 @@ fn a_release_with_the_position_of_another_board_writes_nothing() {
 }
 
 #[test]
-fn a_release_on_a_mirrored_board_is_refused() {
+fn a_release_on_a_mirrored_board_follows_the_rule_of_every_board() {
     let root = tempfile::tempdir().unwrap();
     let (_app, window) = project_with_a_pin(root.path());
     make_context_a_zone(root.path(), MIRRORED);
     let before = project_files(root.path());
 
-    let error = apply_from(&window, &json!([a_release(400, 200)]))
+    let elsewhere = apply_from(&window, &json!([a_release(401, 200)]))
         .unwrap_err()
         .to_string();
 
     assert!(
-        error.contains(
-            "board context is mirrored, so the canvas may only create a note there, or move one and keep it pinned, attach, or detach one on which nothing hangs"
-        ),
-        "{error}"
+        elsewhere.contains(&format!("{RELEASED_ELSEWHERE} context")),
+        "{elsewhere}"
     );
     assert_eq!(project_files(root.path()), before);
+
+    let pinned = context_file(root.path());
+    apply_from(&window, &json!([a_release(400, 200)])).unwrap();
+
+    assert_eq!(
+        context_file(root.path()),
+        pinned.replace(", \"pinned\": true", "")
+    );
 }
 
 #[test]
@@ -1038,63 +1051,46 @@ fn a_note_on_a_mirrored_board_moves_and_only_its_line_changes() {
 }
 
 #[test]
-fn on_a_mirrored_board_no_move_but_a_note_s_is_written() {
+fn on_a_mirrored_board_the_core_refuses_a_box_whose_file_is_missing() {
     let root = tempfile::tempdir().unwrap();
     mirrored_board_with_a_note(root.path());
     let before = project_files(root.path());
     let (_app, window) = canvas(root.path());
 
-    for refused in [
-        a_move_of("payment-service", "context", 1, 2),
-        a_move_of("orders", "context", 1, 2),
-        a_release_of("ask", "context", 0, 0),
-        a_release_of("ask", "context", 1, 2),
-    ] {
-        let error = apply_from(&window, &json!([refused]))
-            .unwrap_err()
-            .to_string();
+    let error = apply_from(&window, &json!([a_move_of("orders", "context", 1, 2)]))
+        .unwrap_err()
+        .to_string();
 
-        assert!(
-            error.contains(
-                "operation 1: board context is mirrored, so the canvas may only create a note there, or move one and keep it pinned, attach, or detach one on which nothing hangs"
-            ),
-            "{refused}: {error}"
-        );
-        for word in ["Ask", "Why", "payment", "orders"] {
-            assert!(!error.contains(word), "{refused}: {error}");
-        }
-        assert_eq!(project_files(root.path()), before, "{refused}");
-    }
+    assert!(error.contains("orders"), "{error}");
+    assert_eq!(project_files(root.path()), before);
 }
 
 #[test]
-fn a_request_with_a_note_and_anything_else_on_a_mirrored_board_writes_nothing() {
+fn a_request_with_a_note_and_a_box_on_a_mirrored_board_writes_both() {
     let root = tempfile::tempdir().unwrap();
     mirrored_board_with_a_note(root.path());
-    add_a_free_board(root.path());
-    let before = project_files(root.path());
     let (_app, window) = canvas(root.path());
-    let note = a_move_of("ask", "context", 400, 200);
-    let plain_box = a_move_of("payment-service", "context", 1, 2);
-    let on_the_free_board = a_move_of("payment-service", "free-board", 1, 2);
 
-    for (request, position) in [
-        (json!([note, plain_box]), 2),
-        (json!([plain_box, note]), 1),
-        (json!([note, on_the_free_board, plain_box]), 3),
+    apply_from(
+        &window,
+        &json!([
+            a_move_of("ask", "context", 400, 200),
+            a_move_of("payment-service", "context", 600, 0)
+        ]),
+    )
+    .unwrap();
+
+    let context = context_file(root.path());
+    for line in [
+        r#""element": "ask", "x": 400, "y": 200"#,
+        r#""element": "payment-service", "x": 600, "y": 0"#,
     ] {
-        let error = apply_from(&window, &request).unwrap_err().to_string();
-
-        assert!(
-            error.contains(&format!("operation {position}: board context is mirrored")),
-            "{request}: {error}"
-        );
-        assert_eq!(project_files(root.path()), before, "{request}");
+        assert!(context.contains(line), "{line}: {context}");
     }
 }
 
 #[test]
-fn a_move_of_a_note_from_a_stale_view_is_refused_by_what_the_file_says_now() {
+fn a_move_from_a_stale_view_is_decided_by_what_the_files_say_now() {
     let root = tempfile::tempdir().unwrap();
     mirrored_board_with_a_note(root.path());
     let (_app, window) = canvas(root.path());
@@ -1102,26 +1098,19 @@ fn a_move_of_a_note_from_a_stale_view_is_refused_by_what_the_file_says_now() {
     let file = root.path().join("abyme/elements/ask.md");
 
     fs::write(&file, "---\nid: ask\ntype: t\nname: Ask\n---\n").unwrap();
-    let before = project_files(root.path());
-    let retyped = apply_from(&window, &json!([a_move_of("ask", "context", 400, 200)]));
-    assert_eq!(project_files(root.path()), before);
-    assert!(retyped.unwrap_err().to_string().contains("is mirrored"));
+    apply_from(&window, &json!([a_move_of("ask", "context", 400, 200)])).unwrap();
+    assert!(context_file(root.path()).contains(r#""element": "ask", "x": 400, "y": 200"#));
 
     fs::remove_file(&file).unwrap();
     let before = project_files(root.path());
-    let gone = apply_from(&window, &json!([a_move_of("ask", "context", 400, 200)]));
+    let gone = apply_from(&window, &json!([a_move_of("ask", "context", 1, 2)]));
     assert_eq!(project_files(root.path()), before);
-    assert!(gone.unwrap_err().to_string().contains("is mirrored"));
+    assert!(gone.unwrap_err().to_string().contains("ask"));
 }
 
 #[test]
-fn on_a_mirrored_board_only_the_exact_type_note_moves() {
-    for (type_ref, moves) in [
-        ("note", true),
-        ("Note", false),
-        ("notes", false),
-        ("c4/note", false),
-    ] {
+fn on_a_mirrored_board_an_element_of_any_type_moves() {
+    for type_ref in ["note", "Note", "notes", "c4/note", "c4/container"] {
         let root = tempfile::tempdir().unwrap();
         project_with_one_element(root.path(), type_ref, "", "");
         let board = root.path().join("abyme/boards/context.board.json");
@@ -1135,8 +1124,52 @@ fn on_a_mirrored_board_only_the_exact_type_note_moves() {
 
         let moved = apply_from(&window, &json!([a_move_of("one", "context", 1, 2)]));
 
-        assert_eq!(moved.is_ok(), moves, "{type_ref}: {moved:?}");
+        assert!(moved.is_ok(), "{type_ref}: {moved:?}");
     }
+}
+
+#[test]
+fn a_box_moved_on_a_mirrored_board_takes_the_notes_hanging_on_it_along() {
+    let root = tempfile::tempdir().unwrap();
+    mirrored_board_with_a_note(root.path());
+    let (_app, window) = canvas(root.path());
+    apply_from(
+        &window,
+        &json!([
+            a_move_of("ask", "context", 30, 40),
+            an_attachment_of("ask", "payment-service", "context")
+        ]),
+    )
+    .unwrap();
+    let before = context_file(root.path());
+    let at = |view: &Value, element: &str| {
+        let found = view["placements"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|placement| placement["element"] == element)
+            .unwrap()
+            .clone();
+        (found["x"].as_i64().unwrap(), found["y"].as_i64().unwrap())
+    };
+    let view = open_board_from(&window, json!({"board": "context"})).unwrap();
+    let (box_x, box_y) = at(&view, "payment-service");
+    let (note_x, note_y) = at(&view, "ask");
+
+    apply_from(
+        &window,
+        &json!([a_move_of("payment-service", "context", 600, 300)]),
+    )
+    .unwrap();
+
+    let after = context_file(root.path());
+    assert_eq!(new_lines(&before, &after).len(), 1, "{after}");
+    let view = open_board_from(&window, json!({"board": "context"})).unwrap();
+    assert_eq!(at(&view, "payment-service"), (600, 300));
+    assert_eq!(
+        at(&view, "ask"),
+        (note_x + 600 - box_x, note_y + 300 - box_y)
+    );
 }
 
 #[test]
@@ -2042,12 +2075,8 @@ fn an_operation_the_canvas_may_not_send_gets_that_answer_on_a_mirrored_board_too
 }
 
 #[test]
-fn open_board_says_the_board_s_mode_and_not_its_statement_kind() {
-    for (zone, expected) in [
-        (Some(MIRRORED), json!("mirrored")),
-        (Some(FREE), json!("free")),
-        (None, Value::Null),
-    ] {
+fn open_board_says_neither_the_board_s_mode_nor_its_statement_kind() {
+    for zone in [Some(MIRRORED), Some(FREE), None] {
         let root = tempfile::tempdir().unwrap();
         project_with_a_board(root.path());
         if let Some(zone) = zone {
@@ -2057,7 +2086,7 @@ fn open_board_says_the_board_s_mode_and_not_its_statement_kind() {
 
         let view = open_board_from(&window, json!({"board": "context"})).unwrap();
 
-        assert_eq!(view["mode"], expected, "{zone:?}");
+        assert_eq!(view.get("mode"), None, "{zone:?}");
         assert!(!view.to_string().contains("statement"), "{view}");
     }
 }
@@ -2430,8 +2459,7 @@ fn a_note_dragged_off_its_box_changes_only_its_line() {
 fn a_refused_attachment_or_detachment_writes_nothing() {
     let root = tempfile::tempdir().unwrap();
     mirrored_board_with_a_note(root.path());
-    // A hand edit hangs `orders` on the note `ask`, so the note may not change
-    // on the mirrored board, nor go.
+    // A hand edit hangs `orders` on the note `ask`, so the note may not go.
     let file = root.path().join("abyme/boards/context.board.json");
     let text = fs::read_to_string(&file).unwrap().replace(
         r#""element": "orders", "x": 220, "y": 0, "width": 180, "height": 90}"#,
@@ -2441,9 +2469,6 @@ fn a_refused_attachment_or_detachment_writes_nothing() {
     fs::write(&file, text).unwrap();
     let before = project_files(root.path());
     let (_app, window) = canvas(root.path());
-    let mirrored = "operation 1: board context is mirrored, so the canvas may only create a note \
-                    there, or move one and keep it pinned, attach, or detach one on which nothing \
-                    hangs";
 
     for (request, expected) in [
         (
@@ -2455,12 +2480,6 @@ fn a_refused_attachment_or_detachment_writes_nothing() {
                     "to": {"existing": "payment-service"}, "board": {"existing": "context"}}]),
             "operation 1: the canvas may not send attach_note without pinned",
         ),
-        (
-            json!([an_attachment_of("ask", "payment-service", "context")]),
-            mirrored,
-        ),
-        (json!([a_detachment_of("ask", "context")]), mirrored),
-        (json!([a_move_of("ask", "context", 1, 2)]), mirrored),
         (
             json!([{"op": "delete_element", "element": {"existing": "ask"}}]),
             "operation 1: something on board context hangs on the note, so the canvas does not \

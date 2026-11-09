@@ -5,7 +5,7 @@
 use std::fs;
 use std::path::Path;
 
-use abyme_model::{Mode, RelationKind};
+use abyme_model::RelationKind;
 use ts_rs::{Config, TS};
 
 use crate::boards::{BoardEntry, ListedBoard};
@@ -36,7 +36,6 @@ fn bindings() -> String {
         exported::<ElementFlag>(&config),
         exported::<FlagPriority>(&config),
         exported::<ListedBoard>(&config),
-        exported::<Mode>(&config),
         exported::<Placement>(&config),
         exported::<Relation>(&config),
         exported::<RelationKind>(&config),

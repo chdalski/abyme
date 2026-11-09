@@ -21,10 +21,9 @@ import { measureBoxes } from "./testLayout";
 
 afterEach(cleanup);
 
-/** A board of two boxes in the given mode. */
-function boardIn(mode: BoardView["mode"]): BoardView {
+/** A board of two boxes. */
+function twoBoxes(): BoardView {
   return boardView({
-    mode,
     placements: [
       placedElement("orders"),
       placedElement("payments", { x: 200 }),
@@ -79,49 +78,24 @@ function boardWithArrow(label: string | null, x = 0): BoardView {
 }
 
 describe("BoardCanvas", () => {
-  it("offers a drag on every board but a mirrored one", () => {
-    const move = () => Promise.resolve();
+  it("offers a drag on every box whose file exists, on every board", () => {
+    const { container } = render(canvasOf(twoBoxes(), () => Promise.resolve()));
 
-    for (const [mode, boxes] of [
-      ["mirrored", 0],
-      ["free", 2],
-      [null, 2],
-    ] as const) {
-      const { container, unmount } = render(canvasOf(boardIn(mode), move));
-
-      expect(container.querySelectorAll(DRAGGABLE_BOX)).toHaveLength(boxes);
-      unmount();
-    }
-  });
-
-  it("takes the drag away when an open board turns mirrored", () => {
-    const move = () => Promise.resolve();
-    const { container, rerender } = render(canvasOf(boardIn("free"), move));
     expect(container.querySelectorAll(DRAGGABLE_BOX)).toHaveLength(2);
-
-    rerender(canvasOf(boardIn("mirrored"), move));
-
-    expect(container.querySelectorAll(DRAGGABLE_BOX)).toHaveLength(0);
   });
 
-  it("moves a selected box with an arrow key, but not on a mirrored board", () => {
-    for (const [mode, calls] of [
-      ["free", 1],
-      ["mirrored", 0],
-    ] as const) {
-      const move = vi.fn(() => Promise.resolve());
-      const { container, unmount } = render(canvasOf(boardIn(mode), move));
-      const box = container.querySelector(".react-flow__node");
-      if (box === null) {
-        throw new Error("no box");
-      }
-
-      fireEvent.keyDown(box, { key: "Enter" });
-      fireEvent.keyDown(box, { key: "ArrowRight" });
-
-      expect(move).toHaveBeenCalledTimes(calls);
-      unmount();
+  it("moves a selected box with an arrow key, on every board", () => {
+    const move = vi.fn(() => Promise.resolve());
+    const { container } = render(canvasOf(twoBoxes(), move));
+    const box = container.querySelector(".react-flow__node");
+    if (box === null) {
+      throw new Error("no box");
     }
+
+    fireEvent.keyDown(box, { key: "Enter" });
+    fireEvent.keyDown(box, { key: "ArrowRight" });
+
+    expect(move).toHaveBeenCalledTimes(1);
   });
 
   it("shows one box per placement with what the projection says of it", () => {
@@ -253,7 +227,6 @@ describe("BoardCanvas", () => {
 /** A box `shop`, whose element owns `boards`, and a box `plain`, on a free board. */
 function boardWithInnerBoards(...boards: string[]): BoardView {
   return boardView({
-    mode: "free",
     placements: [
       placedElement("plain", { x: 400 }),
       placedElement("shop", {
@@ -314,56 +287,35 @@ describe("the marker of a pin", () => {
     expect(box(container, "gone").querySelector("button")).toBeNull();
   });
 
-  it("is plain text with no button on a mirrored board", () => {
-    const { container } = render(
+  it("is a button on every board that releases the pin where the box lies, and nothing else", () => {
+    const move = vi.fn(() => Promise.resolve());
+    const onOpen = vi.fn();
+    const release = vi.fn();
+    render(
       canvasOf(
         boardView({
-          mode: "mirrored",
-          placements: [placedElement("kept", { pinned: true })],
+          placements: [
+            placedElement("kept", {
+              x: 200,
+              y: 30,
+              pinned: true,
+              inner_boards: [{ id: "inner", title: "Inner" }],
+            }),
+          ],
         }),
-        () => Promise.resolve(),
+        move,
+        onOpen,
+        release,
       ),
     );
+    const marker = screen.getByRole("button", { name: "Release pin" });
 
-    expect(box(container, "kept").querySelector("button")).toBeNull();
-    expect(
-      box(container, "kept").querySelector(".element-pin")?.textContent,
-    ).toBe("pinned");
-  });
+    fireEvent.click(marker);
+    fireEvent.doubleClick(marker);
 
-  it("is a button elsewhere that releases the pin where the box lies, and nothing else", () => {
-    for (const mode of [null, "free"] as const) {
-      const move = vi.fn(() => Promise.resolve());
-      const onOpen = vi.fn();
-      const release = vi.fn();
-      const { unmount } = render(
-        canvasOf(
-          boardView({
-            mode,
-            placements: [
-              placedElement("kept", {
-                x: 200,
-                y: 30,
-                pinned: true,
-                inner_boards: [{ id: "inner", title: "Inner" }],
-              }),
-            ],
-          }),
-          move,
-          onOpen,
-          release,
-        ),
-      );
-      const marker = screen.getByRole("button", { name: "Release pin" });
-
-      fireEvent.click(marker);
-      fireEvent.doubleClick(marker);
-
-      expect(release).toHaveBeenCalledWith("kept", { x: 200, y: 30 });
-      expect(move).not.toHaveBeenCalled();
-      expect(onOpen).not.toHaveBeenCalled();
-      unmount();
-    }
+    expect(release).toHaveBeenCalledWith("kept", { x: 200, y: 30 });
+    expect(move).not.toHaveBeenCalled();
+    expect(onOpen).not.toHaveBeenCalled();
   });
 
   it("offers no release on a box without a pin", () => {
@@ -767,19 +719,6 @@ describe("creating a note", () => {
     expect(onOpen).toHaveBeenCalledExactlyOnceWith("inner");
   });
 
-  it("starts on a mirrored board too", () => {
-    const { container } = render(
-      canvasWith(
-        () => Promise.resolve("new-note"),
-        boardView({ mode: "mirrored", placements: [placedBox("plain")] }),
-      ),
-    );
-
-    fireEvent.keyDown(window, { key: "n" });
-
-    expect(notes(container)).toEqual(["+note-1"]);
-  });
-
   it("writes nothing for blank text, and the note goes", () => {
     const create = vi.fn(() => Promise.resolve("new-note"));
     const { container } = render(canvasWith(create));
@@ -1154,9 +1093,8 @@ describe("a note on the canvas", () => {
     });
   });
 
-  const onAMirroredBoard = (askIsANote: boolean) =>
+  const aBoxAndANote = (askIsANote: boolean) =>
     boardView({
-      mode: "mirrored",
       placements: [
         placedElement("plain"),
         placedElement("ask", {
@@ -1169,29 +1107,27 @@ describe("a note on the canvas", () => {
       ],
     });
 
-  it("alone can be dragged on a mirrored board, and offers no release there", () => {
+  it("can be dragged like the box beside it, and shows no pin marker", () => {
     const { container } = render(
-      canvasOf(onAMirroredBoard(true), () => Promise.resolve()),
+      canvasOf(aBoxAndANote(true), () => Promise.resolve()),
     );
 
     expect(
       [...container.querySelectorAll(DRAGGABLE_BOX)].map((box) =>
         box.getAttribute("data-id"),
       ),
-    ).toEqual(["ask"]);
+    ).toEqual(["plain", "ask"]);
     expect(screen.queryByRole("button", { name: "Release pin" })).toBeNull();
   });
 
-  it("loses the drag on a mirrored board when a reload says it is no note", () => {
+  it("keeps the drag and gains a release when a reload says it is no note", () => {
     const move = () => Promise.resolve();
-    const { container, rerender } = render(
-      canvasOf(onAMirroredBoard(true), move),
-    );
+    const { container, rerender } = render(canvasOf(aBoxAndANote(true), move));
 
-    rerender(canvasOf(onAMirroredBoard(false), move));
+    rerender(canvasOf(aBoxAndANote(false), move));
 
-    expect(container.querySelectorAll(DRAGGABLE_BOX)).toHaveLength(0);
-    expect(screen.queryByRole("button", { name: "Release pin" })).toBeNull();
+    expect(container.querySelectorAll(DRAGGABLE_BOX)).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "Release pin" })).toBeDefined();
   });
 
   it("shows its text in place of a box's lines, and no pin marker", () => {
@@ -1231,15 +1167,11 @@ describe("inner boards on a box", () => {
     expect(move).not.toHaveBeenCalled();
   });
 
-  it("opens a board with its button and with a double click on a mirrored board too", () => {
+  it("opens a board with its button and with a double click, on every board", () => {
     const move = vi.fn(() => Promise.resolve());
     const onOpen = vi.fn();
     const { container } = render(
-      canvasOf(
-        { ...boardWithInnerBoards("Containers", "Spare"), mode: "mirrored" },
-        move,
-        onOpen,
-      ),
+      canvasOf(boardWithInnerBoards("Containers", "Spare"), move, onOpen),
     );
 
     fireEvent.click(screen.getByRole("button", { name: "▸ Spare" }));
@@ -1543,20 +1475,17 @@ describe("moving a note with the arrow keys", () => {
 
 describe("a box whose file is missing", () => {
   it("cannot be moved with the arrow keys on any board", () => {
-    for (const mode of [null, "free", "mirrored"] as const) {
-      const move = vi.fn(() => Promise.resolve());
-      const { container, unmount } = render(
-        canvasOf(boardView({ mode, placements: [placedBox("gone")] }), move),
-      );
-      const gone = box(container, "gone");
+    const move = vi.fn(() => Promise.resolve());
+    const { container } = render(
+      canvasOf(boardView({ placements: [placedBox("gone")] }), move),
+    );
+    const gone = box(container, "gone");
 
-      fireEvent.keyDown(gone, { key: "Enter" });
-      fireEvent.keyDown(gone, { key: "ArrowRight" });
+    fireEvent.keyDown(gone, { key: "Enter" });
+    fireEvent.keyDown(gone, { key: "ArrowRight" });
 
-      expect(move).not.toHaveBeenCalled();
-      expect(gone.classList.contains("draggable")).toBe(false);
-      unmount();
-    }
+    expect(move).not.toHaveBeenCalled();
+    expect(gone.classList.contains("draggable")).toBe(false);
   });
 });
 
@@ -1630,7 +1559,7 @@ describe("the zoom bar", () => {
    * measured its boxes and fitted it into view on opening, which moves the
    * zoom away from 100 %; React Flow's pane is 500 × 500 in jsdom.
    */
-  async function zoomCanvas(view: BoardView = boardIn("free")) {
+  async function zoomCanvas(view: BoardView = twoBoxes()) {
     const rendered = render(canvasOf(view, () => Promise.resolve()));
     await waitFor(() => {
       expect(drawnZoom(rendered.container)).not.toBe(1);
@@ -1837,9 +1766,8 @@ describe("highlighting a selection", () => {
    * `orders` uses `payments` and is used by `shop`; `payments` uses `ledger`,
    * which has nothing to do with `orders`; the note `ask` hangs on `ledger`.
    */
-  function linkedBoard(mode: BoardView["mode"] = "free"): BoardView {
+  function linkedBoard(): BoardView {
     return boardView({
-      mode,
       placements: [
         placedElement("orders"),
         placedElement("payments", { x: 300 }),
@@ -2120,31 +2048,25 @@ describe("highlighting a selection", () => {
     }
   });
 
-  it.each([
-    ["a free board", "free"],
-    ["a mirrored board", "mirrored"],
-  ] as const)(
-    "writes nothing while selecting and deselecting on %s",
-    async (_board, mode) => {
-      const spies = writes();
-      const { container } = highlightCanvas(linkedBoard(mode), spies);
+  it("writes nothing while selecting and deselecting", async () => {
+    const spies = writes();
+    const { container } = highlightCanvas(linkedBoard(), spies);
 
-      await select(container, "orders");
-      await addToSelection(container, "ask");
-      await select(container, "payments");
-      const pane = container.querySelector(".react-flow__pane");
-      if (pane !== null) {
-        fireEvent.click(pane);
-      }
-      await waitFor(() =>
-        expect(roleOf(container, "orders")).toEqual(["element-box"]),
-      );
+    await select(container, "orders");
+    await addToSelection(container, "ask");
+    await select(container, "payments");
+    const pane = container.querySelector(".react-flow__pane");
+    if (pane !== null) {
+      fireEvent.click(pane);
+    }
+    await waitFor(() =>
+      expect(roleOf(container, "orders")).toEqual(["element-box"]),
+    );
 
-      for (const spy of Object.values(spies)) {
-        expect(spy).not.toHaveBeenCalled();
-      }
-    },
-  );
+    for (const spy of Object.values(spies)) {
+      expect(spy).not.toHaveBeenCalled();
+    }
+  });
 
   it("puts no text from the repository into a class or a style", async () => {
     const hostile = 'x" ; } <b> y';

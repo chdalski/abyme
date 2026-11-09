@@ -175,8 +175,8 @@ impl AbymeServer {
             summary (null removes it), owner (null removes it), and zone (null removes it), and changes only \
             the fields it names; an element owns at most one board, and no board may lie inside itself (the \
             board above a board is its owner's home). A zone is {\"mode\": ..., \"statement\": ...} with the \
-            mode free or mirrored (mirrored: what it shows follows the code, and a person cannot move its \
-            elements in the canvas) and the \
+            mode free or mirrored (mirrored: what it shows follows the code, while people may arrange it in \
+            the canvas, so it can hold boxes a person pinned, which layout_board leaves where they are) and the \
             statement kind current, target, decision, idea, knowledge, or question; \
             the presets are Current (mirrored, current) for what exists today, Target (free, target) for \
             what is agreed but not built, and Brainstorm (free, idea) for ideas. \

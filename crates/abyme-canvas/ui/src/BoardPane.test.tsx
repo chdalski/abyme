@@ -263,12 +263,11 @@ describe("BoardPane", () => {
     expect((await screen.findByRole("alert")).textContent).toBe(message);
   });
 
-  describe("a note on a mirrored board", () => {
+  describe("moving a note", () => {
     const withANote = (applyFailure: string | null) => {
       const client = paneWith(applyFailure);
       client.views = {
         context: boardView({
-          mode: "mirrored",
           placements: [
             placedBox("payments", {
               shown: { kind: "note", name: "Ask", body: "" },
@@ -300,7 +299,8 @@ describe("BoardPane", () => {
     });
 
     it("returns to its place with the message when the move is refused", async () => {
-      const message = "operation 1: board context is mirrored";
+      const message =
+        "operation 1: the canvas releases a pin on board context only at the position in the board file";
       await openPane(withANote(message));
 
       await dragTogether({ payments: { x: 40, y: 80 } });

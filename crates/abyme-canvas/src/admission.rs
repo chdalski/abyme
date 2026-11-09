@@ -6,22 +6,22 @@
 //! one breaks the build until it is admitted or refused here. A request that
 //! creates an element is admitted only as a whole, by [`creates_a_note`].
 //! [`check_board_files`] then decides from the project's files, also by name
-//! for each variant and each mode: on a mirrored board a person moves,
-//! attaches, and detaches only a note, whose file says what it is, and only one
-//! on which no placement of that board hangs, so that nothing else moves along
-//! there; and a release of a pin keeps the position in the board file, so that
-//! a release from a stale view does not move a box back. An update, a
-//! deletion, an attachment, and a detachment concern only a note, decided the
-//! same way, and a deletion only one on which nothing hangs on any board.
-//! These are rules of this one client, not a boundary: the files stay open to
-//! the AI and to edits by hand, and the position authorizes nothing, since a
-//! page that may call `apply` can also read it. A move the canvas sends pins
-//! the element, since a person placed it there.
+//! for each variant: a release of a pin keeps the position in the board file,
+//! so that a release from a stale view does not move a box back; an update, a
+//! deletion, an attachment, and a detachment concern only a note, whose file
+//! says what it is; and a deletion only one on which nothing hangs on any
+//! board. No rule looks at a board's mode: a person arranges a mirrored board
+//! as a free one, while what it shows follows the code, so a mode that
+//! restricts people needs a rule of its own here. These are rules of this one
+//! client, not a boundary: the files stay open to the AI and to edits by hand,
+//! and the position authorizes nothing, since a page that may call `apply` can
+//! also read it. A move the canvas sends pins the element, since a person
+//! placed it there.
 
 use std::fmt;
 
 use abyme_core::{MAX_OPERATIONS, Operation, Ref, Snapshot};
-use abyme_model::{Board, BoardId, Element, ElementId, Mode, NOTE_TYPE, StatementKind, is_allowed};
+use abyme_model::{Board, BoardId, Element, ElementId, NOTE_TYPE, StatementKind, is_allowed};
 
 #[cfg(test)]
 mod tests;
@@ -42,15 +42,6 @@ pub enum Refused {
         position: usize,
         /// The kind of operation, named by this module.
         kind: &'static str,
-    },
-    /// One operation does anything on a mirrored board but move a note and
-    /// keep it pinned, attach it, or detach it, where nothing on that board
-    /// hangs on the note, and is no part of a request that creates a note.
-    Mirrored {
-        /// The operation's position in the request, counted from 1.
-        position: usize,
-        /// The board.
-        board: BoardId,
     },
     /// One operation changes, deletes, attaches, or detaches an element whose
     /// file does not say it is a note.
@@ -87,12 +78,6 @@ impl fmt::Display for Refused {
                 formatter,
                 "operation {position}: the canvas may not send {kind}"
             ),
-            Self::Mirrored { position, board } => write!(
-                formatter,
-                "operation {position}: board {board} is mirrored, so the canvas may only create \
-                 a note there, or move one and keep it pinned, attach, or detach one on which \
-                 nothing hangs"
-            ),
             Self::NotANote { position } => write!(
                 formatter,
                 "operation {position}: the canvas may change, delete, attach, and detach only \
@@ -122,10 +107,11 @@ impl fmt::Display for Refused {
 ///
 /// Whatever page a debug build loads from the dev server's address can send
 /// every operation admitted here, so it can create notes on any board, write
-/// their text into the repository, where the AI reads it, and delete them; and
-/// it can hang any note on any element placed on a board, which adds the
-/// relation `concerns` to the note and drops its verification stamp, and
-/// detach notes.
+/// their text into the repository, where the AI reads it, and delete them; it
+/// can hang any note on any element placed on a board, which adds the relation
+/// `concerns` to the note and drops its verification stamp, and detach notes;
+/// and it can move, pin, and release any element placed on any board,
+/// mirrored or not.
 /// Admitting another operation needs a security review of that origin too.
 ///
 /// # Errors
@@ -151,12 +137,10 @@ pub fn admit(operations: &[Operation]) -> Result<(), Refused> {
 }
 
 /// Checks every operation of a request against the board files of `snapshot`,
-/// as they stand before the request: on a mirrored board none does anything but
-/// move a note and keep it pinned, attach it, or detach it, and only a note that
-/// no placement of that board names as the box it hangs on, since a change of
-/// the note could make such an attachment start to hold; and none releases a pin
-/// anywhere but at the element's position in the file of the board it names. So
-/// no request leaves a box at a new position without a pin. An update, a
+/// as they stand before the request, on every board alike, whatever its mode:
+/// none releases a pin anywhere but at the element's position in the file of
+/// the board it names, so no request leaves a box at a new position without a
+/// pin. An update, a
 /// deletion, an attachment, or a detachment concerns only an element whose file
 /// says it is a note, on any board, and a deletion only one that no board names
 /// as the box something hangs on, since detaching it would rewrite that line.
@@ -196,20 +180,12 @@ fn refused_by_board_file(
         } => match board {
             Ref::Existing(id) => {
                 let found = snapshot.boards.get(id)?;
-                match found.zone.map(|zone| zone.mode) {
-                    Some(Mode::Mirrored) => (!keeps_a_note_pinned(snapshot, element, *pinned)
-                        || is_named_on(found, element))
-                    .then(|| Refused::Mirrored {
+                (*pinned == Some(false) && !lies_at(found, element, *x, *y)).then(|| {
+                    Refused::ReleaseElsewhere {
                         position,
                         board: id.clone(),
-                    }),
-                    Some(Mode::Free) | None => (*pinned == Some(false)
-                        && !lies_at(found, element, *x, *y))
-                    .then(|| Refused::ReleaseElsewhere {
-                        position,
-                        board: id.clone(),
-                    }),
-                }
+                    }
+                })
             }
             Ref::New(_) => None,
         },
@@ -231,19 +207,8 @@ fn refused_by_board_file(
                     board: board.id.clone(),
                 })
         }
-        Operation::AttachNote { note, board, .. } | Operation::DetachNote { note, board } => {
-            if !is_a_note(snapshot, note) {
-                return Some(Refused::NotANote { position });
-            }
-            let Ref::Existing(id) = board else {
-                return None;
-            };
-            let found = snapshot.boards.get(id)?;
-            (found.zone.map(|zone| zone.mode) == Some(Mode::Mirrored) && is_named_on(found, note))
-                .then(|| Refused::Mirrored {
-                    position,
-                    board: id.clone(),
-                })
+        Operation::AttachNote { note, .. } | Operation::DetachNote { note, .. } => {
+            (!is_a_note(snapshot, note)).then_some(Refused::NotANote { position })
         }
         Operation::CreateElement { .. }
         | Operation::CreateBoard { .. }
@@ -296,15 +261,6 @@ fn creates_a_note(operations: &[Operation]) -> bool {
         }
         _ => false,
     }
-}
-
-/// Whether a move with `pinned` keeps `element` pinned and it is a note.
-fn keeps_a_note_pinned(
-    snapshot: &Snapshot,
-    element: &Ref<ElementId>,
-    pinned: Option<bool>,
-) -> bool {
-    pinned == Some(true) && is_a_note(snapshot, element)
 }
 
 /// Whether the file of `element` in `snapshot` says it is a note. A missing

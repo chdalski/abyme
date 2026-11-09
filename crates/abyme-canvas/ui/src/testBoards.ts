@@ -5,7 +5,6 @@ export function boardView(overrides: Partial<BoardView> = {}): BoardView {
   return {
     id: "context",
     title: "Context",
-    mode: null,
     placements: [],
     relations: [],
     trail: [],

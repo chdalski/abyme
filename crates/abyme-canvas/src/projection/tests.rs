@@ -72,7 +72,6 @@ fn shows_a_box_per_placement_with_its_rect_and_the_element_s_fields() {
         BoardView {
             id: board_id("context"),
             title: "Context".to_owned(),
-            mode: None,
             placements: vec![
                 Placement {
                     element: element_id("orders"),
@@ -144,7 +143,7 @@ fn the_projection_carries_exactly_the_named_fields_and_no_body() {
     assert!(!json.to_string().contains("SECRET-BODY"));
     assert_eq!(
         keys(&json),
-        ["id", "mode", "placements", "relations", "title", "trail"]
+        ["id", "placements", "relations", "title", "trail"]
     );
     let placements = json["placements"].as_array().unwrap();
     assert_eq!(

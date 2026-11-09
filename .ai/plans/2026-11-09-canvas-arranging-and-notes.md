@@ -25,7 +25,7 @@ highlighting a selection keeps the notes on a selected box undimmed.
 ## Steps
 
 - [x] Notes on a selected box stay undimmed
-- [ ] Mirrored boards are arranged like free ones
+- [x] Mirrored boards are arranged like free ones
 - [ ] One function finds the box a point lies on
 - [ ] A new note created on a box hangs on it
 - [ ] A note-mode button places a note where the user clicks
@@ -52,17 +52,17 @@ pin, as on a free board; what a mirrored board shows still follows the code.
 
 Review path: Security-Hybrid
 
-- [ ] On a mirrored board, dragging or moving with the arrow keys a box whose element file exists
+- [x] On a mirrored board, dragging or moving with the arrow keys a box whose element file exists
       moves it and pins it, and its marker releases the pin; a box whose element file is missing
       stays where it is, as on a free board.
-- [ ] The canvas's admission refuses nothing on a mirrored board that it admits on a free board, and
+- [x] The canvas's admission refuses nothing on a mirrored board that it admits on a free board, and
       admits nothing there that it refuses on a free board; a release still keeps the position in
       the board file.
-- [ ] The board view the UI receives carries no mode, and `ui/src/bindings.ts` matches the Rust
+- [x] The board view the UI receives carries no mode, and `ui/src/bindings.ts` matches the Rust
       types.
-- [ ] Rust tests of admission and of the command `apply` show moves, pins, and releases of boxes on
+- [x] Rust tests of admission and of the command `apply` show moves, pins, and releases of boxes on
       a mirrored board written; UI tests show such boxes draggable and their pin releasable.
-- [ ] No text an AI, a developer, or a reader of the code or docs gets still gives the old rule of
+- [x] No text an AI, a developer, or a reader of the code or docs gets still gives the old rule of
       what a person may change on a mirrored board: the MCP tool descriptions, the abyme-mcp
       README, the doc comment of `Mode::Mirrored`, the canvas's module docs, the `abyme-canvas` row
       of the root `CLAUDE.md`, `Canvas.md`, `Boards and Zones.md`, and the summary of the element

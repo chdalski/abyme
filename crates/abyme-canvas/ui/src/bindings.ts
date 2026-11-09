@@ -21,11 +21,6 @@ id: string,
  */
 title: string, 
 /**
- * The board's mode, if it is a zone. On a mirrored board, the UI offers a
- * drag only on a note.
- */
-mode: Mode | null, 
-/**
  * One entry per element on the board, in element-ID order.
  */
 placements: Array<Placement>, 
@@ -65,8 +60,6 @@ id: string,
  * The title shown for the board, as the board file holds it.
  */
 title: string, };
-
-export type Mode = "free" | "mirrored";
 
 export type Placement = { 
 /**

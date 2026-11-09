@@ -55,8 +55,8 @@ type BoardCanvasProps = {
 /**
  * A board's boxes and the arrows between them on the canvas. Moving boxes
  * moves their elements; `Delete` and `Backspace` delete the selected notes, and
- * never a box or an arrow. Arrows follow from the view and hold no state. A
- * mirrored board offers no release of a pin, and a move only of a note. The key
+ * never a box or an arrow. Arrows follow from the view and hold no state. Every
+ * board, mirrored or not, offers moving and releasing a pin alike. The key
  * `N`, a double-click on an empty spot, and the toolbar start a new note, on
  * every board. The zoom bar shows and changes the zoom, from `MIN_ZOOM` to
  * `MAX_ZOOM`, which fitting the board into view keeps to as well. A selection
@@ -198,7 +198,7 @@ function Flow({
   return (
     <Highlight.Provider value={focus}>
       <OpenBoard.Provider value={onOpen}>
-        <ReleasePin.Provider value={view.mode === "mirrored" ? null : release}>
+        <ReleasePin.Provider value={release}>
           <WriteNote.Provider value={writeNote}>
             <NewNotes.Provider value={newNotes}>
               <NoteFields.Provider value={fields}>

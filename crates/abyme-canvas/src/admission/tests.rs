@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 
 use abyme_core::LocalKey;
-use abyme_model::{ElementFixture, Placement, Rect, StatementKind, Zone};
+use abyme_model::{ElementFixture, Mode, Placement, Rect, StatementKind, Zone};
 use serde_json::{Value, json};
 
 fn operation(value: Value) -> Operation {
@@ -286,48 +286,17 @@ fn snapshot() -> Snapshot {
 }
 
 #[test]
-fn refuses_a_move_without_a_note_s_file_on_a_mirrored_board_and_names_where() {
-    let requests: [(&[&str], usize); 3] = [
-        (&["mirrored"], 1),
-        (&["free", "plain", "mirrored"], 3),
-        (&["free", "mirrored", "mirrored"], 2),
-    ];
-
-    for (boards, position) in requests {
-        let operations: Vec<Operation> = boards.iter().map(|board| a_move_on(board)).collect();
-
-        assert_eq!(
-            check_board_files(&snapshot(), &operations),
-            Err(Refused::Mirrored {
-                position,
-                board: "mirrored".parse().unwrap(),
-            }),
-            "{boards:?}"
-        );
-    }
-}
-
-#[test]
-fn lets_a_move_pass_on_a_free_board_on_no_zone_and_on_a_board_it_does_not_have() {
-    for board in ["free", "plain", "nowhere"] {
+fn lets_a_move_and_pin_of_any_element_pass_on_every_board() {
+    for board in ["free", "plain", "mirrored", "nowhere"] {
         assert_eq!(
             check_board_files(&snapshot(), &[a_move_on(board)]),
             Ok(()),
             "{board}"
         );
     }
-}
-
-#[test]
-fn names_only_the_position_and_the_board_of_a_refused_move() {
-    let refused = Refused::Mirrored {
-        position: 2,
-        board: "mirrored".parse().unwrap(),
-    };
-
     assert_eq!(
-        refused.to_string(),
-        "operation 2: board mirrored is mirrored, so the canvas may only create a note there, or move one and keep it pinned, attach, or detach one on which nothing hangs"
+        check_board_files(&snapshot(), &["free", "plain", "mirrored"].map(a_move_on)),
+        Ok(())
     );
 }
 
@@ -387,7 +356,7 @@ fn lets_a_release_pass_only_at_the_position_in_the_file_of_its_board() {
 
 #[test]
 fn refuses_a_release_of_an_element_its_board_does_not_place() {
-    for board in ["free", "plain"] {
+    for board in ["free", "plain", "mirrored"] {
         assert_eq!(
             check_board_files(&snapshot(), &[a_release_on(board)]),
             Err(Refused::ReleaseElsewhere {
@@ -397,17 +366,6 @@ fn refuses_a_release_of_an_element_its_board_does_not_place() {
             "{board}"
         );
     }
-}
-
-#[test]
-fn refuses_a_release_without_a_note_s_file_on_a_mirrored_board() {
-    assert_eq!(
-        check_board_files(&snapshot(), &[a_release_on("mirrored")]),
-        Err(Refused::Mirrored {
-            position: 1,
-            board: "mirrored".parse().unwrap(),
-        })
-    );
 }
 
 #[test]
@@ -444,55 +402,6 @@ fn snapshot_with_a_note() -> Snapshot {
     snapshot
 }
 
-#[test]
-fn lets_only_a_move_that_keeps_a_note_pinned_pass_on_a_mirrored_board() {
-    let with_pinned = |pinned: Value| {
-        operation(json!({
-            "op": "move_element",
-            "element": {"existing": "payments"},
-            "board": {"existing": "mirrored"},
-            "x": 10,
-            "y": 20,
-            "pinned": pinned
-        }))
-    };
-    let refused = Err(Refused::Mirrored {
-        position: 1,
-        board: "mirrored".parse().unwrap(),
-    });
-    let without_pinned = operation(json!({
-        "op": "move_element",
-        "element": {"existing": "payments"},
-        "board": {"existing": "mirrored"},
-        "x": 10,
-        "y": 20
-    }));
-    let new_element = operation(json!({
-        "op": "move_element",
-        "element": {"new": "payments"},
-        "board": {"existing": "mirrored"},
-        "x": 10,
-        "y": 20,
-        "pinned": true
-    }));
-
-    assert_eq!(
-        check_board_files(&snapshot_with_a_note(), &[with_pinned(json!(true))]),
-        Ok(())
-    );
-    for not_keeping_a_pin in [with_pinned(json!(false)), without_pinned, new_element] {
-        assert_eq!(
-            check_board_files(&snapshot_with_a_note(), &[not_keeping_a_pin]),
-            refused
-        );
-    }
-    assert_eq!(
-        check_board_files(&snapshot(), &[with_pinned(json!(true))]),
-        refused,
-        "no file says it is a note"
-    );
-}
-
 /// The three operations that create a note on the board `board`.
 fn a_new_note_on(board: &str) -> Vec<Operation> {
     [
@@ -518,7 +427,7 @@ fn admits_and_lets_a_new_note_pass_as_a_whole_request_on_any_board() {
 }
 
 #[test]
-fn a_new_note_with_anything_beside_it_does_not_pass_the_mirrored_check() {
+fn a_new_note_with_anything_beside_it_is_no_creation_of_a_note() {
     let beside = a_move_on("mirrored");
     let new_note = a_new_note_on("mirrored");
     let before: Vec<Operation> = std::iter::once(beside.clone())
@@ -527,10 +436,6 @@ fn a_new_note_with_anything_beside_it_does_not_pass_the_mirrored_check() {
     let after: Vec<Operation> = new_note.iter().cloned().chain([beside]).collect();
 
     for request in [before, after] {
-        assert!(matches!(
-            check_board_files(&snapshot(), &request),
-            Err(Refused::Mirrored { .. })
-        ));
         assert!(admit(&request).is_err());
     }
 }
@@ -583,7 +488,7 @@ fn lets_a_release_of_an_attached_note_pass_only_at_its_position_on_the_board() {
 }
 
 #[test]
-fn lets_a_move_of_an_attached_note_pass_on_a_mirrored_board_but_not_of_its_box() {
+fn lets_a_move_of_an_attached_note_and_of_its_box_pass_on_a_mirrored_board() {
     let a_move = |element: &str| {
         operation(json!({
             "op": "move_element",
@@ -597,13 +502,7 @@ fn lets_a_move_of_an_attached_note_pass_on_a_mirrored_board_but_not_of_its_box()
     let snapshot = snapshot_with_an_attached_note(5, 6);
 
     assert_eq!(check_board_files(&snapshot, &[a_move("payments")]), Ok(()));
-    assert_eq!(
-        check_board_files(&snapshot, &[a_move("checkout")]),
-        Err(Refused::Mirrored {
-            position: 1,
-            board: "mirrored".parse().unwrap(),
-        })
-    );
+    assert_eq!(check_board_files(&snapshot, &[a_move("checkout")]), Ok(()));
 }
 
 fn an_attachment(note: &str, to: &str, board: &str) -> Operation {
@@ -736,7 +635,7 @@ fn files_naming_the_note() -> [&'static str; 3] {
 }
 
 #[test]
-fn refuses_to_move_attach_or_detach_a_note_a_file_names_on_a_mirrored_board_only() {
+fn lets_a_note_a_file_names_be_moved_attached_and_detached_on_every_board() {
     for lines in files_naming_the_note() {
         let snapshot = snapshot_naming_the_note(lines);
         let on = |board: &str| {
@@ -747,21 +646,13 @@ fn refuses_to_move_attach_or_detach_a_note_a_file_names_on_a_mirrored_board_only
             ]
         };
 
-        for refused in on("mirrored") {
+        for board in ["plain", "mirrored"] {
             assert_eq!(
-                check_board_files(&snapshot, &[refused]),
-                Err(Refused::Mirrored {
-                    position: 1,
-                    board: "mirrored".parse().unwrap(),
-                }),
-                "{lines}"
+                check_board_files(&snapshot, &on(board)),
+                Ok(()),
+                "{board}: {lines}"
             );
         }
-        assert_eq!(
-            check_board_files(&snapshot, &on("plain")),
-            Ok(()),
-            "{lines}"
-        );
     }
 }
 
@@ -801,5 +692,166 @@ fn names_only_the_position_and_the_board_of_a_refused_deletion() {
     assert_eq!(
         refused.to_string(),
         "operation 3: something on board plain hangs on the note, so the canvas does not delete it"
+    );
+}
+
+/// Every mode a zone can have. The match breaks the build when a mode is added,
+/// so whoever adds one decides here whether admission must treat it apart.
+fn every_mode() -> [Mode; 2] {
+    let listed = |mode: Mode| match mode {
+        Mode::Free | Mode::Mirrored => mode,
+    };
+    [listed(Mode::Free), listed(Mode::Mirrored)]
+}
+
+/// The board `here`, of the zone `zone`, placing the box `checkout` at 100,
+/// 200, pinned, the note `ask` hanging on it, and the note `payments`, on which
+/// the box `x` hangs; `checkout` is no note, `ask` and `payments` are.
+fn arranged_board(zone: Option<Mode>) -> Snapshot {
+    let zone = zone.map_or(String::new(), |mode| {
+        format!(
+            r#""zone": {{"mode": "{}", "statement": "current"}}, "#,
+            mode.as_str()
+        )
+    });
+    let text = format!(
+        r#"{{"format": 1, "id": "here", "title": "here", {zone}"placements": [
+            {{"element": "ask", "x": 5, "y": 6, "width": 180, "height": 90, "pinned": true, "attached_to": "checkout"}},
+            {{"element": "checkout", "x": 100, "y": 200, "width": 180, "height": 90, "pinned": true}},
+            {{"element": "payments", "x": 400, "y": 0, "width": 180, "height": 90}},
+            {{"element": "x", "x": 1, "y": 2, "width": 180, "height": 90, "attached_to": "payments"}}
+        ]}}"#
+    );
+    let id: BoardId = "here".parse().unwrap();
+    let element = |id: &str, type_ref: &str| {
+        (
+            id.parse::<ElementId>().unwrap(),
+            ElementFixture::new(id).type_ref(type_ref).name(id).build(),
+        )
+    };
+    Snapshot {
+        elements: [
+            element("ask", "note"),
+            element("checkout", "c4/container"),
+            element("payments", "note"),
+        ]
+        .into_iter()
+        .collect(),
+        boards: std::iter::once((id.clone(), Board::from_json(&id, &text).unwrap())).collect(),
+    }
+}
+
+/// One of each operation `check_board_files` decides on a board.
+fn every_kind_of_request() -> Vec<(&'static str, Vec<Operation>)> {
+    vec![
+        (
+            "move and pin a box",
+            vec![operation(
+                json!({"op": "move_element", "element": {"existing": "checkout"},
+                "board": {"existing": "here"}, "x": 300, "y": 300, "pinned": true}),
+            )],
+        ),
+        (
+            "release a pin where the file has it",
+            vec![operation(
+                json!({"op": "move_element", "element": {"existing": "checkout"},
+                "board": {"existing": "here"}, "x": 100, "y": 200, "pinned": false}),
+            )],
+        ),
+        (
+            "release a pin elsewhere",
+            vec![operation(
+                json!({"op": "move_element", "element": {"existing": "checkout"},
+                "board": {"existing": "here"}, "x": 101, "y": 200, "pinned": false}),
+            )],
+        ),
+        (
+            "attach a note something hangs on",
+            vec![an_attachment("payments", "checkout", "here")],
+        ),
+        (
+            "detach a note something hangs on",
+            vec![a_detachment("payments", "here")],
+        ),
+        (
+            "move a note something hangs on",
+            vec![a_note_move("payments", "here")],
+        ),
+        (
+            "update a box",
+            vec![operation(
+                json!({"op": "update_element", "element": {"existing": "checkout"},
+                "name": "Checkout"}),
+            )],
+        ),
+        (
+            "delete a box",
+            vec![operation(
+                json!({"op": "delete_element", "element": {"existing": "checkout"}}),
+            )],
+        ),
+        (
+            "delete a note something hangs on",
+            vec![operation(
+                json!({"op": "delete_element", "element": {"existing": "payments"}}),
+            )],
+        ),
+        ("create a note", a_new_note_on("here")),
+    ]
+}
+
+#[test]
+fn decides_every_request_on_every_mode_as_on_a_board_without_a_zone() {
+    for (request, operations) in every_kind_of_request() {
+        let without_a_zone = check_board_files(&arranged_board(None), &operations);
+        for mode in every_mode() {
+            assert_eq!(
+                check_board_files(&arranged_board(Some(mode)), &operations),
+                without_a_zone,
+                "{request} on {mode:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn decides_a_mirrored_board_by_the_rules_of_every_board() {
+    let decided: Vec<(&str, Result<(), Refused>)> = every_kind_of_request()
+        .into_iter()
+        .map(|(request, operations)| {
+            (
+                request,
+                check_board_files(&arranged_board(Some(Mode::Mirrored)), &operations),
+            )
+        })
+        .collect();
+    let here: BoardId = "here".parse().unwrap();
+
+    assert_eq!(
+        decided,
+        [
+            ("move and pin a box", Ok(())),
+            ("release a pin where the file has it", Ok(())),
+            (
+                "release a pin elsewhere",
+                Err(Refused::ReleaseElsewhere {
+                    position: 1,
+                    board: here.clone(),
+                })
+            ),
+            ("attach a note something hangs on", Ok(())),
+            ("detach a note something hangs on", Ok(())),
+            ("move a note something hangs on", Ok(())),
+            ("update a box", Err(Refused::NotANote { position: 1 })),
+            ("delete a box", Err(Refused::NotANote { position: 1 })),
+            (
+                "delete a note something hangs on",
+                Err(Refused::HungOn {
+                    position: 1,
+                    board: here,
+                })
+            ),
+            ("create a note", Ok(())),
+        ]
     );
 }

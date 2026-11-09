@@ -14,7 +14,6 @@ const shop = vi.hoisted(() => ({
   arrows: {
     id: "arrows",
     title: "Arrows",
-    mode: null,
     placements: [
       {
         element: "constructor",
@@ -52,7 +51,6 @@ const shop = vi.hoisted(() => ({
   view: {
     id: "online-shop",
     title: "Online Shop",
-    mode: null,
     placements: [
       {
         element: "orders-database",

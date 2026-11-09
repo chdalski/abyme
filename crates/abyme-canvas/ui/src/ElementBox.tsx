@@ -15,13 +15,10 @@ import { NoteContent } from "./NoteContent";
 /** Opens a board: how a box reaches the app's choice of the open board. */
 export const OpenBoard = createContext<(board: string) => void>(() => {});
 
-/**
- * Releases the pin of an element at its position, or `null` on a board where
- * a person may not.
- */
+/** Releases the pin of an element at its position. */
 export const ReleasePin = createContext<
-  ((element: string, position: XYPosition) => void) | null
->(null);
+  (element: string, position: XYPosition) => void
+>(() => {});
 
 /** The levels of the review flags the boxes show. */
 export const ReviewMarks = createContext<FlagMarks>(NO_MARKS);
@@ -78,10 +75,10 @@ function InnerBoards({ boards }: { boards: ElementData["innerBoards"] }) {
 }
 
 /**
- * The marker of a pinned box: a button that releases the pin where a person
- * may and the box shows an element whose file exists, which the core can
- * release, or plain text. Like the buttons of inner boards, it neither starts
- * a drag nor moves a selected box with the arrow keys.
+ * The marker of a pinned box: a button that releases the pin when the box
+ * shows an element whose file exists, which the core can release, or plain
+ * text. Like the buttons of inner boards, it neither starts a drag nor moves a
+ * selected box with the arrow keys.
  */
 function PinMarker({
   element,
@@ -93,7 +90,7 @@ function PinMarker({
   position: XYPosition;
 }) {
   const release = useContext(ReleasePin);
-  if (release === null || shown.kind !== "element") {
+  if (shown.kind !== "element") {
     return <span className="element-pin element-mark">pinned</span>;
   }
   return (

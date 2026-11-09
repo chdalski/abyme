@@ -4,11 +4,11 @@ type: "docs/note"
 name: "Board Graph"
 summary: "How boards form a graph: elements with a home, references, inner boards, relations across boards, zooming in, and deleting"
 anchor: "docs/2 Concepts/Board Graph.md"
-verified: "8440c1b18d10b254b3f0975518d2ca286766daf4"
+verified: "68046747acdd3151eca283ffd48c3624d6ffeed2"
 verified_by: "ai"
 verified_content:
   - {path: "crates/abyme-canvas/src/admission.rs", object: "7634e1b108a4c5b27810e5199345bee9c8243771"}
-  - {path: "crates/abyme-canvas/ui", object: "4ece57087da5c61fe7b17e0bfeaf08699fb85a83"}
+  - {path: "crates/abyme-canvas/ui", object: "ead763c1c3c136434d148f11752370b615607064"}
   - {path: "crates/abyme-core", object: "0a469e1ed2190def5e59b153a1e2f8860ddf2570"}
   - {path: "crates/abyme-core/src/apply.rs", object: "3c10e50ed7beb9b1cf685498296e6874ca98338c"}
   - {path: "crates/abyme-model", object: "bd2383395459ab71952a8102b5d45d5ef66c8360"}

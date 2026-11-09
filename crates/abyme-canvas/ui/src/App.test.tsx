@@ -1410,11 +1410,11 @@ describe("App", () => {
 
     describe("with one press", () => {
       /**
-       * `outer`, whose box `shop` owns `inner`; `inner`, a board of `mode`
+       * `outer`, whose box `shop` owns `inner`; `inner`, a board
        * with the trail back to `outer` and the box `deep`, which owns
        * `deeper`, at the same place as `shop`; and `deeper`.
        */
-      function threeLevels(mode: BoardView["mode"]): FakeClient {
+      function threeLevels(): FakeClient {
         const client = new FakeClient([
           { id: "outer", title: "Outer", depth: 0 },
           { id: "inner", title: "Inner", depth: 1 },
@@ -1439,7 +1439,6 @@ describe("App", () => {
           inner: boardView({
             id: "inner",
             title: "Inner",
-            mode,
             trail: [{ id: "outer", title: "Outer" }],
             placements: [owning("deep", "deeper", "Deeper")],
           }),
@@ -1449,8 +1448,8 @@ describe("App", () => {
       }
 
       /** Opens `inner` with the first click of a press on `shop`'s button. */
-      async function firstClickOpensInner(mode: BoardView["mode"] = null) {
-        const client = threeLevels(mode);
+      async function firstClickOpensInner() {
+        const client = threeLevels();
         const rendered = render(<App client={client} />);
         fireEvent.click(await screen.findByRole("button", { name: "Outer" }));
         const button = await screen.findByRole("button", { name: "▸ Inner" });
@@ -1482,38 +1481,32 @@ describe("App", () => {
       const settleAll = () =>
         act(() => new Promise<void>((done) => setTimeout(done, 0)));
 
-      it.each([null, "mirrored"] as const)(
-        "opens no further board when the rest lands on a ▸ button (%s board)",
-        async (mode) => {
-          await firstClickOpensInner(mode);
+      it("opens no further board when the rest lands on a ▸ button", async () => {
+        await firstClickOpensInner();
 
-          restOfPress(await screen.findByRole("button", { name: "▸ Deeper" }));
-          await settleAll();
+        restOfPress(await screen.findByRole("button", { name: "▸ Deeper" }));
+        await settleAll();
 
-          expect(screen.getByRole("heading", { name: "Inner" })).toBeDefined();
-        },
-      );
+        expect(screen.getByRole("heading", { name: "Inner" })).toBeDefined();
+      });
 
-      it.each([null, "mirrored"] as const)(
-        "opens no further board when the rest lands on a box with an inner board (%s board)",
-        async (mode) => {
-          const { container } = await firstClickOpensInner(mode);
-          const deep = await waitFor(() => {
-            const found = container.querySelector(
-              '.react-flow__node[data-id="deep"]',
-            );
-            if (found === null) {
-              throw new Error("no box");
-            }
-            return found;
-          });
+      it("opens no further board when the rest lands on a box with an inner board", async () => {
+        const { container } = await firstClickOpensInner();
+        const deep = await waitFor(() => {
+          const found = container.querySelector(
+            '.react-flow__node[data-id="deep"]',
+          );
+          if (found === null) {
+            throw new Error("no box");
+          }
+          return found;
+        });
 
-          restOfPress(deep);
-          await settleAll();
+        restOfPress(deep);
+        await settleAll();
 
-          expect(screen.getByRole("heading", { name: "Inner" })).toBeDefined();
-        },
-      );
+        expect(screen.getByRole("heading", { name: "Inner" })).toBeDefined();
+      });
 
       it("opens no further board when the rest lands on a breadcrumb", async () => {
         await firstClickOpensInner();
