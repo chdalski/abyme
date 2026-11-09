@@ -17,6 +17,7 @@ import { ReviewMarks } from "./ElementBox";
 import type { Move } from "./nodes";
 import type { NoteParts } from "./notes";
 import { boardView, placedBox, placedElement } from "./testBoards";
+import { measureBoxes } from "./testLayout";
 
 afterEach(cleanup);
 
@@ -1594,5 +1595,239 @@ describe("the marks on a box's top edge", () => {
     expect(
       screen.getByRole("button", { name: "Release pin" }).classList,
     ).toContain("element-mark");
+  });
+});
+
+describe("the zoom bar", () => {
+  let undoMeasuring: () => void = () => {};
+
+  beforeEach(() => {
+    undoMeasuring = measureBoxes();
+  });
+
+  afterEach(() => {
+    // Unmounted first, so that no late size report meets jsdom's own globals.
+    cleanup();
+    undoMeasuring();
+  });
+
+  /** The zoom the canvas draws with, from the transform of its viewport. */
+  function drawnZoom(container: HTMLElement): number {
+    const viewport = container.querySelector<HTMLElement>(
+      ".react-flow__viewport",
+    );
+    const scale = /scale\(([^)]+)\)/.exec(viewport?.style.transform ?? "");
+    return Number(scale?.[1]);
+  }
+
+  /** The percentage the bar shows. */
+  function shownPercent(): string {
+    return screen.getByTitle("Zoom to 100 %").textContent ?? "";
+  }
+
+  /**
+   * A canvas of `view`, by default two small boxes, once React Flow has
+   * measured its boxes and fitted it into view on opening, which moves the
+   * zoom away from 100 %; React Flow's pane is 500 × 500 in jsdom.
+   */
+  async function zoomCanvas(view: BoardView = boardIn("free")) {
+    const rendered = render(canvasOf(view, () => Promise.resolve()));
+    await waitFor(() => {
+      expect(drawnZoom(rendered.container)).not.toBe(1);
+    });
+    return rendered;
+  }
+
+  /** A board many times wider than the pane, which fits only below 10 %. */
+  function wideBoard(): BoardView {
+    return boardView({
+      placements: [
+        placedElement("orders"),
+        placedElement("payments", { x: 100_000 }),
+      ],
+    });
+  }
+
+  it("shows the zoom the canvas draws with as a whole percentage", async () => {
+    const { container } = await zoomCanvas();
+
+    await waitFor(() => {
+      expect(shownPercent()).toBe(
+        `${Math.round(drawnZoom(container) * 100)} %`,
+      );
+    });
+    expect(shownPercent()).toMatch(/^\d+ %$/);
+  });
+
+  it("zooms to 100 % on a click on the percentage", async () => {
+    const { container } = await zoomCanvas();
+
+    fireEvent.click(screen.getByTitle("Zoom to 100 %"));
+
+    await waitFor(() => {
+      expect(drawnZoom(container)).toBe(1);
+    });
+    expect(shownPercent()).toBe("100 %");
+  });
+
+  it("zooms in with + and out with −, and the percentage follows", async () => {
+    const { container } = await zoomCanvas();
+    fireEvent.click(screen.getByTitle("Zoom to 100 %"));
+    await waitFor(() => {
+      expect(shownPercent()).toBe("100 %");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+    await waitFor(() => {
+      expect(drawnZoom(container)).toBeGreaterThan(1);
+    });
+    expect(shownPercent()).toBe(`${Math.round(drawnZoom(container) * 100)} %`);
+
+    fireEvent.click(screen.getByRole("button", { name: "Zoom out" }));
+    fireEvent.click(screen.getByRole("button", { name: "Zoom out" }));
+    await waitFor(() => {
+      expect(drawnZoom(container)).toBeLessThan(1);
+    });
+    expect(shownPercent()).toBe(`${Math.round(drawnZoom(container) * 100)} %`);
+  });
+
+  it("fits the board into the pane, with React Flow's margin of a tenth", async () => {
+    const { container } = await zoomCanvas();
+    fireEvent.click(screen.getByTitle("Zoom to 100 %"));
+    await waitFor(() => {
+      expect(drawnZoom(container)).toBe(1);
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Fit the board into view" }),
+    );
+
+    // The two boxes span 380 × 90 in a pane of 500 × 500: the width decides.
+    await waitFor(() => {
+      expect(drawnZoom(container)).toBeCloseTo(500 / (380 * 1.1));
+    });
+    expect(shownPercent()).toBe("120 %");
+  });
+
+  it("fits a board too wide for the pane at the lowest zoom, 10 %", async () => {
+    const { container } = await zoomCanvas(wideBoard());
+    fireEvent.click(screen.getByTitle("Zoom to 100 %"));
+    await waitFor(() => {
+      expect(drawnZoom(container)).toBe(1);
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Fit the board into view" }),
+    );
+
+    await waitFor(() => {
+      expect(drawnZoom(container)).toBeCloseTo(0.1);
+    });
+    expect(shownPercent()).toBe("10 %");
+  });
+
+  it("zooms in no further than 200 %", async () => {
+    const { container } = await zoomCanvas();
+    const zoomIn = screen.getByRole("button", { name: "Zoom in" });
+
+    for (let click = 0; click < 10; click += 1) {
+      fireEvent.click(zoomIn);
+    }
+
+    await waitFor(() => {
+      expect(drawnZoom(container)).toBe(2);
+    });
+    expect(shownPercent()).toBe("200 %");
+  });
+
+  it("zooms with the keys +, -, and 0, with Shift where + needs it", async () => {
+    const { container } = await zoomCanvas();
+    fireEvent.click(screen.getByTitle("Zoom to 100 %"));
+    await waitFor(() => {
+      expect(drawnZoom(container)).toBe(1);
+    });
+
+    const plus = fireEvent.keyDown(window, { key: "+", shiftKey: true });
+    await waitFor(() => {
+      expect(drawnZoom(container)).toBeGreaterThan(1);
+    });
+    const zoomedIn = drawnZoom(container);
+
+    const minus = fireEvent.keyDown(window, { key: "-" });
+    await waitFor(() => {
+      expect(drawnZoom(container)).toBeLessThan(zoomedIn);
+    });
+
+    fireEvent.click(screen.getByTitle("Zoom to 100 %"));
+    await waitFor(() => {
+      expect(drawnZoom(container)).toBe(1);
+    });
+    const zero = fireEvent.keyDown(window, { key: "0" });
+    await waitFor(() => {
+      expect(drawnZoom(container)).not.toBe(1);
+    });
+
+    // fireEvent returns false when a handler prevented the default.
+    expect([plus, minus, zero]).toEqual([false, false, false]);
+  });
+
+  it("leaves the zoom and the key alone while a note's text field has the focus", async () => {
+    const { container } = await zoomCanvas();
+    fireEvent.click(screen.getByTitle("Zoom to 100 %"));
+    await waitFor(() => {
+      expect(drawnZoom(container)).toBe(1);
+    });
+    fireEvent.keyDown(window, { key: "n" });
+    const field = screen.getByRole("textbox", { name: "Text of the note" });
+    expect(document.activeElement).toBe(field);
+
+    const notPrevented = ["+", "-", "0"].map((key) =>
+      fireEvent.keyDown(field, { key }),
+    );
+
+    expect(notPrevented).toEqual([true, true, true]);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(drawnZoom(container)).toBe(1);
+  });
+
+  it.each([
+    ["Ctrl", { key: "+", ctrlKey: true }],
+    ["Meta", { key: "-", metaKey: true }],
+    ["Alt", { key: "0", altKey: true }],
+  ])(
+    "leaves the zoom and the key alone with %s held",
+    async (_modifier, init) => {
+      const { container } = await zoomCanvas();
+      fireEvent.click(screen.getByTitle("Zoom to 100 %"));
+      await waitFor(() => {
+        expect(drawnZoom(container)).toBe(1);
+      });
+
+      const notPrevented = fireEvent.keyDown(window, init);
+
+      expect(notPrevented).toBe(true);
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+      expect(drawnZoom(container)).toBe(1);
+    },
+  );
+
+  it("keeps React Flow's attribution link, at the bottom left", async () => {
+    const { container } = await zoomCanvas();
+
+    const attribution = container.querySelector(".react-flow__attribution");
+    const link = attribution?.querySelector("a");
+
+    expect(attribution?.classList).toContain("bottom");
+    expect(attribution?.classList).toContain("left");
+    expect(link?.getAttribute("href")).toMatch(/^https:\/\/reactflow\.dev/);
+    expect(link?.getAttribute("rel")).toBe("noopener noreferrer");
+    expect(
+      container.querySelector(".zoom-bar")?.closest(".react-flow__panel")
+        ?.classList,
+    ).toContain("right");
   });
 });

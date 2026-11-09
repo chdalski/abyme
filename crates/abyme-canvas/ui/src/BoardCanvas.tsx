@@ -25,21 +25,14 @@ import type { ElementNode, Move } from "./nodes";
 import { NewNotes, NoteFields, WriteNote } from "./NoteContent";
 import type { NoteParts } from "./notes";
 import { RestOfOpeningPress } from "./press";
+import { isTyping } from "./typing";
+import { MAX_ZOOM, MIN_ZOOM, ZoomBar } from "./ZoomBar";
 
 /** The one node type the canvas knows. */
 const NODE_TYPES = { element: ElementBox };
 
 /** The keys that delete the selected notes; React Flow ignores them in a text field. */
 const DELETE_KEYS = ["Delete", "Backspace"];
-
-/** Whether a key pressed in `target` belongs to typing. */
-function isTyping(target: EventTarget | null): boolean {
-  return (
-    target instanceof HTMLInputElement ||
-    target instanceof HTMLTextAreaElement ||
-    (target instanceof HTMLElement && target.isContentEditable)
-  );
-}
 
 type BoardCanvasProps = {
   view: BoardView;
@@ -65,7 +58,8 @@ type BoardCanvasProps = {
  * never a box or an arrow. Arrows follow from the view and hold no state. A
  * mirrored board offers no release of a pin, and a move only of a note. The key
  * `N`, a double-click on an empty spot, and the toolbar start a new note, on
- * every board.
+ * every board. The zoom bar shows and changes the zoom, from `MIN_ZOOM` to
+ * `MAX_ZOOM`, which fitting the board into view keeps to as well.
  */
 export function BoardCanvas(props: BoardCanvasProps) {
   return (
@@ -208,6 +202,9 @@ function Flow({
                   nodesConnectable={false}
                   deleteKeyCode={DELETE_KEYS}
                   zoomOnDoubleClick={false}
+                  minZoom={MIN_ZOOM}
+                  maxZoom={MAX_ZOOM}
+                  attributionPosition="bottom-left"
                   fitView
                 >
                   <Panel position="top-left">
@@ -215,6 +212,7 @@ function Flow({
                       New note
                     </button>
                   </Panel>
+                  <ZoomBar />
                 </ReactFlow>
               </div>
             </NoteFields.Provider>

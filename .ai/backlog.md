@@ -70,6 +70,7 @@ share a parent line with one sub-item each.
 
 - The canvas row of `CLAUDE.md` names "when the files change" for the flags and again "it asks again whenever a file watcher sees the project's files change" at its end, whose "it" is now less clear; say that it asks for the list and the open board there (Reviewer, backlog bugs Task 7).
 - The clause "it authorizes nothing" in the `apply` paragraph of `docs/5 Architecture/Canvas.md` is reasoning no reader acts on, and could go. From canvas display, Task 7, security engineer.
+- The Decisions entry "Minimum zoom 10 %" of `.ai/plans/2026-11-09-canvas-usability.md` says boards up to ten times the window fit; with React Flow's fitting margin of a tenth it is about nine times (Reviewer, canvas usability Task 2).
 
 ## Tooling & CI
 

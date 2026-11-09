@@ -79,7 +79,7 @@ So that it still feels fast, sketching creates elements right away:
 - An arrow that ends in empty space creates a new element there.
 - Shapes without meaning, scribbles, and freehand do not exist for now.
 
-This includes camera, selection, moving, resizing, snapping, editing text in place, frames, references, undo, and keyboard shortcuts; arrows and moving between boards with a breadcrumb are built. Later additions: highlighting the AI's changes live, handing the selection to the AI (`get_selection`), and letting the AI point at elements (`focus`), see [[Ideas#Visual Collaboration with the AI]].
+This includes camera, selection, moving, resizing, snapping, editing text in place, frames, references, undo, and keyboard shortcuts; arrows, moving between boards with a breadcrumb, and a zoom bar are built. Later additions: highlighting the AI's changes live, handing the selection to the AI (`get_selection`), and letting the AI point at elements (`focus`), see [[Ideas#Visual Collaboration with the AI]].
 
 ## Projecting a Board
 
@@ -111,7 +111,7 @@ React Flow reports every change through `onNodesChange` or `onConnect`. The canv
 
 | The user wants to | React Flow brings | We build |
 |---|---|---|
-| pan and zoom | mouse, trackpad, touch | – |
+| pan and zoom | mouse, trackpad, touch | a zoom bar with keys (see below) |
 | select, including several | click, selection box; lasso as an example | – |
 | move elements | dragging, grid, arrow keys | one operation on release |
 | resize | `NodeResizer` | one operation |
@@ -121,6 +121,8 @@ React Flow reports every change through `onNodesChange` or `onConnect`. The canv
 | delete | Delete and Backspace | for sticky notes only, with no question; a refusal about references and relations shows as text (see [[Board Graph#Deleting]]) |
 | tools on the element | `NodeToolbar` above the selected node | color, switching the presentation, zooming in |
 | undo, copy, helper lines | only as paid Pro examples | ourselves, through operations |
+
+**Zooming works like this,** on every board: the wheel or the trackpad zooms at the mouse, and the zoom bar at the bottom right shows the zoom as a whole percentage between `−`, which zooms the view out, and `+`, which zooms the view in. A click on the percentage sets 100 %, and the button next to `+` fits the whole board into view. The keys `+`, `-`, and `0` do the same as `+`, `−`, and fitting, also with Shift where the keyboard needs it for `+`, but not while a text field has the focus or with Ctrl, Meta, or Alt held, which stay the webview's. The zoom reaches from 10 % to 200 %, and fitting keeps to that range. React Flow's attribution link sits at the bottom left.
 
 **A sticky note is created like this,** on every board: the key `N` or a double-click on an empty spot put it at the mouse, and the toolbar, or `N` while the mouse is elsewhere, in the middle of the view. Its text field is active right away. `Esc` or a click next to it ends the input and writes it where it appeared, pinned, once; blank text writes nothing, and the note goes. It stays on the screen until the board's next view lists it, or until a view asked for after the write answered leaves it out, as when another writer deleted it first; then it goes without a message. A double-click on an empty spot does not zoom. The note grows with its text.
 

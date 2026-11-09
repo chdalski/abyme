@@ -25,7 +25,7 @@ recorded in `docs/Ideas.md`.
 ## Steps
 
 - [x] The ideas from trying the canvas are recorded
-- [ ] A zoom bar shows and changes the zoom
+- [x] A zoom bar shows and changes the zoom
 - [ ] The relations of the selected boxes stand out
 - [ ] One helper builds a board's list entry
 - [ ] The board list shows the hierarchy
@@ -53,20 +53,20 @@ At the bottom right of the board, a bar shows the zoom level and offers zooming 
 
 Review path: Security-Hybrid
 
-- [ ] The bar shows the current zoom as a whole percentage and follows every change of the zoom,
+- [x] The bar shows the current zoom as a whole percentage and follows every change of the zoom,
       also by the trackpad or the wheel.
-- [ ] A button `−` zooms out, a button `+` zooms in, a click on the percentage sets 100 %, and a
+- [x] A button `−` zooms out, a button `+` zooms in, a click on the percentage sets 100 %, and a
       fourth button fits the whole board into view.
-- [ ] The keys `+`, `-`, and `0` zoom in, zoom out, and fit the board, with Shift where the
+- [x] The keys `+`, `-`, and `0` zoom in, zoom out, and fit the board, with Shift where the
       keyboard needs it for the character; they do nothing while a text field has the focus or
       with Ctrl, Meta, or Alt held.
-- [ ] The zoom reaches from 10 % to 200 %, React Flow's default maximum, and fitting a board uses
+- [x] The zoom reaches from 10 % to 200 %, React Flow's default maximum, and fitting a board uses
       that range.
-- [ ] The attribution link shows at the bottom left, and the bar covers nothing else of the board's
+- [x] The attribution link shows at the bottom left, and the bar covers nothing else of the board's
       controls.
-- [ ] Tests through `BoardCanvas` show each button and key acting on the zoom and the percentage
+- [x] Tests through `BoardCanvas` show each button and key acting on the zoom and the percentage
       following it, including a fit against a pane of known size.
-- [ ] `docs/5 Architecture/Canvas.md` tells a reader how to zoom, and its Scope section and its
+- [x] `docs/5 Architecture/Canvas.md` tells a reader how to zoom, and its Scope section and its
       Editing table agree with that.
 
 ### Task 3: The relations of the selected boxes stand out
