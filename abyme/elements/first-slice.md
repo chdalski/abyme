@@ -4,10 +4,10 @@ type: "docs/note"
 name: "First Slice"
 summary: "The first slice: the working skeleton, the MVP, and how it is tested"
 anchor: "docs/5 Architecture/First Slice.md"
-verified: "6949d94434ce2f52d055e56c93a5ad2796cdfdc3"
+verified: "2e1ec0b8bc6d2d42088ac7020c2b39a01448063e"
 verified_by: "ai"
 verified_content:
-  - {path: "crates/abyme-canvas", object: "82dde203c8b8e240c018d89ebb1dd59acd4ea8c9"}
+  - {path: "crates/abyme-canvas", object: "1fce14d288a143c7adedfd55f47499006e1830dd"}
   - {path: "crates/abyme-canvas/src/watcher.rs", object: "a8badd25c98381dec02941177aa8c95d28eab210"}
   - {path: "crates/abyme-core", object: "0a469e1ed2190def5e59b153a1e2f8860ddf2570"}
   - {path: "crates/abyme-index", object: "d66ee4eb756a692cd1fcb85506f1081b42df7b79"}

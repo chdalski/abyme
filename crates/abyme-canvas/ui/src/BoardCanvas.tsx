@@ -25,8 +25,24 @@ import { DRAFT_SIZE, type ElementNode, type Move } from "./nodes";
 import { NewNotes, NoteFields, WriteNote } from "./NoteContent";
 import type { NoteParts } from "./notes";
 import { RestOfOpeningPress } from "./press";
+import { useNoteMode } from "./noteMode";
 import { isTyping } from "./typing";
 import { MAX_ZOOM, MIN_ZOOM, ZoomBar } from "./ZoomBar";
+
+/** The icon of note mode: a speech bubble, drawn in the button's colour. */
+function SpeechBubble() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+      <path
+        d="M4 4h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H10l-5 4v-4H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
 
 /** The one node type the canvas knows. */
 const NODE_TYPES = { element: ElementBox };
@@ -62,9 +78,10 @@ type BoardCanvasProps = {
  * moves their elements; `Delete` and `Backspace` delete the selected notes, and
  * never a box or an arrow. Arrows follow from the view and hold no state. Every
  * board, mirrored or not, offers moving and releasing a pin alike. The key
- * `N`, a double-click on an empty spot, and the toolbar start a new note, on
- * every board, centred on its point; written with its centre on a box, it
- * hangs there. The zoom bar shows and changes the zoom, from `MIN_ZOOM` to
+ * `N` and a double-click on an empty spot start a new note, on every board,
+ * centred on its point, and the toolbar's button switches into note mode, whose
+ * next press on the board starts one there; written with its centre on a box,
+ * it hangs there. The zoom bar shows and changes the zoom, from `MIN_ZOOM` to
  * `MAX_ZOOM`, which fitting the board into view keeps to as well. A selection
  * highlights the arrows that leave and enter it and the boxes at their other
  * ends, and dims the rest.
@@ -132,8 +149,20 @@ function Flow({
     }
   }, [addDraft, screenToFlowPosition]);
 
+  const noteMode = useNoteMode(
+    useCallback(
+      (point: XYPosition) => addDraft(screenToFlowPosition(point)),
+      [addDraft, screenToFlowPosition],
+    ),
+  );
+  const endNoteMode = noteMode.end;
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !isTyping(event.target)) {
+        endNoteMode();
+        return;
+      }
       if (
         event.key.toLowerCase() !== "n" ||
         event.repeat ||
@@ -147,6 +176,7 @@ function Flow({
       }
       // Otherwise the letter lands in the text field that opens.
       event.preventDefault();
+      endNoteMode();
       if (mouse.current === null) {
         addAtTheMiddle();
       } else {
@@ -155,7 +185,7 @@ function Flow({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [addAtTheMiddle, addDraft, screenToFlowPosition]);
+  }, [addAtTheMiddle, addDraft, screenToFlowPosition, endNoteMode]);
 
   const isRestOfOpeningPress = useContext(RestOfOpeningPress);
   const onDoubleClick = useCallback(
@@ -217,7 +247,12 @@ function Flow({
               <NoteFields.Provider value={fields}>
                 <div
                   ref={surface}
-                  className="board-surface"
+                  className={
+                    noteMode.placing
+                      ? "board-surface board-surface-placing"
+                      : "board-surface"
+                  }
+                  {...noteMode.handlers}
                   onMouseMove={(event) => {
                     mouse.current = { x: event.clientX, y: event.clientY };
                   }}
@@ -241,8 +276,15 @@ function Flow({
                     fitView
                   >
                     <Panel position="top-left">
-                      <button type="button" onClick={addAtTheMiddle}>
-                        New note
+                      <button
+                        type="button"
+                        className="note-mode"
+                        aria-label="New note"
+                        aria-pressed={noteMode.placing}
+                        title="New note: click where it goes"
+                        onClick={noteMode.toggle}
+                      >
+                        <SpeechBubble />
                       </button>
                     </Panel>
                     <ZoomBar />

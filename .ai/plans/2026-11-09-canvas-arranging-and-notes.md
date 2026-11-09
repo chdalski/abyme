@@ -28,7 +28,7 @@ highlighting a selection keeps the notes on a selected box undimmed.
 - [x] Mirrored boards are arranged like free ones
 - [x] One function finds the box a point lies on
 - [x] A new note created on a box hangs on it
-- [ ] A note-mode button places a note where the user clicks
+- [x] A note-mode button places a note where the user clicks
 - [ ] Notes look like speech bubbles pointing to their box
 
 ## Tasks
@@ -112,18 +112,18 @@ ends the mode.
 
 Review path: Security-Hybrid
 
-- [ ] The toolbar button, with a speech-bubble icon and an accessible name, switches note mode on
+- [x] The toolbar button, with a speech-bubble icon and an accessible name, switches note mode on
       and off and shows its state.
-- [ ] In note mode, a press on an empty spot places a free note centred there, and a press anywhere
+- [x] In note mode, a press on an empty spot places a free note centred there, and a press anywhere
       on a box, its buttons and markers included, places a note there that hangs on the box when
       written, as in Task 4; the press moves, selects, pans, opens, and releases nothing, and the
       mode ends.
-- [ ] `Esc` outside a text field ends note mode and places nothing; `N` places a note at the mouse,
+- [x] `Esc` outside a text field ends note mode and places nothing; `N` places a note at the mouse,
       as it does outside note mode, and ends note mode; the zoom bar and the toolbar work as before
       while it is on; opening another board ends it.
-- [ ] Tests through `BoardCanvas` cover a press on a box, on a box's button, on an empty spot, the
+- [x] Tests through `BoardCanvas` cover a press on a box, on a box's button, on an empty spot, the
       end of the mode after one note, `Esc`, and `N`.
-- [ ] `docs/5 Architecture/Canvas.md` describes note mode.
+- [x] `docs/5 Architecture/Canvas.md` describes note mode.
 
 ### Task 6: Notes look like speech bubbles pointing to their box
 

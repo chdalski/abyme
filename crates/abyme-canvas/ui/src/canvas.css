@@ -356,3 +356,21 @@ button.element-pin {
 .react-flow__edge.edge-dimmed {
   opacity: 0.25;
 }
+
+/* Note mode: the button stays pressed, and the board shows where a press
+   places the note. */
+.note-mode {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem;
+}
+
+.note-mode[aria-pressed="true"] {
+  background: #e3e8f2;
+  border-color: #2f6fdb;
+}
+
+.board-surface-placing .react-flow__pane,
+.board-surface-placing .react-flow__node {
+  cursor: crosshair;
+}

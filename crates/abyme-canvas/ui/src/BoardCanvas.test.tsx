@@ -583,15 +583,6 @@ describe("creating a note", () => {
     expect(writtenAt(create)).toEqual({ x: 120, y: 75 });
   });
 
-  it("starts in the middle of the view with the toolbar, wherever the mouse is", () => {
-    const { container, create } = placedCanvas();
-    fireEvent.mouseMove(surfaceOf(container), { clientX: 120, clientY: 60 });
-
-    fireEvent.click(screen.getByRole("button", { name: "New note" }));
-
-    expect(writtenAt(create)).toEqual({ x: 120, y: 75 });
-  });
-
   it("takes the mouse on a new note, so that its text field can be clicked", () => {
     const { container } = render(canvasWith(() => Promise.resolve("new-note")));
 
@@ -941,6 +932,351 @@ describe("creating a note", () => {
       fireEvent.keyDown(fieldOf(), { key: "Escape" });
 
       expect(create.mock.calls[0]?.[2]).toBeNull();
+    });
+  });
+
+  describe("in note mode", () => {
+    type Create = (
+      position: XYPosition,
+      parts: NoteParts,
+      hangOn: string | null,
+    ) => Promise<string | null>;
+
+    const modeButton = () => screen.getByRole("button", { name: "New note" });
+    const placing = () => modeButton().getAttribute("aria-pressed");
+
+    /** Presses a button, by default the primary one, at `x`, `y` on `target` and lets go, as a browser reports it. */
+    function press(
+      target: Element,
+      x: number,
+      y: number,
+      init: MouseEventInit = {},
+    ) {
+      const at = { clientX: x, clientY: y, button: 0, detail: 1, ...init };
+      fireEvent.pointerDown(target, at);
+      fireEvent.mouseDown(target, at);
+      fireEvent.pointerUp(target, at);
+      fireEvent.mouseUp(target, at);
+      // A browser reports a click only for the primary button.
+      if (at.button === 0) {
+        fireEvent.click(target, at);
+      }
+    }
+
+    /** `plain` at 300, 200, 180 by 90, pinned, with the inner board `inner`, and `ask`, a note, at 0, 300. */
+    const arranged = () =>
+      boardView({
+        placements: [
+          placedElement("plain", {
+            x: 300,
+            y: 200,
+            pinned: true,
+            inner_boards: [{ id: "inner", title: "Inner" }],
+          }),
+          placedBox("ask", {
+            x: 0,
+            y: 300,
+            shown: { kind: "note", name: "Ask", body: "" },
+          }),
+        ],
+      });
+
+    /** A canvas of `arranged` in note mode, with every callback a mock. */
+    function noteModeCanvas() {
+      const move = vi.fn<(moves: Move[]) => Promise<void>>(() =>
+        Promise.resolve(),
+      );
+      const onOpen = vi.fn<(board: string) => void>();
+      const release = vi.fn<(element: string, position: XYPosition) => void>();
+      const create = vi.fn<Create>(() => Promise.resolve("new-note"));
+      const deleteNotes = vi.fn<(elements: string[]) => void>();
+      const { container } = render(
+        canvasOf(
+          arranged(),
+          move,
+          onOpen,
+          release,
+          () => Promise.resolve(true),
+          create,
+          deleteNotes,
+        ),
+      );
+      fireEvent.click(modeButton());
+      return { container, move, onOpen, release, create, deleteNotes };
+    }
+
+    /** Writes the open note, and returns the request's position and box. */
+    function written(create: ReturnType<typeof vi.fn<Create>>) {
+      fireEvent.change(fieldOf(), { target: { value: "Ask" } });
+      fireEvent.keyDown(fieldOf(), { key: "Escape" });
+      const [position, , hangOn] = create.mock.calls[0] ?? [];
+      return { position, hangOn };
+    }
+
+    it("is switched on and off by the toolbar button, which says so", () => {
+      const { container } = render(
+        canvasWith(() => Promise.resolve("new-note")),
+      );
+      expect(modeButton().querySelector("svg")).not.toBeNull();
+      expect(placing()).toBe("false");
+
+      fireEvent.click(modeButton());
+      expect(placing()).toBe("true");
+
+      fireEvent.click(modeButton());
+      expect(placing()).toBe("false");
+      expect(notes(container)).toEqual([]);
+    });
+
+    it("places a free note centred on a press on an empty spot, and ends", () => {
+      const { container, create } = noteModeCanvas();
+
+      press(paneOf(container), 120, 60);
+
+      expect(notes(container)).toEqual(["+note-1"]);
+      expect(placing()).toBe("false");
+      expect(written(create)).toEqual({
+        position: { x: 30, y: 15 },
+        hangOn: null,
+      });
+    });
+
+    it("places a note on a press on a box, which hangs on it, and moves, selects, and opens nothing", () => {
+      const { container, create, move, onOpen } = noteModeCanvas();
+
+      press(box(container, "plain"), 390, 245);
+
+      expect(notes(container)).toEqual(["+note-1"]);
+      expect(placing()).toBe("false");
+      expect(box(container, "plain").classList).not.toContain("selected");
+      expect(move).not.toHaveBeenCalled();
+      expect(onOpen).not.toHaveBeenCalled();
+      expect(written(create)).toEqual({
+        position: { x: 300, y: 200 },
+        hangOn: "plain",
+      });
+    });
+
+    it("places the note as the press starts", () => {
+      const { container } = noteModeCanvas();
+
+      fireEvent.pointerDown(paneOf(container), { clientX: 120, clientY: 60 });
+
+      expect(notes(container)).toEqual(["+note-1"]);
+    });
+
+    it("keeps the placing press from the box, and lets the browser send its mousedown", () => {
+      const { container } = noteModeCanvas();
+      const plain = box(container, "plain");
+      const reached = vi.fn();
+      for (const type of ["pointerdown", "mousedown", "click", "touchstart"]) {
+        plain.addEventListener(type, reached);
+      }
+      const at = { clientX: 390, clientY: 245, button: 0, detail: 1 };
+
+      // `fireEvent` answers false for an event whose default was prevented.
+      expect(fireEvent.pointerDown(plain, at)).toBe(true);
+      fireEvent.touchStart(plain);
+      expect(fireEvent.mouseDown(plain, at)).toBe(false);
+      expect(fireEvent.click(plain, at)).toBe(false);
+
+      expect(reached).not.toHaveBeenCalled();
+    });
+
+    it("lets the touch of the next press go", () => {
+      const { container } = noteModeCanvas();
+      press(paneOf(container), 120, 60);
+      const plain = box(container, "plain");
+      const reached = vi.fn();
+      plain.addEventListener("touchstart", reached);
+
+      fireEvent.pointerDown(plain, { clientX: 390, clientY: 245 });
+      fireEvent.touchStart(plain);
+
+      expect(reached).toHaveBeenCalledOnce();
+    });
+
+    it("places a note on a press on a box's pin marker and releases nothing", () => {
+      const { container, create, release } = noteModeCanvas();
+
+      press(screen.getByRole("button", { name: "Release pin" }), 390, 245);
+
+      expect(release).not.toHaveBeenCalled();
+      expect(notes(container)).toEqual(["+note-1"]);
+      expect(written(create).hangOn).toBe("plain");
+    });
+
+    it("places a note on a press on a box's button for an inner board and opens nothing", () => {
+      const { container, create, onOpen } = noteModeCanvas();
+
+      press(screen.getByRole("button", { name: "▸ Inner" }), 390, 245);
+
+      expect(onOpen).not.toHaveBeenCalled();
+      expect(notes(container)).toEqual(["+note-1"]);
+      expect(written(create).hangOn).toBe("plain");
+    });
+
+    it("places a note on a press that moves on a box, and moves the box not", () => {
+      const { container, move } = noteModeCanvas();
+      const plain = box(container, "plain");
+      const before = plain.style.transform;
+
+      fireEvent.pointerDown(plain, { clientX: 390, clientY: 245, button: 0 });
+      fireEvent.mouseDown(plain, { clientX: 390, clientY: 245, button: 0 });
+      fireEvent.mouseMove(window, { clientX: 500, clientY: 300 });
+      fireEvent.mouseUp(window, { clientX: 500, clientY: 300 });
+
+      expect(notes(container)).toEqual(["+note-1"]);
+      expect(move).not.toHaveBeenCalled();
+      expect(plain.style.transform).toBe(before);
+      expect(plain.classList).not.toContain("selected");
+    });
+
+    it("places a note on a press with Shift on an empty spot and draws no selection", () => {
+      const { container } = noteModeCanvas();
+
+      press(paneOf(container), 120, 60, { shiftKey: true });
+
+      expect(container.querySelector(".react-flow__selection")).toBeNull();
+      expect(notes(container)).toEqual(["+note-1"]);
+    });
+
+    it("places a note on a double-click on a box once, and opens nothing", () => {
+      const { container, onOpen } = noteModeCanvas();
+      const plain = box(container, "plain");
+
+      press(plain, 390, 245);
+      press(plain, 390, 245, { detail: 2 });
+      fireEvent.doubleClick(plain, { clientX: 390, clientY: 245, detail: 2 });
+
+      expect(notes(container)).toEqual(["+note-1"]);
+      expect(onOpen).not.toHaveBeenCalled();
+    });
+
+    it("places nothing on a press of the right button and stays on", () => {
+      const { container } = noteModeCanvas();
+
+      press(paneOf(container), 120, 60, { button: 2 });
+
+      expect(notes(container)).toEqual([]);
+      expect(placing()).toBe("true");
+    });
+
+    it("places nothing when the middle button goes down and stays on", () => {
+      const { container } = noteModeCanvas();
+
+      // Only its start: the rest pans the board, also over a box.
+      fireEvent.pointerDown(paneOf(container), {
+        clientX: 120,
+        clientY: 60,
+        button: 1,
+      });
+
+      expect(notes(container)).toEqual([]);
+      expect(placing()).toBe("true");
+    });
+
+    it.each([
+      ["a full press", (target: Element) => press(target, 120, 60)],
+      [
+        "a press not let go",
+        (target: Element) => {
+          fireEvent.pointerDown(target, { clientX: 120, clientY: 60 });
+          fireEvent.mouseDown(target, { clientX: 120, clientY: 60 });
+        },
+      ],
+      [
+        "a press whose mousedown never came",
+        (target: Element) => {
+          fireEvent.pointerDown(target, { clientX: 120, clientY: 60 });
+        },
+      ],
+    ])(
+      "lets the next click go after %s placed a note",
+      (_name, placingPress) => {
+        const { container, release } = noteModeCanvas();
+        placingPress(paneOf(container));
+
+        press(screen.getByRole("button", { name: "Release pin" }), 390, 205);
+        expect(release).toHaveBeenCalledOnce();
+
+        press(modeButton(), 20, 20);
+        expect(placing()).toBe("true");
+      },
+    );
+
+    it("lets a click from the keyboard go right after the press that placed a note", () => {
+      const { container } = noteModeCanvas();
+      press(paneOf(container), 120, 60);
+
+      // Enter or Space on a button clicks it without a press, with no count.
+      fireEvent.click(modeButton(), { detail: 0 });
+
+      expect(placing()).toBe("true");
+    });
+
+    it("leaves a selected note selected and deletes nothing", () => {
+      const { container, deleteNotes } = noteModeCanvas();
+      const ask = box(container, "ask");
+      fireEvent.click(modeButton());
+      fireEvent.keyDown(ask, { key: "Enter" });
+      expect(ask.classList).toContain("selected");
+      fireEvent.click(modeButton());
+
+      press(paneOf(container), 120, 60);
+      fireEvent.keyDown(fieldOf(), { key: "Backspace" });
+
+      expect(ask.classList).toContain("selected");
+      expect(deleteNotes).not.toHaveBeenCalled();
+    });
+
+    it("ends with Esc and places nothing", () => {
+      const { container } = noteModeCanvas();
+
+      fireEvent.keyDown(window, { key: "Escape" });
+      // A press on the board starts with this, where note mode would place.
+      fireEvent.pointerDown(paneOf(container), {
+        clientX: 120,
+        clientY: 60,
+        button: 0,
+      });
+
+      expect(placing()).toBe("false");
+      expect(notes(container)).toEqual([]);
+    });
+
+    it("stays on when Esc ends the text field of a note", () => {
+      const { container, create } = noteModeCanvas();
+      fireEvent.click(modeButton());
+      fireEvent.keyDown(window, { key: "n" });
+      fireEvent.click(modeButton());
+
+      fireEvent.change(fieldOf(), { target: { value: "Ask" } });
+      fireEvent.keyDown(fieldOf(), { key: "Escape" });
+
+      expect(create).toHaveBeenCalledOnce();
+      expect(placing()).toBe("true");
+      expect(notes(container)).toEqual(["+note-1"]);
+    });
+
+    it("places a note at the mouse with N, and ends", () => {
+      const { container, create } = noteModeCanvas();
+      fireEvent.mouseMove(surfaceOf(container), { clientX: 120, clientY: 60 });
+
+      fireEvent.keyDown(window, { key: "n" });
+
+      expect(placing()).toBe("false");
+      expect(notes(container)).toEqual(["+note-1"]);
+      expect(written(create).position).toEqual({ x: 30, y: 15 });
+    });
+
+    it("places nothing on a press on the zoom bar, and stays on", () => {
+      const { container } = noteModeCanvas();
+
+      press(screen.getByRole("button", { name: "Zoom in" }), 700, 500);
+
+      expect(notes(container)).toEqual([]);
+      expect(placing()).toBe("true");
     });
   });
 });
@@ -2104,7 +2440,7 @@ describe("highlighting a selection", () => {
     const { container } = highlightCanvas(linkedBoard());
     await select(container, "orders");
 
-    fireEvent.click(screen.getByRole("button", { name: "New note" }));
+    fireEvent.keyDown(window, { key: "n" });
 
     const field = screen.getByRole("textbox", { name: "Text of the note" });
     expect(document.activeElement).toBe(field);
