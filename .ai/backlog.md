@@ -73,6 +73,7 @@ share a parent line with one sub-item each.
 - At the sidebar's minimum width of 10rem, a board at depth 7 or 8 gets nearly all of it as indent, so its title shrinks to nothing and the list scrolls sideways: `crates/abyme-canvas/ui/src/canvas.css` with `INDENT_LEVELS` in `BoardList.tsx` (Reviewer, canvas usability Task 7, Low).
 - `host !== undefined` in `notesOnTheSelection` is redundant, since `attached_to` is `string | null`: `crates/abyme-canvas/ui/src/edges.ts` (Reviewer, canvas arranging and notes Task 1, Low).
 - The test "keeps the notes hanging on a selected box undimmed" has one note on the box; a second would pin "every note": `crates/abyme-canvas/ui/src/BoardCanvas.test.tsx` (Reviewer, canvas arranging and notes Task 1, Low).
+- `boxHolding` builds its own map of nodes on each call, so `onTheBoardAndHung` builds one per moved note; negligible for a drag, and taking the caller's map would widen its signature: `crates/abyme-canvas/ui/src/nodes.ts` (Reviewer, canvas arranging and notes Task 3, Low).
 
 ## Documentation
 

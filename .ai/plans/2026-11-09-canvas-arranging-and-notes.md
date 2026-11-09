@@ -26,7 +26,7 @@ highlighting a selection keeps the notes on a selected box undimmed.
 
 - [x] Notes on a selected box stay undimmed
 - [x] Mirrored boards are arranged like free ones
-- [ ] One function finds the box a point lies on
+- [x] One function finds the box a point lies on
 - [ ] A new note created on a box hangs on it
 - [ ] A note-mode button places a note where the user clicks
 - [ ] Notes look like speech bubbles pointing to their box
@@ -75,9 +75,9 @@ that creating a note can use it too. Behavior is unchanged.
 
 Review path: Reviewer-only
 
-- [ ] One exported function in `nodes.ts` finds the box a point of the board lies on by the drop
+- [x] One exported function in `nodes.ts` finds the box a point of the board lies on by the drop
       rule, and `onTheBoardAndHung` uses it.
-- [ ] The tests of `onTheBoardAndHung` and of dropping notes on boxes in `nodes.test.ts` pass with
+- [x] The tests of `onTheBoardAndHung` and of dropping notes on boxes in `nodes.test.ts` pass with
       their assertions unchanged.
 
 ### Task 4: A new note created on a box hangs on it

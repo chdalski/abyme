@@ -4,10 +4,10 @@ type: "docs/note"
 name: "Placement and Layout"
 summary: "How boxes are placed by free space or laid out as a layered diagram, and the rules for it"
 anchor: "docs/4 AI Interface/Placement and Layout.md"
-verified: "68046747acdd3151eca283ffd48c3624d6ffeed2"
+verified: "15c6cd545e757b1e81005cfedb2f46254b8ca324"
 verified_by: "ai"
 verified_content:
-  - {path: "crates/abyme-canvas/ui", object: "ead763c1c3c136434d148f11752370b615607064"}
+  - {path: "crates/abyme-canvas/ui", object: "4fcea1011ff6cdad3e47029cdb623a552de5ae1f"}
   - {path: "crates/abyme-core/src/apply.rs", object: "3c10e50ed7beb9b1cf685498296e6874ca98338c"}
   - {path: "crates/abyme-core/src/layout", object: "4577e346dd8dec7f7cf21769b186d43506cf563b"}
   - {path: "crates/abyme-core/src/operation.rs", object: "87912b132f2386f40e7baefe191c10acf5358678"}

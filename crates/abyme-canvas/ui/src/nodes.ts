@@ -132,11 +132,47 @@ function onTheBoard(
       };
 }
 
+/** Whether the rect of `box` on the board holds `point`. */
+function holds(
+  box: ElementNode,
+  point: XYPosition,
+  byId: Map<string, ElementNode>,
+): boolean {
+  const at = onTheBoard(box, byId);
+  return (
+    point.x >= at.x &&
+    point.x <= at.x + (box.width ?? 0) &&
+    point.y >= at.y &&
+    point.y <= at.y + (box.height ?? 0)
+  );
+}
+
+/**
+ * The box a note lands on at `point` of the board, by the drop rule: the box
+ * drawn on top, last in `nodes`, whose rect holds the point, being no note, no
+ * new note, no box whose file is missing, and not `except`; none if no box
+ * holds the point.
+ */
+export function boxHolding(
+  point: XYPosition,
+  nodes: ElementNode[],
+  except?: string,
+): ElementNode | undefined {
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  return nodes.findLast(
+    (box) =>
+      box.id !== except &&
+      box.data.draft === null &&
+      box.data.shown.kind !== "note" &&
+      box.data.shown.kind !== "missing" &&
+      holds(box, point, byId),
+  );
+}
+
 /**
  * `moves`, as React Flow reports them for `nodes` as they stand after the
  * moves, each at its position on the board, and a note's with where it now
- * hangs: on the box drawn on top whose rect holds the note's centre, being no
- * note, no box whose file is missing, and not the note itself; else on the box
+ * hangs: on the box `boxHolding` finds at the note's centre; else on the box
  * it hangs on while that box holds the centre, whatever it shows now; and off
  * that box otherwise.
  */
@@ -155,32 +191,19 @@ export function onTheBoardAndHung(moves: Move[], nodes: ElementNode[]): Move[] {
       x: position.x + (node.width ?? 0) / 2,
       y: position.y + (node.height ?? 0) / 2,
     };
-    const holdsCentre = (box: ElementNode) => {
-      const at = onTheBoard(box, byId);
-      return (
-        centre.x >= at.x &&
-        centre.x <= at.x + (box.width ?? 0) &&
-        centre.y >= at.y &&
-        centre.y <= at.y + (box.height ?? 0)
-      );
-    };
     const current = node.data.attachedTo;
-    const below = nodes.filter(
-      (box) =>
-        box.id !== node.id &&
-        box.data.draft === null &&
-        box.data.shown.kind !== "note" &&
-        box.data.shown.kind !== "missing" &&
-        holdsCentre(box),
-    );
-    const target = below.at(-1)?.id;
+    const target = boxHolding(centre, nodes, node.id)?.id;
     if (target !== undefined && target !== current) {
       return { element: move.element, position, hang: { attachTo: target } };
     }
     // A note stays on its box, whatever the box shows now, while its centre
     // lies on it.
     const host = current === null ? undefined : byId.get(current);
-    if (target === undefined && host !== undefined && !holdsCentre(host)) {
+    if (
+      target === undefined &&
+      host !== undefined &&
+      !holds(host, centre, byId)
+    ) {
       return { element: move.element, position, hang: "detach" };
     }
     return { element: move.element, position };
