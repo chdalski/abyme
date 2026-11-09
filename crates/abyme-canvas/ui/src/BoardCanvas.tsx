@@ -21,7 +21,7 @@ import type { BoardView } from "./bindings";
 import { useBoardNodes } from "./boardNodes";
 import { focusOf, focusedEdges, toEdges } from "./edges";
 import { ElementBox, Highlight, OpenBoard, ReleasePin } from "./ElementBox";
-import type { ElementNode, Move } from "./nodes";
+import { DRAFT_SIZE, type ElementNode, type Move } from "./nodes";
 import { NewNotes, NoteFields, WriteNote } from "./NoteContent";
 import type { NoteParts } from "./notes";
 import { RestOfOpeningPress } from "./press";
@@ -41,9 +41,14 @@ type BoardCanvasProps = {
   move: (moves: Move[]) => Promise<void>;
   release: (element: string, position: XYPosition) => void;
   writeNote: (element: string, parts: NoteParts) => Promise<boolean>;
+  /**
+   * Writes a new note at `position`, hung on the element `hangOn` if one is
+   * given, in one request; answers its ID, or none when the write failed.
+   */
   createNote: (
     position: XYPosition,
     parts: NoteParts,
+    hangOn: string | null,
   ) => Promise<string | null>;
   deleteNotes: (elements: string[]) => void;
   onMoveFailed: (message: string) => void;
@@ -58,7 +63,8 @@ type BoardCanvasProps = {
  * never a box or an arrow. Arrows follow from the view and hold no state. Every
  * board, mirrored or not, offers moving and releasing a pin alike. The key
  * `N`, a double-click on an empty spot, and the toolbar start a new note, on
- * every board. The zoom bar shows and changes the zoom, from `MIN_ZOOM` to
+ * every board, centred on its point; written with its centre on a box, it
+ * hangs there. The zoom bar shows and changes the zoom, from `MIN_ZOOM` to
  * `MAX_ZOOM`, which fitting the board into view keeps to as well. A selection
  * highlights the arrows that leave and enter it and the boxes at their other
  * ends, and dims the rest.
@@ -87,6 +93,7 @@ function Flow({
     nodes,
     onNodesChange,
     addDraft,
+    boxAt,
     dropDraft,
     draftWritten,
     noteFields,
@@ -184,7 +191,13 @@ function Flow({
   const newNotes = useMemo(
     () => ({
       create: async (draft: string, position: XYPosition, parts: NoteParts) => {
-        const created = await createNote(position, parts);
+        // Decided as the note is written, by the boxes as they are now: a box
+        // removed or moved away while the text was typed leaves the note free.
+        const hangOn = boxAt({
+          x: position.x + DRAFT_SIZE.width / 2,
+          y: position.y + DRAFT_SIZE.height / 2,
+        });
+        const created = await createNote(position, parts, hangOn);
         if (created !== null) {
           draftWritten(draft, created);
         }
@@ -192,7 +205,7 @@ function Flow({
       },
       drop: dropDraft,
     }),
-    [createNote, draftWritten, dropDraft],
+    [createNote, boxAt, draftWritten, dropDraft],
   );
 
   return (

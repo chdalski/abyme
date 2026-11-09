@@ -27,7 +27,7 @@ highlighting a selection keeps the notes on a selected box undimmed.
 - [x] Notes on a selected box stay undimmed
 - [x] Mirrored boards are arranged like free ones
 - [x] One function finds the box a point lies on
-- [ ] A new note created on a box hangs on it
+- [x] A new note created on a box hangs on it
 - [ ] A note-mode button places a note where the user clicks
 - [ ] Notes look like speech bubbles pointing to their box
 
@@ -88,21 +88,21 @@ creates it. The core already applies a request that creates, places, pins, and a
 
 Review path: Security-Hybrid
 
-- [ ] `N` over a box that is no note and whose file exists creates a note centred on the mouse;
+- [x] `N` over a box that is no note and whose file exists creates a note centred on the mouse;
       once its text is written it hangs on that box, with the relation `concerns` and its
       placement attached, in one request; beside every box it is written free, as today.
-- [ ] A note created by a double-click on an empty spot or by the toolbar is also centred on its
+- [x] A note created by a double-click on an empty spot or by the toolbar is also centred on its
       point, and hangs on a box only where its centre lies on one when it is written.
-- [ ] The canvas admits a request that creates one note and attaches that new note to an existing
+- [x] The canvas admits a request that creates one note and attaches that new note to an existing
       element on the same board; it admits no creating request with any other attachment or any
       other added operation; the existing requests that move and attach or detach a note stay
       admitted as they are; the UI's types allow exactly these shapes.
-- [ ] If the box is gone or no longer under the note when its text is written, the note is written
+- [x] If the box is gone or no longer under the note when its text is written, the note is written
       free.
-- [ ] Rust tests of admission and of the command `apply` cover the admitted request and its refused
+- [x] Rust tests of admission and of the command `apply` cover the admitted request and its refused
       variants; UI tests cover creating on a box, beside a box, and a box removed while the text is
       typed.
-- [ ] `docs/5 Architecture/Canvas.md` and `docs/2 Concepts/Presentation.md` describe where a note
+- [x] `docs/5 Architecture/Canvas.md` and `docs/2 Concepts/Presentation.md` describe where a note
       appears and that creating it on a box hangs it there, as dropping it there does.
 
 ### Task 5: A note-mode button places a note where the user clicks

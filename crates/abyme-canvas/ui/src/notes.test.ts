@@ -74,7 +74,12 @@ describe("splitNoteText", () => {
 describe("toNewNote", () => {
   it("creates, places, and pins a note of the kind idea, at integer coordinates", () => {
     expect(
-      toNewNote("context", { x: 40.4, y: -80.6 }, { name: "Ask", body: "Why" }),
+      toNewNote(
+        "context",
+        { x: 40.4, y: -80.6 },
+        { name: "Ask", body: "Why" },
+        null,
+      ),
     ).toEqual([
       {
         op: "create_element",
@@ -98,6 +103,26 @@ describe("toNewNote", () => {
         pinned: true,
       },
     ]);
+  });
+});
+
+describe("toNewNote on a box", () => {
+  it("hangs the new note on the box in the same request, confirming its pin", () => {
+    const request = toNewNote(
+      "context",
+      { x: 1, y: 2 },
+      { name: "Ask", body: "" },
+      "payments",
+    );
+
+    expect(request).toHaveLength(4);
+    expect(request[3]).toEqual({
+      op: "attach_note",
+      note: { new: "note" },
+      to: { existing: "payments" },
+      board: { existing: "context" },
+      pinned: true,
+    });
   });
 });
 

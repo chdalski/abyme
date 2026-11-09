@@ -10,6 +10,7 @@ import { nextStamp } from "./boards";
 import {
   type ElementNode,
   type Move,
+  boxHolding,
   closeNoteField,
   draftNote,
   finishedMoves,
@@ -104,11 +105,18 @@ export function useBoardNodes(
   );
 
   const nextDraft = useRef(1);
-  const addDraft = useCallback((position: XYPosition) => {
+  /** Adds a new note centred on `point`. */
+  const addDraft = useCallback((point: XYPosition) => {
     const id = `+note-${String(nextDraft.current)}`;
     nextDraft.current += 1;
-    setNodes((current) => [...current, draftNote(id, position)]);
+    setNodes((current) => [...current, draftNote(id, point)]);
   }, []);
+  // The box a note with its centre at `point` hangs on, by the drop rule, among
+  // the boxes as last rendered; none beside every box.
+  const boxAt = useCallback(
+    (point: XYPosition) => boxHolding(point, shown.current)?.id ?? null,
+    [],
+  );
   const dropDraft = useCallback((id: string) => {
     setNodes((current) => current.filter((node) => node.id !== id));
   }, []);
@@ -151,6 +159,7 @@ export function useBoardNodes(
     nodes,
     onNodesChange,
     addDraft,
+    boxAt,
     dropDraft,
     draftWritten,
     noteFields,

@@ -374,6 +374,48 @@ describe("BoardPane", () => {
       return create;
     };
 
+    it("hangs a note whose centre lies on a box on it, in the one request", async () => {
+      const client = paneWith(null);
+      const apply = vi.spyOn(client, "apply").mockResolvedValue(["ask"]);
+      await openPane(client);
+
+      // A note of 180 by 90 at 10, 20 has its centre at 100, 65, on `payments`.
+      await expect(
+        creator()("+note-1", { x: 10, y: 20 }, { name: "Ask", body: "" }),
+      ).resolves.toBe(true);
+
+      expect(apply).toHaveBeenLastCalledWith([
+        {
+          op: "create_element",
+          key: "note",
+          type_ref: "note",
+          name: "Ask",
+          body: "",
+          statement: "idea",
+        },
+        {
+          op: "place_element",
+          element: { new: "note" },
+          board: { existing: "context" },
+        },
+        {
+          op: "move_element",
+          element: { new: "note" },
+          board: { existing: "context" },
+          x: 10,
+          y: 20,
+          pinned: true,
+        },
+        {
+          op: "attach_note",
+          note: { new: "note" },
+          to: { existing: "payments" },
+          board: { existing: "context" },
+          pinned: true,
+        },
+      ]);
+    });
+
     it("sends the three operations for this board, behind a move", async () => {
       const client = paneWith(null);
       let finishMove = () => {};

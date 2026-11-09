@@ -370,20 +370,27 @@ export function closeNoteField(
   return [...rest, ...back];
 }
 
+/** The size of a new note: the size the core gives a box without a file. */
+export const DRAFT_SIZE = { width: 180, height: 90 } as const;
+
 /**
- * A new note at `position` that no file holds yet, under an ID no element can
- * have. It cannot be selected or dragged, so no move or update ever names it, but
+ * A new note centred on `point` that no file holds yet, under an ID no element
+ * can have. It cannot be selected or dragged, so no move or update ever names it, but
  * it takes the mouse, which React Flow would turn off for such a node, or its
  * text field could not be clicked. It has the size the core gives a box without a
  * file: crates/abyme-core/src/layout/box_size.rs. The two change together.
  */
-export function draftNote(id: string, position: XYPosition): ElementNode {
+export function draftNote(id: string, point: XYPosition): ElementNode {
+  const position = {
+    x: point.x - DRAFT_SIZE.width / 2,
+    y: point.y - DRAFT_SIZE.height / 2,
+  };
   return {
     id,
     type: "element",
     position,
-    width: 180,
-    height: 90,
+    width: DRAFT_SIZE.width,
+    height: DRAFT_SIZE.height,
     data: {
       element: id,
       shown: { kind: "note", name: "", body: "" },

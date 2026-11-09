@@ -1,6 +1,6 @@
 import type { XYPosition } from "@xyflow/react";
 
-import type { NewNote, NoteDeletion, NoteUpdate } from "./client";
+import type { NewFreeNote, NewNote, NoteDeletion, NoteUpdate } from "./client";
 
 /** What a note's text is made of. */
 export type NoteParts = { name: string; body: string };
@@ -38,16 +38,18 @@ const NEW_NOTE_KEY = "note";
 
 /**
  * The request that creates a note with `parts` on `board` at `position`, rounded
- * to the integers the board file holds, and pinned: a person placed it there.
+ * to the integers the board file holds, and pinned: a person placed it there;
+ * and that hangs it on the element `hangOn`, if one is given.
  */
 export function toNewNote(
   board: string,
   position: XYPosition,
   parts: NoteParts,
+  hangOn: string | null,
 ): NewNote {
   const element = { new: NEW_NOTE_KEY };
   const on = { existing: board };
-  return [
+  const free: NewFreeNote = [
     {
       op: "create_element",
       key: NEW_NOTE_KEY,
@@ -66,6 +68,18 @@ export function toNewNote(
       pinned: true,
     },
   ];
+  return hangOn === null
+    ? free
+    : [
+        ...free,
+        {
+          op: "attach_note",
+          note: element,
+          to: { existing: hangOn },
+          board: on,
+          pinned: true,
+        },
+      ];
 }
 
 /** The operation that deletes the note `element`. */

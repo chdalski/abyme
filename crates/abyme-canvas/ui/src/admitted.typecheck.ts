@@ -171,4 +171,56 @@ export function onlyAdmittedOperations(client: AbymeClient): void {
     // @ts-expect-error A detachment takes no box.
     { op: "detach_note", note, board, to: element },
   ]);
+  const hang = {
+    op: "attach_note",
+    note: { new: "n" },
+    to: element,
+    board,
+    pinned: true,
+  } as const;
+  void client.apply([create, place, pin, hang]);
+  void client.apply([
+    create,
+    place,
+    pin,
+    // @ts-expect-error The new note hangs only on an element that exists.
+    { ...hang, to: { new: "e" } },
+  ]);
+  void client.apply([
+    create,
+    place,
+    pin,
+    // @ts-expect-error The new note hangs only on a board that exists.
+    { ...hang, board: { new: "b" } },
+  ]);
+  void client.apply([
+    create,
+    place,
+    pin,
+    // @ts-expect-error Hanging the new note always confirms its pin.
+    { op: "attach_note", note: { new: "n" }, to: element, board },
+  ]);
+  void client.apply([
+    create,
+    place,
+    pin,
+    // @ts-expect-error Hanging the new note never releases its pin.
+    { ...hang, pinned: false },
+  ]);
+  void client.apply([
+    create,
+    place,
+    pin,
+    // @ts-expect-error A request that creates a note detaches nothing.
+    { op: "detach_note", note: { new: "n" }, board },
+  ]);
+  // @ts-expect-error A request that creates a note hangs it once and does nothing else.
+  void client.apply([create, place, pin, hang, hang]);
+  void client.apply([
+    create,
+    place,
+    pin,
+    // @ts-expect-error The new note is hung, not an existing one.
+    { ...hang, note: { existing: "ask" } },
+  ]);
 }

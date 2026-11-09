@@ -42,6 +42,7 @@ function canvasOf(
   createNote: (
     position: XYPosition,
     parts: NoteParts,
+    hangOn: string | null,
   ) => Promise<string | null> = () => Promise.resolve("new-note"),
   deleteNotes: (elements: string[]) => void = () => {},
   askedAt: number | null = null,
@@ -466,7 +467,11 @@ describe("creating a note", () => {
 
   /** A canvas whose `createNote` is `create`. */
   function canvasWith(
-    create: (position: XYPosition, parts: NoteParts) => Promise<string | null>,
+    create: (
+      position: XYPosition,
+      parts: NoteParts,
+      hangOn: string | null,
+    ) => Promise<string | null>,
     view = plainBoard(),
     askedAt: number | null = null,
   ) {
@@ -513,9 +518,11 @@ describe("creating a note", () => {
 
     fireEvent.change(fieldOf(), { target: { value: "Ask" } });
     fireEvent.keyDown(fieldOf(), { key: "Escape" });
+    // Centred on the mouse: the note is 180 by 90.
     expect(create).toHaveBeenCalledExactlyOnceWith(
-      { x: 120, y: 60 },
+      { x: 30, y: 15 },
       { name: "Ask", body: "" },
+      null,
     );
   });
 
@@ -532,7 +539,10 @@ describe("creating a note", () => {
     return create.mock.calls[0]?.[0];
   }
 
-  /** A canvas whose surface lies at 10, 20 and is 400 by 200, with its middle at 210, 120. */
+  /**
+   * A canvas whose surface lies at 10, 20 and is 400 by 200, with its middle at
+   * 210, 120, where a note of 180 by 90 centred there has its corner at 120, 75.
+   */
   function placedCanvas() {
     const create = vi.fn<
       (position: XYPosition, parts: NoteParts) => Promise<string | null>
@@ -552,7 +562,7 @@ describe("creating a note", () => {
 
     fireEvent.keyDown(window, { key: "n" });
 
-    expect(writtenAt(create)).toEqual({ x: 210, y: 120 });
+    expect(writtenAt(create)).toEqual({ x: 120, y: 75 });
   });
 
   it("takes a capital N, as with Caps Lock, like a small one", () => {
@@ -560,7 +570,7 @@ describe("creating a note", () => {
 
     fireEvent.keyDown(window, { key: "N" });
 
-    expect(writtenAt(create)).toEqual({ x: 210, y: 120 });
+    expect(writtenAt(create)).toEqual({ x: 120, y: 75 });
   });
 
   it("starts in the middle of the view with N after the mouse has left", () => {
@@ -570,7 +580,7 @@ describe("creating a note", () => {
 
     fireEvent.keyDown(window, { key: "n" });
 
-    expect(writtenAt(create)).toEqual({ x: 210, y: 120 });
+    expect(writtenAt(create)).toEqual({ x: 120, y: 75 });
   });
 
   it("starts in the middle of the view with the toolbar, wherever the mouse is", () => {
@@ -579,7 +589,7 @@ describe("creating a note", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "New note" }));
 
-    expect(writtenAt(create)).toEqual({ x: 210, y: 120 });
+    expect(writtenAt(create)).toEqual({ x: 120, y: 75 });
   });
 
   it("takes the mouse on a new note, so that its text field can be clicked", () => {
@@ -691,9 +701,11 @@ describe("creating a note", () => {
     expect(notes(container)).toEqual(["+note-1"]);
     fireEvent.change(fieldOf(), { target: { value: "Ask" } });
     fireEvent.keyDown(fieldOf(), { key: "Escape" });
+    // Centred on the mouse: the note is 180 by 90.
     expect(create).toHaveBeenCalledExactlyOnceWith(
-      { x: 120, y: 60 },
+      { x: 30, y: 15 },
       { name: "Ask", body: "" },
+      null,
     );
   });
 
@@ -826,6 +838,110 @@ describe("creating a note", () => {
         expect(element.startsWith("+")).toBe(false);
       }
     }
+  });
+
+  describe("on a box", () => {
+    /** `plain` at 300, 200, 180 by 90, `ask`, a note, beside it, and `gone`, whose file is missing. */
+    const boxes = () =>
+      boardView({
+        placements: [
+          placedElement("plain", { x: 300, y: 200 }),
+          placedBox("ask", {
+            x: 0,
+            y: 0,
+            shown: { kind: "note", name: "Ask", body: "" },
+          }),
+          placedBox("gone", { x: 600, y: 0 }),
+        ],
+      });
+
+    /** Creates a note with N at the mouse at `x`, `y`, writes "Ask", and returns where it went. */
+    function createdAt(
+      x: number,
+      y: number,
+      view = boxes(),
+    ): {
+      create: ReturnType<
+        typeof vi.fn<
+          (
+            position: XYPosition,
+            parts: NoteParts,
+            hangOn: string | null,
+          ) => Promise<string | null>
+        >
+      >;
+    } {
+      const create = vi.fn<
+        (
+          position: XYPosition,
+          parts: NoteParts,
+          hangOn: string | null,
+        ) => Promise<string | null>
+      >(() => Promise.resolve("new-note"));
+      const { container } = render(canvasWith(create, view));
+      fireEvent.mouseMove(surfaceOf(container), { clientX: x, clientY: y });
+      fireEvent.keyDown(window, { key: "n" });
+      fireEvent.change(fieldOf(), { target: { value: "Ask" } });
+      fireEvent.keyDown(fieldOf(), { key: "Escape" });
+      return { create };
+    }
+
+    it("hangs on the box its centre lies on, in the request that creates it", () => {
+      const { create } = createdAt(390, 245);
+
+      expect(create).toHaveBeenCalledExactlyOnceWith(
+        { x: 300, y: 200 },
+        { name: "Ask", body: "" },
+        "plain",
+      );
+    });
+
+    it("hangs by its centre, not its corner", () => {
+      // Centre 310, 210 on `plain`, corner 220, 165 beside it.
+      expect(createdAt(310, 210).create.mock.calls[0]?.[2]).toBe("plain");
+      cleanup();
+      // Centre 560, 250 beside `plain`, corner 470, 205 on it.
+      expect(createdAt(560, 250).create.mock.calls[0]?.[2]).toBeNull();
+    });
+
+    it("stands free beside every box", () => {
+      const { create } = createdAt(390, 400);
+
+      expect(create.mock.calls[0]?.[2]).toBeNull();
+    });
+
+    it("hangs on no note and on no box whose file is missing", () => {
+      expect(createdAt(90, 45).create.mock.calls[0]?.[2]).toBeNull();
+      cleanup();
+      expect(createdAt(690, 45).create.mock.calls[0]?.[2]).toBeNull();
+    });
+
+    it("stands free when its box goes while its text is typed", () => {
+      const create = vi.fn<
+        (
+          position: XYPosition,
+          parts: NoteParts,
+          hangOn: string | null,
+        ) => Promise<string | null>
+      >(() => Promise.resolve("new-note"));
+      const { container, rerender } = render(canvasWith(create, boxes()));
+      fireEvent.mouseMove(surfaceOf(container), {
+        clientX: 390,
+        clientY: 245,
+      });
+      fireEvent.keyDown(window, { key: "n" });
+      fireEvent.change(fieldOf(), { target: { value: "Ask" } });
+
+      rerender(
+        canvasWith(
+          create,
+          boardView({ placements: [placedBox("gone", { x: 600, y: 0 })] }),
+        ),
+      );
+      fireEvent.keyDown(fieldOf(), { key: "Escape" });
+
+      expect(create.mock.calls[0]?.[2]).toBeNull();
+    });
   });
 });
 

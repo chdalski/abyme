@@ -30,7 +30,7 @@ Relations appear as arrows. Type packs define default presentations per type, e.
 
 A sticky note is a native element of the type `note`, by which the canvas and the AI recognize it, so it looks the same on every board. The canvas shows its whole text in one fixed color.
 
-**Attaching:** Dragging a note onto a box attaches it there. Two things happen:
+**Attaching:** Dragging a note onto a box attaches it there, and so does creating it on a box. Two things happen:
 
 - **Content:** The note gets the [[Relations|relation]] “concerns” to the box. It holds on every board, and the AI sees it.
 - **Layout:** The placement remembers the box and the position relative to it. Moving the box moves the note along, but only on this board.

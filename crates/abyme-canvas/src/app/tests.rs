@@ -1516,6 +1516,89 @@ fn a_new_note_writes_its_file_and_a_pinned_placement_and_returns_its_id() {
     );
 }
 
+/// `a_new_note` on `board` hung on `to` there, in the same request.
+fn a_new_note_hung_on(board: &str, to: &str) -> Vec<Value> {
+    let mut request = a_new_note(board, "Ask", "");
+    request.push(json!({"op": "attach_note", "note": {"new": "note"},
+                        "to": {"existing": to}, "board": {"existing": board},
+                        "pinned": true}));
+    request
+}
+
+#[test]
+fn a_new_note_hung_on_a_box_writes_its_relation_and_attachment_and_nothing_of_the_box() {
+    let root = tempfile::tempdir().unwrap();
+    project_with_a_board(root.path());
+    make_context_a_zone(root.path(), MIRRORED);
+    let box_file = PathBuf::from("abyme/elements/payment-service.md");
+    let before = project_files(root.path());
+    let box_line = |board: &str| {
+        board
+            .lines()
+            .find(|line| line.contains(r#""element": "payment-service""#))
+            .unwrap()
+            .to_owned()
+    };
+    let line_before = box_line(&context_file(root.path()));
+    let (_app, window) = canvas(root.path());
+
+    let created = apply_from(
+        &window,
+        &json!(a_new_note_hung_on("context", "payment-service")),
+    );
+
+    assert_eq!(created, Ok(json!(["ask"])));
+    assert!(element_of(root.path(), "ask").is_note());
+    let note = fs::read_to_string(root.path().join("abyme/elements/ask.md")).unwrap();
+    assert!(
+        note.contains(r#"{kind: "concerns", to: "payment-service"}"#),
+        "{note}"
+    );
+    let board = context_file(root.path());
+    assert!(
+        board
+            .lines()
+            .any(|line| line.contains(r#""element": "ask""#)
+                && line.contains(r#""attached_to": "payment-service""#)),
+        "{board}"
+    );
+    assert_eq!(box_line(&board), line_before);
+    assert_eq!(project_files(root.path())[&box_file], before[&box_file]);
+}
+
+#[test]
+fn a_new_note_hung_on_a_note_an_absent_or_an_unknown_element_writes_nothing() {
+    let root = tempfile::tempdir().unwrap();
+    mirrored_board_with_a_note(root.path());
+    add_a_free_board(root.path());
+    fs::write(
+        root.path().join("abyme/elements/elsewhere.md"),
+        "---\nid: elsewhere\ntype: t\nname: Elsewhere\n---\n",
+    )
+    .unwrap();
+    let before = project_files(root.path());
+    let (_app, window) = canvas(root.path());
+
+    for (to, refused) in [
+        (
+            "ask",
+            "element ask is a note; a note hangs only on an element that is no note",
+        ),
+        (
+            "elsewhere",
+            "element elsewhere does not lie on board context",
+        ),
+        ("nobody", "no element has the ID nobody"),
+    ] {
+        let error = apply_from(&window, &json!(a_new_note_hung_on("context", to)))
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains(refused), "{to}: {error}");
+        assert_eq!(project_files(root.path()), before, "{to}");
+    }
+}
+
 #[test]
 fn a_move_and_an_update_return_no_ids() {
     let root = tempfile::tempdir().unwrap();

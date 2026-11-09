@@ -547,7 +547,7 @@ fn admits_an_attachment_with_pinned_and_a_detachment_of_existing_elements() {
 }
 
 #[test]
-fn a_request_that_creates_and_attaches_a_note_is_no_creation_of_a_note() {
+fn a_request_that_creates_a_note_and_attaches_another_is_no_creation_of_a_note() {
     let mut operations = a_new_note_on("free");
     operations.push(an_attachment("payments", "checkout", "free"));
 
@@ -558,6 +558,156 @@ fn a_request_that_creates_and_attaches_a_note_is_no_creation_of_a_note() {
             kind: "create_element"
         })
     );
+}
+
+/// The attachment of the note the request `a_new_note_on` creates to `to` on
+/// `board`, given as JSON so that each test can change one field.
+fn the_new_note_hung(to: Value, board: Value, pinned: Option<bool>) -> Operation {
+    let mut value = json!({"op": "attach_note", "note": {"new": "note"}});
+    value["to"] = to;
+    value["board"] = board;
+    if let Some(pinned) = pinned {
+        value["pinned"] = json!(pinned);
+    }
+    operation(value)
+}
+
+/// `a_new_note_on("free")` hung on `checkout` on that board.
+fn a_new_note_hung_on_a_box() -> Vec<Operation> {
+    let mut operations = a_new_note_on("free");
+    operations.push(the_new_note_hung(
+        json!({"existing": "checkout"}),
+        json!({"existing": "free"}),
+        Some(true),
+    ));
+    operations
+}
+
+#[test]
+fn admits_a_new_note_hung_on_an_element_of_its_board() {
+    assert_eq!(admit(&a_new_note_hung_on_a_box()), Ok(()));
+}
+
+#[test]
+fn refuses_every_other_shape_of_a_new_note_with_an_attachment() {
+    let with_last = |last: Operation| {
+        let mut operations = a_new_note_on("free");
+        operations.push(last);
+        operations
+    };
+    let free = || json!({"existing": "free"});
+    let checkout = || json!({"existing": "checkout"});
+    let mut attached_before_the_move = a_new_note_on("free");
+    attached_before_the_move.insert(2, the_new_note_hung(checkout(), free(), Some(true)));
+    let mut twice = a_new_note_hung_on_a_box();
+    twice.push(the_new_note_hung(checkout(), free(), Some(true)));
+    let mut with_a_fifth = a_new_note_hung_on_a_box();
+    with_a_fifth.push(a_move_on("free"));
+    let mut placed_elsewhere = a_new_note_hung_on_a_box();
+    placed_elsewhere[1] = operation(json!({"op": "place_element",
+        "element": {"new": "note"}, "board": {"existing": "other"}}));
+    placed_elsewhere[2] = operation(json!({"op": "move_element",
+        "element": {"new": "note"}, "board": {"existing": "other"}, "x": 1, "y": 2,
+        "pinned": true}));
+
+    for (shape, request) in [
+        (
+            "an existing note",
+            with_last(operation(
+                json!({"op": "attach_note", "note": {"existing": "note"},
+                "to": checkout(), "board": free(), "pinned": true}),
+            )),
+        ),
+        (
+            "another new key",
+            with_last(operation(
+                json!({"op": "attach_note", "note": {"new": "other"},
+                "to": checkout(), "board": free(), "pinned": true}),
+            )),
+        ),
+        (
+            "a new element to hang on",
+            with_last(the_new_note_hung(json!({"new": "box"}), free(), Some(true))),
+        ),
+        (
+            "a new board",
+            with_last(the_new_note_hung(
+                checkout(),
+                json!({"new": "board"}),
+                Some(true),
+            )),
+        ),
+        (
+            "another board than the note's",
+            with_last(the_new_note_hung(
+                checkout(),
+                json!({"existing": "other"}),
+                Some(true),
+            )),
+        ),
+        ("the note's board placed elsewhere", placed_elsewhere),
+        (
+            "no pinned",
+            with_last(the_new_note_hung(checkout(), free(), None)),
+        ),
+        ("the attachment before the move", attached_before_the_move),
+        ("two attachments", twice),
+        (
+            "a detachment instead",
+            with_last(operation(
+                json!({"op": "detach_note", "note": {"new": "note"},
+                "board": free()}),
+            )),
+        ),
+        ("a fifth operation", with_a_fifth),
+    ] {
+        assert_eq!(
+            admit(&request),
+            Err(Refused::Operation {
+                position: 1,
+                kind: "create_element"
+            }),
+            "{shape}"
+        );
+    }
+}
+
+#[test]
+fn names_nothing_of_a_refused_new_note_with_an_attachment() {
+    let request: Vec<Operation> = [
+        json!({"op": "create_element", "key": "secret-key", "type_ref": "note",
+               "name": "SECRET-NAME", "body": "SECRET-BODY", "statement": "idea"}),
+        json!({"op": "place_element", "element": {"new": "secret-key"},
+               "board": {"existing": "free"}}),
+        json!({"op": "move_element", "element": {"new": "secret-key"},
+               "board": {"existing": "free"}, "x": 1, "y": 2, "pinned": true}),
+        json!({"op": "attach_note", "note": {"new": "secret-key"},
+               "to": {"existing": "secret-id"}, "board": {"existing": "other"},
+               "pinned": true}),
+    ]
+    .into_iter()
+    .map(operation)
+    .collect();
+
+    let refused = admit(&request).unwrap_err().to_string();
+
+    for secret in ["secret", "SECRET", "other"] {
+        assert!(!refused.contains(secret), "{refused}");
+    }
+}
+
+#[test]
+fn lets_a_new_note_hung_on_a_box_pass_the_board_files_on_every_board() {
+    for board in ["free", "plain", "mirrored", "nowhere"] {
+        let mut request = a_new_note_on(board);
+        request.push(the_new_note_hung(
+            json!({"existing": "checkout"}),
+            json!({"existing": board}),
+            Some(true),
+        ));
+
+        assert_eq!(check_board_files(&snapshot(), &request), Ok(()), "{board}");
+    }
 }
 
 #[test]
@@ -797,6 +947,15 @@ fn every_kind_of_request() -> Vec<(&'static str, Vec<Operation>)> {
             )],
         ),
         ("create a note", a_new_note_on("here")),
+        ("create a note hung on a box", {
+            let mut request = a_new_note_on("here");
+            request.push(the_new_note_hung(
+                json!({"existing": "checkout"}),
+                json!({"existing": "here"}),
+                Some(true),
+            ));
+            request
+        }),
     ]
 }
 
@@ -852,6 +1011,7 @@ fn decides_a_mirrored_board_by_the_rules_of_every_board() {
                 })
             ),
             ("create a note", Ok(())),
+            ("create a note hung on a box", Ok(())),
         ]
     );
 }

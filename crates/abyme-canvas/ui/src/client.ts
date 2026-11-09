@@ -69,11 +69,27 @@ export type AdmittedOperation =
   AdmittedMove | NoteUpdate | NoteDeletion | NoteAttachment | NoteDetachment;
 
 /**
- * The one request that creates an element: a note with its own statement kind
- * `idea`, placed on a board that exists and pinned where a person put it. Rust
- * admits it only as a whole.
+ * The attachment that hangs the note a request creates on an element that
+ * exists, confirming the note's pin, which the request's move sets. Rust
+ * admits it only as the last operation of that request, on the note's board.
  */
-export type NewNote = [
+export type NewNoteAttachment = {
+  op: "attach_note";
+  note: { new: string };
+  to: { existing: string };
+  board: { existing: string };
+  pinned: true;
+};
+
+/**
+ * The one request that creates an element: a note with its own statement kind
+ * `idea`, placed on a board that exists and pinned where a person put it, and
+ * at most hung at once on an element there. Rust admits it only as a whole.
+ */
+export type NewNote = NewFreeNote | [...NewFreeNote, NewNoteAttachment];
+
+/** The three operations that create a note that hangs on nothing. */
+export type NewFreeNote = [
   {
     op: "create_element";
     key: string;

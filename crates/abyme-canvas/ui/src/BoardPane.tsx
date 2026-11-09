@@ -112,8 +112,8 @@ export function BoardPane({
     [send, onNoteWrite],
   );
   const createNote = useCallback(
-    (position: XYPosition, parts: NoteParts) => {
-      const created = send(toNewNote(board, position, parts)).then(
+    (position: XYPosition, parts: NoteParts, hangOn: string | null) => {
+      const created = send(toNewNote(board, position, parts, hangOn)).then(
         ([id]) => {
           setWriteFailure(null);
           return id ?? null;

@@ -4,7 +4,8 @@
 //! [`admit`] is pure and runs before any access to the project. It matches
 //! every variant of the core's operations and references by name, so a new
 //! one breaks the build until it is admitted or refused here. A request that
-//! creates an element is admitted only as a whole, by [`creates_a_note`].
+//! creates an element is admitted only as a whole, by [`creates_a_note`]: a
+//! note, and at most its attachment to an element on the same board.
 //! [`check_board_files`] then decides from the project's files, also by name
 //! for each variant: a release of a pin keeps the position in the board file,
 //! so that a release from a stale view does not move a box back; an update, a
@@ -20,7 +21,7 @@
 
 use std::fmt;
 
-use abyme_core::{MAX_OPERATIONS, Operation, Ref, Snapshot};
+use abyme_core::{LocalKey, MAX_OPERATIONS, Operation, Ref, Snapshot};
 use abyme_model::{Board, BoardId, Element, ElementId, NOTE_TYPE, StatementKind, is_allowed};
 
 #[cfg(test)]
@@ -103,11 +104,13 @@ impl fmt::Display for Refused {
 /// an element that exists, deleting an element that exists, attaching a note
 /// that exists to an element that exists on a board that exists, with
 /// `pinned: true`, detaching such a note, and, as a whole request, creating a
-/// note.
+/// note, and hanging it, in the same request, on an element placed on that
+/// board.
 ///
 /// Whatever page a debug build loads from the dev server's address can send
-/// every operation admitted here, so it can create notes on any board, write
-/// their text into the repository, where the AI reads it, and delete them; it
+/// every operation admitted here, so it can create notes on any board, also
+/// hung at once on an element placed there, write their text into the
+/// repository, where the AI reads it, and delete them; it
 /// can hang any note on any element placed on a board, which adds the relation
 /// `concerns` to the note and drops its verification stamp, and detach notes;
 /// and it can move, pin, and release any element placed on any board,
@@ -222,15 +225,45 @@ fn refused_by_board_file(
 
 /// Whether `operations` is exactly a request that creates one note: its own
 /// statement kind `idea`, placed on a board that exists and pinned where a person
-/// put it. Every field is named, so that a new one breaks the build until it is
-/// admitted or refused here.
+/// put it, and, as a fourth and last operation, at most one attachment that
+/// hangs that new note, with its pin confirmed, on an existing element of the
+/// same board. Every field is named, so that a new one breaks the build until it
+/// is admitted or refused here.
+fn creates_a_note(operations: &[Operation]) -> bool {
+    match operations {
+        [create, place, pin] => created_note(create, place, pin).is_some(),
+        [
+            create,
+            place,
+            pin,
+            Operation::AttachNote {
+                note: Ref::New(attached),
+                to: Ref::Existing(_),
+                board: Ref::Existing(attached_on),
+                pinned: Some(_),
+            },
+        ] => created_note(create, place, pin)
+            .is_some_and(|(key, board)| attached == key && attached_on == board),
+        _ => false,
+    }
+}
+
+/// The key and the board of the note that `create`, `place`, and `pin` create,
+/// if they are exactly the three operations that create one note: its own
+/// statement kind `idea`, placed on a board that exists and pinned where a
+/// person put it. Every field is named, so that a new one breaks the build until
+/// it is admitted or refused here.
 #[expect(
     clippy::unneeded_field_pattern,
     reason = "naming every field of the move breaks the build when it gains one, until that field is admitted or refused here"
 )]
-fn creates_a_note(operations: &[Operation]) -> bool {
-    match operations {
-        [
+fn created_note<'a>(
+    create: &'a Operation,
+    place: &'a Operation,
+    pin: &'a Operation,
+) -> Option<(&'a LocalKey, &'a BoardId)> {
+    match (create, place, pin) {
+        (
             Operation::CreateElement {
                 key,
                 type_ref,
@@ -251,15 +284,14 @@ fn creates_a_note(operations: &[Operation]) -> bool {
                 y: _,
                 pinned: Some(true),
             },
-        ] => {
-            type_ref == NOTE_TYPE
-                && placed == key
-                && moved == key
-                && placed_on == moved_on
-                && is_note_name(name)
-                && is_note_body(body)
-        }
-        _ => false,
+        ) => (type_ref == NOTE_TYPE
+            && placed == key
+            && moved == key
+            && placed_on == moved_on
+            && is_note_name(name)
+            && is_note_body(body))
+        .then_some((key, placed_on)),
+        _ => None,
     }
 }
 
@@ -328,8 +360,9 @@ fn refused_kind(operation: &Operation) -> Option<&'static str> {
             }
         },
         Operation::LayoutBoard { .. } => Some("layout_board"),
-        // The canvas attaches a note only right after its own move, which pins
-        // it, so the attachment always confirms the pin.
+        // The canvas attaches an existing note only right after its own move,
+        // which pins it, so the attachment always confirms the pin; a note it
+        // creates and attaches at once is admitted by `creates_a_note`.
         Operation::AttachNote {
             note,
             to,
