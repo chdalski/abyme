@@ -272,10 +272,12 @@ When the user asks you to implement:
    the plan promises unchanged behavior, first find every
    input state in which the planned design computes
    something different from the current code — per
-   changed path, including states only test data reaches.
-   Settle each, asking the user where _Ask about
-   trade-offs_ says so, and record each outcome in
-   Decisions. A prior plan promised identical results and
+   changed path, including states only test data reaches,
+   and check what it keeps against each specification
+   Context names: a clause it breaks is a Decisions entry
+   (plan-format). Settle each, asking the user where
+   _Ask about trade-offs_ says so, and record each outcome
+   in Decisions. A prior plan promised identical results and
    left such states open; the plan-reviewer found them one
    per pass.
 4. **Classify every task** with `risk-assessment.md` and
@@ -312,12 +314,11 @@ When the user asks you to implement:
       concerns a plan the next pass may still change.
    c. **Follow-up pass:** launch one `plan-reviewer` with
       the previous pass's Blocking findings and the output
-      of `diff -u <copy> <plan>` — it has no Bash. It
-      reviews the revision against the rest of the plan,
-      not the unchanged text again. Repeat b–c until a pass
-      reports "No blocking issues found" or every remaining
-      Blocking finding is declined or collected for the
-      user.
+      of `diff -u <copy> <plan>`. It reviews the revision
+      against the rest of the plan, not the unchanged text
+      again. Repeat b–c until a pass reports "No blocking
+      issues found" or every remaining Blocking finding is
+      declined or collected for the user.
    d. **No pass for Advisory findings alone.** A pass
       without Blocking findings ends the cycle, and its
       Advisory findings are dropped — except after the
@@ -424,8 +425,19 @@ both paths.
    and bring each element the task's code flags up to date
    with `apply` (root `CLAUDE.md`). `verify` stamps only
    committed code, so their stamps go to the next task, or,
-   for the plan's last task, to Completion step 2. Delete
-   any scratch file you wrote to measure or try
+   for the plan's last task, to Completion step 2. When
+   the plan's Context names a specification for behavior
+   the task adds, changes, or promises to keep unchanged,
+   read the sections that apply (WebFetch for a URL, Read
+   for a file) before you read or change the code, and take
+   each test's expected outcome from them, not from what the
+   code returns now: tests built from the current code
+   confirm it instead of checking it. Where the code departs
+   from them and no Decisions entry keeps the departure,
+   stop before the test and put it to the user: fixing it
+   is a plan revision, keeping it a Decisions entry. A kept
+   departure is pinned with a test that names its entry.
+   Delete any scratch file you wrote to measure or try
    something: it is a tool, not a deliverable, and only
    the task's files belong in `git status`. Then run the
    build, format,
@@ -444,7 +456,9 @@ both paths.
    Task Notes, changed files, each element step 4 verified
    or updated with what was checked or changed,
    advisor consultation status, and every quality command
-   run with its result. The status is either
+   run with its result — for a task that corrects a defect
+   also the Cause and Same cause lines
+   (`root-cause-discipline.md`). The status is either
    `security-engineer pre-implementation signed off;
    security-engineer post-implementation signed off` or
    `no advisors consulted — Reviewer-only`. On rejection,
